@@ -52,9 +52,27 @@ export async function loginAction(
       error: "Password login isn't fully configured yet. Try Continue with Google, or try again later.",
     };
   }
-  if (!account) return { error: GENERIC_ERROR };
-
   const supabase = await createClient();
+
+  if (!account) {
+    // No accounts row resolved. One legitimate case remains: an auth user
+    // created via Google who later set a password (e.g. through Forgot
+    // password) but never completed account setup — no row exists yet to
+    // resolve. Try the password against the identifier itself when it is
+    // an email; on success the completion flow creates the row.
+    const trimmed = identifier.trim();
+    if (!trimmed.includes("@")) return { error: GENERIC_ERROR };
+    const direct = await supabase.auth.signInWithPassword({
+      email: trimmed,
+      password,
+    });
+    if (direct.error || !direct.data.user) return { error: GENERIC_ERROR };
+    if (passesAdminGate(direct.data.user.email, null)) {
+      redirect("/admin/check");
+    }
+    redirect("/verify");
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({
     email: account.email,
     password,

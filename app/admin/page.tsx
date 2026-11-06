@@ -15,15 +15,16 @@ import DiwaliToggle from "@/components/DiwaliToggle";
 //
 // The counts below are REAL queries against the live tables, run on the
 // service-role client so RLS can never undercount an admin's own numbers.
-// The working queues behind them — verification review, ReqToAdmin,
-// flairs, developer requests — land in Slice 4 and are marked as such;
-// nothing here is fake data.
+// The queues behind them (ReqToAdmin, flairs, developer requests,
+// colleges, reports) are the linked subpages; nothing here is fake data.
 
 interface AdminStats {
   totalAccounts: number | null;
   pendingAccounts: number | null;
   pendingVerifications: number | null;
   openReports: number | null;
+  pendingColleges: number | null;
+  pendingDevRequests: number | null;
 }
 
 const EMPTY_STATS: AdminStats = {
@@ -31,9 +32,16 @@ const EMPTY_STATS: AdminStats = {
   pendingAccounts: null,
   pendingVerifications: null,
   openReports: null,
+  pendingColleges: null,
+  pendingDevRequests: null,
 };
 
-type CountTable = "accounts" | "verifications" | "reports";
+type CountTable =
+  | "accounts"
+  | "verifications"
+  | "reports"
+  | "college_codes"
+  | "developer_requests";
 
 async function countRows(
   admin: ReturnType<typeof createAdminClient>,
@@ -41,7 +49,8 @@ async function countRows(
   column?: string,
   value?: string,
 ): Promise<number | null> {
-  let query = admin.from(table).select("id", { count: "exact", head: true });
+  const keyColumn = table === "college_codes" ? "code" : "id";
+  let query = admin.from(table).select(keyColumn, { count: "exact", head: true });
   if (column && value) {
     query = query.eq(column, value);
   }
@@ -52,14 +61,29 @@ async function countRows(
 async function loadStats(): Promise<AdminStats> {
   try {
     const admin = createAdminClient();
-    const [totalAccounts, pendingAccounts, pendingVerifications, openReports] =
-      await Promise.all([
-        countRows(admin, "accounts"),
-        countRows(admin, "accounts", "status", "pending_verification"),
-        countRows(admin, "verifications", "status", "pending"),
-        countRows(admin, "reports", "status", "open"),
-      ]);
-    return { totalAccounts, pendingAccounts, pendingVerifications, openReports };
+    const [
+      totalAccounts,
+      pendingAccounts,
+      pendingVerifications,
+      openReports,
+      pendingColleges,
+      pendingDevRequests,
+    ] = await Promise.all([
+      countRows(admin, "accounts"),
+      countRows(admin, "accounts", "status", "pending_verification"),
+      countRows(admin, "verifications", "status", "pending"),
+      countRows(admin, "reports", "status", "open"),
+      countRows(admin, "college_codes", "status", "pending"),
+      countRows(admin, "developer_requests", "status", "received"),
+    ]);
+    return {
+      totalAccounts,
+      pendingAccounts,
+      pendingVerifications,
+      openReports,
+      pendingColleges,
+      pendingDevRequests,
+    };
   } catch {
     // Service role unavailable — show dashes rather than wrong numbers.
     return EMPTY_STATS;
@@ -102,26 +126,41 @@ export default async function AdminPage() {
     { label: "Open reports", value: stats.openReports, hint: "Reports not yet actioned or dismissed" },
   ];
 
-  const comingSoon: Array<{ title: string; body: string; waiting: number | null }> = [
-    {
-      title: "Verification review queue",
-      body: "ID card photos, parsed fields, per-layer results and alternative proofs — approve or reject with a reason. Decisions are audit-logged.",
-      waiting: stats.pendingVerifications,
-    },
+  const tools: Array<{
+    title: string;
+    body: string;
+    href: string;
+    waiting: number | null;
+  }> = [
     {
       title: "ReqToAdmin queue",
-      body: "Messages students flag with the ReqToAdmin flair inside servers, plus verification appeals raised the same way.",
+      body: "Messages students flag with the ReqToAdmin flair inside servers, plus the pending Maya Jwalam reveal requests overview.",
+      href: "/admin/requests",
       waiting: null,
     },
     {
       title: "Flair manager",
-      body: "Create, recolour and remove server flairs. ReqToAdmin is the only built-in flair; everything else is made here.",
+      body: "Create, recolour and remove global and per-server flairs. ReqToAdmin is built in — recolour it, never delete it.",
+      href: "/admin/flairs",
       waiting: null,
     },
     {
       title: "Developer requests inbox",
-      body: "“Req to Developer” submissions from Settings — change requests, add-ons and bug reports — with status updates back to the student.",
-      waiting: null,
+      body: "“Req to Developer” submissions from Settings → Help — set a status and the student gets an Inbox update.",
+      href: "/admin/developer-requests",
+      waiting: stats.pendingDevRequests,
+    },
+    {
+      title: "College registry review",
+      body: "Student-added colleges waiting at pending — approve them for everyone, or reject to remove the entry.",
+      href: "/admin/colleges",
+      waiting: stats.pendingColleges,
+    },
+    {
+      title: "Reports queue",
+      body: "Open reports from students, with the reported message or chirp in context. Mark actioned or dismiss.",
+      href: "/admin/reports",
+      waiting: stats.openReports,
     },
   ];
 
@@ -202,34 +241,34 @@ export default async function AdminPage() {
         <h2 className="text-sm font-medium uppercase tracking-widest text-neutral-500">
           Queues &amp; tools
         </h2>
-        {comingSoon.map((item) => (
-          <div
+        {tools.map((item) => (
+          <Link
             key={item.title}
-            className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4"
+            href={item.href}
+            className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 transition hover:border-neutral-600"
           >
             <div className="flex items-center justify-between gap-3">
               <p className="font-medium">{item.title}</p>
-              <span className="shrink-0 rounded-full bg-neutral-800 px-2.5 py-1 text-[11px] uppercase tracking-widest text-neutral-400">
-                Coming in Slice 4
-              </span>
+              <span className="shrink-0 text-neutral-500">→</span>
             </div>
             <p className="mt-1 text-sm leading-relaxed text-neutral-400">
               {item.body}
             </p>
             {item.waiting !== null ? (
               <p className="mt-2 text-xs text-neutral-500">
-                {formatCount(item.waiting)} waiting right now (counted above).
+                {formatCount(item.waiting)} waiting right now.
               </p>
             ) : null}
-          </div>
+          </Link>
         ))}
       </section>
 
       <p className="text-xs leading-relaxed text-neutral-600">
-        Appointing or revoking admins, and college registry maintenance,
-        also arrive with the Slice 4 queues. Granting the admin role grants
-        the Admin Pass — profile completion is skipped for those accounts,
-        but sign-in never is.
+        Joining no longer involves ID-card review, so there is no
+        verification queue: the &quot;Pending verification&quot; and
+        &quot;Verification queue&quot; counts above only cover legacy rows.
+        Granting the admin role grants the Admin Pass — profile completion
+        is skipped for those accounts, but sign-in never is.
       </p>
     </main>
   );
