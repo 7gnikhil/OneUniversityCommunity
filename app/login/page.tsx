@@ -1,25 +1,63 @@
-// Login — password OR direct Google. There is NO OTP login anywhere;
-// the only OTP in OneUco is the forgot-password email OTP.
-//
-// Feature port TODO:
-// - Password login: single identifier field accepting OneUco ID, username
-//   or email + password (verified server-side against the stored hash).
-// - "Continue with Google" (Supabase Auth OAuth). If the Google email
-//   matches an existing account it signs into it; if new, it flows into
-//   sign-up -> student verification.
-// - Separate Admin entry: "Admin — Continue with Google" + the admin
-//   account's password. The owner's email is checked SERVER-SIDE only and
-//   is never rendered in the UI. Admin role bypasses student verification
-//   (Admin Pass) but never bypasses the password.
-// - Log out kills the server session and returns here; a deleted session
-//   cookie likewise ends access (no silent re-entry).
-export default function LoginPage() {
+import Link from "next/link";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
+import LoginForm from "./LoginForm";
+
+// Login — password OR direct Continue with Google. There is NO OTP login
+// anywhere in OneUco; the only OTP-style flow is the forgot-password email
+// reset. Admins have their own entry (/admin/login): an account with an
+// admin role skips student verification (Admin Pass) but never skips
+// authentication.
+
+function safeNext(raw: string | undefined): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string; error?: string }>;
+}) {
+  const params = await searchParams;
+  const next = safeNext(params.next);
+
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-2xl font-semibold">OneUco</h1>
-      <p className="text-sm text-neutral-500">
-        Placeholder — login (password or Continue with Google) is ported here
-        in the feature phase.
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-6 p-6">
+      <div className="text-center">
+        <h1 className="text-3xl font-semibold tracking-tight">OneUco</h1>
+        <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+          One University Community
+        </p>
+      </div>
+
+      {params.error === "auth" ? (
+        <p className="w-full rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300" role="alert">
+          That sign-in didn&apos;t complete. Please try again.
+        </p>
+      ) : null}
+
+      <LoginForm next={next} />
+
+      <div className="flex w-full items-center gap-3 text-[11px] uppercase tracking-widest text-neutral-600">
+        <span className="h-px flex-1 bg-neutral-800" />
+        or
+        <span className="h-px flex-1 bg-neutral-800" />
+      </div>
+
+      <GoogleSignInButton label="Continue with Google" nextPath={next} />
+
+      <div className="flex w-full items-center justify-between text-sm">
+        <Link href="/forgot-password" className="text-neutral-400 transition hover:text-white">
+          Forgot password?
+        </Link>
+        <Link href="/admin/login" className="text-neutral-400 transition hover:text-white">
+          Admin sign-in
+        </Link>
+      </div>
+
+      <p className="text-center text-xs leading-relaxed text-neutral-600">
+        OneUco is for verified JNTUH students only. New here? Sign in with
+        Google and you&apos;ll be taken to student verification.
       </p>
     </main>
   );

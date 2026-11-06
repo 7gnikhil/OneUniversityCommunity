@@ -1,21 +1,37 @@
-// Dial Home — the landing screen after login.
+import Link from "next/link";
+import DialNav from "@/components/DialNav";
+import LiveClock from "@/components/LiveClock";
+
+// Dial Home — the app's home screen (signed-in, verified users land here;
+// the middleware sends everyone else to /login or the /verify shell).
 //
-// Feature port TODO:
-// - Round dial selector (Servers · Swipe Deck · Friends · Chirp · Profile)
-//   with a real rotary-dial sound (mechanical clicks + return snap),
-//   respecting the in-app sound toggle and device silent mode.
-// - Small live clock line: weekday · date + year · HH:MM:SS ticking.
-// - Notification-count badges on dial stops for the *other* pages.
-// - Desktop: dial shrinks; content column widens.
+// Ported in this slice: the round rotating dial with its five stops, the
+// OneUco wordmark header and the small live clock line, on the black
+// minimal theme. Still to port (later slices): the rotary-dial sound,
+// unread-count badges on the stops, and the desktop wide layout.
 export default function DialHomePage() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-2xl font-semibold">OneUco</h1>
-      <p className="text-sm text-neutral-400">One University Community</p>
-      <p className="text-sm text-neutral-500">
-        Placeholder — the round dial home (Servers · Swipe Deck · Friends ·
-        Chirp · Profile) is ported here in the feature phase.
-      </p>
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-6">
+      <header className="flex flex-col items-center gap-1.5 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">OneUco</h1>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+          One University Community
+        </p>
+        <LiveClock />
+      </header>
+
+      <div className="flex flex-1 items-center justify-center py-10">
+        <DialNav />
+      </div>
+
+      <footer className="flex items-center justify-center gap-6 pb-2 text-xs text-neutral-500">
+        <Link href="/inbox" className="transition hover:text-white">
+          Inbox
+        </Link>
+        <Link href="/profile" className="transition hover:text-white">
+          Settings
+        </Link>
+      </footer>
     </main>
   );
 }
