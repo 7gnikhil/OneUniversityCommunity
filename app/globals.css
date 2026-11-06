@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* OneUco: black, minimal default theme. --accent is set per-user at runtime
+   (Settings -> App colour: Black default, Teal, Coral, Violet, Blue, Amber). */
+:root {
+  --accent: #111111;
+}
+
+html,
+body {
+  height: 100%;
+}
