@@ -35,8 +35,11 @@ export default function LoginForm({ next }: { next: string }) {
 
   useEffect(() => {
     if (lockedUntil === null) return;
+    // Capture as a non-null const: TypeScript cannot narrow the state
+    // variable itself inside the nested update() closure.
+    const until: number = lockedUntil;
     function update(): void {
-      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+      const remaining = Math.ceil((until - Date.now()) / 1000);
       if (remaining <= 0) {
         setLockedUntil(null);
         setAttempts(0);
