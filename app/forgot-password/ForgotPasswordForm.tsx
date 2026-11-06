@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { canonicalOrigin } from "@/lib/site";
 
 // Step 1 of the only reset flow in OneUco: ask Supabase to email a
 // password-reset link. The link lands on /auth/callback and continues to
@@ -17,7 +18,7 @@ export default function ForgotPasswordForm() {
     setBusy(true);
     const supabase = createClient();
     await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      redirectTo: `${canonicalOrigin(window.location.origin)}/auth/callback?next=/reset-password`,
     });
     // Neutral on purpose: success and "no such account" look identical.
     setSent(true);

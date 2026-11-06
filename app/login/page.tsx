@@ -16,7 +16,7 @@ function safeNext(raw: string | undefined): string {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; reason?: string }>;
 }) {
   const params = await searchParams;
   const next = safeNext(params.next);
@@ -33,6 +33,9 @@ export default async function LoginPage({
       {params.error === "auth" ? (
         <p className="w-full rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300" role="alert">
           That sign-in didn&apos;t complete. Please try again.
+          {params.reason ? (
+            <span className="mt-0.5 block text-xs text-red-400/70">({params.reason})</span>
+          ) : null}
         </p>
       ) : null}
 
@@ -55,9 +58,17 @@ export default async function LoginPage({
         </Link>
       </div>
 
+      <p className="text-sm text-neutral-400">
+        New to OneUco?{" "}
+        <Link href="/signup" className="font-medium text-white transition hover:text-neutral-300">
+          Create your account
+        </Link>
+      </p>
+
       <p className="text-center text-xs leading-relaxed text-neutral-600">
-        OneUco is for verified JNTUH students only. New here? Sign in with
-        Google and you&apos;ll be taken to student verification.
+        OneUco is for verified JNTUH students only. New here? Create an
+        account with your email or continue with Google — either way
+        you&apos;ll complete student verification before you get in.
       </p>
     </main>
   );

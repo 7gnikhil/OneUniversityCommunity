@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { canonicalOrigin } from "@/lib/site";
 
 // "Continue with Google" via Supabase Auth OAuth. On success the browser
 // leaves for Google and returns through /auth/callback?next=<nextPath>;
@@ -24,7 +25,7 @@ export default function GoogleSignInButton({
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+        redirectTo: `${canonicalOrigin(window.location.origin)}/auth/callback?next=${encodeURIComponent(nextPath)}`,
       },
     });
     if (oauthError) {

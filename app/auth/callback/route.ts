@@ -22,7 +22,14 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+    // Self-diagnosing failure path: log the exact reason server-side and
+    // carry a short sanitised code to the login banner so a screenshot of
+    // the failure identifies it (e.g. PKCE verifier problems show up here).
+    console.error("[auth/callback] code exchange failed:", error.code ?? error.name, error.message);
+    const reason = (error.code ?? "exchange").replace(/[^a-z0-9_]/gi, "").slice(0, 40) || "exchange";
+    return NextResponse.redirect(`${origin}/login?error=auth&reason=${reason}`);
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  console.error("[auth/callback] landed without a code");
+  return NextResponse.redirect(`${origin}/login?error=auth&reason=nocode`);
 }
