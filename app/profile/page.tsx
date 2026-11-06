@@ -1,31 +1,81 @@
-// Profile + Settings.
-//
-// Feature port TODO:
-// - Public profile shows ONLY: photo(s), name, bio, branch (+ username /
-//   OneUco ID on the owner's own view). Year, college and hall-ticket
-//   number are never public.
-// - Nothing is mandatory: every field is optional, "Skip for now" always
-//   works; name/college/branch pre-fill from the ID verification.
-// - Profile photo: upload the original photo from the device gallery
-//   (`avatars` bucket) at profile setup and later in Edit Profile.
-// - Portfolio links live in Settings -> Portfolio (NOT in sign-up).
-// - Settings sections: intention + preference filters (per intention:
-//   dating / friendship / study partner / networking; all default "Any"),
-//   App colour (Black default, Teal, Coral, Violet, Blue, Amber), sound,
-//   Help (FAQ + rules), Req to Developer form (lands in
-//   `developer_requests`; statuses Received/Planned/Done/Declined — the
-//   developer contact shows NO email address anywhere), Account
-//   (password, sessions), and a standalone red "Log out" row at the very
-//   bottom of Settings (also inside Account). Delete account in the
-//   danger zone.
-export default function ProfilePage() {
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getProfileByAccountId } from "@/lib/profile";
+import {
+  EMPTY_PORTFOLIO,
+  normalisePortfolio,
+  normalisePreferences,
+} from "@/lib/preferences";
+import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
+
+// Profile + Settings. Shows ONLY public fields (photo(s), name, bio,
+// branch) plus the owner's @username / OneUco ID. Year, college and
+// hall-ticket number are never read here — they live in the private
+// verifications table and are not part of a profile.
+// Portfolio links are edited here (Settings -> Portfolio), NOT at sign-up.
+// Nothing is mandatory: every field can stay empty.
+export default async function ProfilePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+
+  if (!account) {
+    return (
+      <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
+        <h1 className="text-xl font-semibold">Profile</h1>
+        <p className="text-sm leading-relaxed text-neutral-400">
+          Your account isn&apos;t finished yet — complete sign-up first, then
+          your profile opens up here.
+        </p>
+        <Link
+          href="/verify"
+          className="rounded-full bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-neutral-200"
+        >
+          Go to account setup
+        </Link>
+      </main>
+    );
+  }
+
+  const profile = await getProfileByAccountId(supabase, account.id);
+
+  const portfolio = profile
+    ? normalisePortfolio(profile.portfolio)
+    : EMPTY_PORTFOLIO;
+
+  const initial: ProfileEditorInitial = {
+    accountId: account.id,
+    username: account.username,
+    oneucoId: account.oneuco_id,
+    name: profile?.name ?? "",
+    bio: profile?.bio ?? "",
+    branch: profile?.branch ?? "",
+    photoUrl: profile?.photo_url ?? null,
+    photoUrls: profile?.photo_urls ?? [],
+    portfolio,
+    intention: profile?.intention ?? null,
+    preferences: normalisePreferences(profile?.preferences ?? {}),
+    accentColor: profile?.accent_color ?? "black",
+  };
+
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-xl font-semibold">Profile</h1>
-      <p className="text-sm text-neutral-500">
-        Placeholder — profile and settings are ported here in the feature
-        phase.
-      </p>
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 p-6">
+      <div className="flex items-center justify-between">
+        <Link
+          href="/"
+          className="text-sm text-neutral-400 transition hover:text-white"
+        >
+          ← OneUco
+        </Link>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+          Profile & Settings
+        </p>
+      </div>
+      <ProfileEditor initial={initial} />
     </main>
   );
 }
