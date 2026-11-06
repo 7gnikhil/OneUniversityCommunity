@@ -6,6 +6,8 @@ import {
   type AccountRow,
 } from "@/lib/auth/account";
 import { getProfileByAccountId } from "@/lib/profile";
+import { getDiwaliMode } from "@/lib/server/diwali-settings";
+import DiwaliToggle from "@/components/DiwaliToggle";
 
 // Admin landing — owner/admin only. The Admin Pass gate itself is enforced
 // by middleware (accounts.role 'owner' | 'admin', or owner recognition);
@@ -92,6 +94,7 @@ export default async function AdminPage() {
   const roleLabel = account?.role === "owner" ? "Owner" : "Admin";
 
   const stats = await loadStats();
+  const diwaliMode = await getDiwaliMode();
   const statCards: Array<{ label: string; value: number | null; hint: string }> = [
     { label: "Total accounts", value: stats.totalAccounts, hint: "Everyone who has completed sign-up" },
     { label: "Pending verification", value: stats.pendingAccounts, hint: "Accounts waiting on ID review" },
@@ -193,6 +196,8 @@ export default async function AdminPage() {
         ))}
       </section>
 
+      <DiwaliToggle mode={diwaliMode} />
+
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium uppercase tracking-widest text-neutral-500">
           Queues &amp; tools
@@ -221,10 +226,10 @@ export default async function AdminPage() {
       </section>
 
       <p className="text-xs leading-relaxed text-neutral-600">
-        Appointing or revoking admins, and college-code list maintenance,
+        Appointing or revoking admins, and college registry maintenance,
         also arrive with the Slice 4 queues. Granting the admin role grants
-        the Admin Pass — verification is skipped for those accounts, but
-        sign-in never is.
+        the Admin Pass — profile completion is skipped for those accounts,
+        but sign-in never is.
       </p>
     </main>
   );

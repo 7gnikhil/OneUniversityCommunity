@@ -34,6 +34,9 @@ export default function SignupForm() {
             placeholder="you@example.com"
             className={INPUT_CLASS}
           />
+          <span className="text-[11px] leading-relaxed text-neutral-500">
+            Any personal email works — no college email needed.
+          </span>
         </label>
         <label className="flex flex-col gap-1 text-left">
           <span className="text-xs text-neutral-400">Password</span>

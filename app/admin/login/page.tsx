@@ -43,7 +43,7 @@ export default async function AdminLoginPage({
       <p className="text-center text-xs leading-relaxed text-neutral-600">
         Only accounts with an admin role pass this entry. Admins still
         authenticate like everyone else — the Admin Pass skips student
-        verification, never sign-in.
+        profile completion, never sign-in.
       </p>
 
       <Link href="/login" className="text-sm text-neutral-400 transition hover:text-white">

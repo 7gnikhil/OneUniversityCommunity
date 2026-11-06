@@ -17,11 +17,12 @@ export default function TermsPage() {
       <section className="mt-8 space-y-3 text-sm leading-6">
         <h2 className="text-base font-semibold text-white">Eligibility</h2>
         <p>
-          OneUco is only for current students of JNTUH-affiliated colleges who
-          complete the in-app student verification. One account per student:
-          an account is tied to one hall-ticket number. Impersonating another
-          person or using someone else&rsquo;s ID card is not allowed and
-          leads to removal.
+          OneUco is only for current students of any college or university
+          who complete the in-app joining steps. When you join, you declare
+          your college or university, branch and graduation year; we do not
+          collect or check ID cards or other documents. One account per
+          student. Impersonating another person is not allowed and leads to
+          removal.
         </p>
 
         <h2 className="pt-4 text-base font-semibold text-white">Acceptable use</h2>

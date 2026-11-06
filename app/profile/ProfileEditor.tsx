@@ -33,7 +33,7 @@ export interface ProfileEditorInitial {
 // Profile + settings editor. Photos upload from the browser straight into
 // the PUBLIC avatars bucket under the account's own folder; everything
 // else saves through the server action (session client + RLS). Only
-// public fields live here — year/college/hall ticket never appear.
+// public fields live here — the private college/graduation-year declarations never appear.
 export default function ProfileEditor({
   initial,
 }: {
@@ -203,7 +203,8 @@ export default function ProfileEditor({
           </label>
           <p className="text-[11px] text-neutral-500">
             Your DP, photos, name, bio and branch are what other students
-            see. Your year, college and hall-ticket number are never public.
+            see. The college and graduation year you declared when joining
+            stay private.
           </p>
         </header>
 

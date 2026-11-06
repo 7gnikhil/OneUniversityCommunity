@@ -35,8 +35,8 @@ function cleanText(raw: string, maxLength: number): string {
 
 // Profile save. All writes go through the SESSION client, so the profiles
 // RLS policies (owner-only insert/update) do the enforcing. Only public
-// fields exist on profiles — year, college and hall-ticket number are
-// never accepted here; they live in the private verifications table.
+// fields exist on profiles — the college and graduation year declared at
+// joining are never accepted here; they live on the private accounts row.
 export async function updateProfileAction(
   _prevState: ProfileFormState,
   formData: FormData,
@@ -50,7 +50,7 @@ export async function updateProfileAction(
   }
   const account = await getAccountByAuthUserId(supabase, user.id);
   if (!account) {
-    return { error: "Finish creating your account first (on the verification page).", saved: false };
+    return { error: "Finish creating your account first (on the profile completion page).", saved: false };
   }
   const accountId: string = account.id;
 

@@ -1,5 +1,5 @@
-// Pure validation + shared option lists for Slice 2 (account completion,
-// verification, profile). No server or client imports — safe to use from
+// Pure validation + shared option lists for account completion, the open
+// college registry and profiles. No server or client imports — safe to use from
 // Server Components, server actions and Client Components alike.
 
 // ── Username (@handle) ─────────────────────────────────────────────────────
@@ -23,57 +23,73 @@ export function validateUsername(raw: string): string | null {
   return null;
 }
 
-// ── Hall ticket ────────────────────────────────────────────────────────────
-// JNTUH hall-ticket / admission numbers are 10 characters:
-//   chars 1–2  joining year (YY → 2000+YY)
-//   chars 3–4  college code (validated against public.college_codes)
-//   rest       course / branch / roll characters
-// This is a STRUCTURE check only — there is no public JNTU API, so nothing
-// here (or anywhere) claims the number was verified against university
-// records.
-export const HALL_TICKET_PATTERN = /^[0-9A-Z]{10}$/;
-
-export function normaliseHallTicket(raw: string): string {
-  return raw.trim().toUpperCase().replace(/[\s-]/g, "");
+// ── Open college registry ─────────────────────────────────────────────────
+// Students can add a college or university that is not listed yet. Names
+// are compared in a normalised form so trivial spacing/punctuation variants
+// do not create duplicate registry entries.
+export function normaliseCollegeName(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-export interface HallTicketStructure {
-  joiningYear: number;
-  collegeCode: string;
-  suggestedGradYear: number;
+export function normaliseCollegeDisplayName(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ");
 }
 
-// Returns null when the ticket is not even structurally a hall ticket.
-export function parseHallTicket(raw: string): HallTicketStructure | null {
-  const ticket = normaliseHallTicket(raw);
-  if (!HALL_TICKET_PATTERN.test(ticket)) return null;
-  if (!/^[0-9]{2}/.test(ticket)) return null;
-  const joiningYear = 2000 + Number(ticket.slice(0, 2));
-  return {
-    joiningYear,
-    collegeCode: ticket.slice(2, 4),
-    // +4 for a standard B.Tech entry; lateral entry is +3 — the student
-    // confirms/edits the graduation year in the form, this is a hint only.
-    suggestedGradYear: joiningYear + 4,
+const COLLEGE_CODE_STOP_WORDS = new Set(["AND", "FOR", "OF", "THE"]);
+const COLLEGE_CODE_SUFFIXES = "23456789ABCDEFGHJKMNPQRSTUVWXYZ".split("");
+
+// Derive a short registry code from a college name: initials for multi-word
+// names (up to four), or the leading consonants of a one-word name.
+export function deriveCollegeCode(name: string): string {
+  const words = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0 && !COLLEGE_CODE_STOP_WORDS.has(word));
+
+  if (words.length >= 2) {
+    return words
+      .slice(0, 4)
+      .map((word) => word.charAt(0))
+      .join("");
+  }
+
+  const word = words[0] ?? "COLLEGE";
+  const consonants = word.replace(/[^BCDFGHJKLMNPQRSTVWXYZ]/g, "");
+  const base = consonants.length >= 2 ? consonants : word;
+  return base.slice(0, 4).padEnd(2, "X");
+}
+
+// Candidate codes in preference order: the derived code first, then
+// suffixed variants that stay within four characters and are not taken.
+export function collegeCodeCandidates(
+  name: string,
+  existingCodes: ReadonlyArray<{ code: string }>,
+): string[] {
+  const taken = new Set(
+    existingCodes.map((row) => row.code.trim().toUpperCase()),
+  );
+  const base = deriveCollegeCode(name);
+  const candidates: string[] = [];
+  const addCandidate = (candidate: string): void => {
+    if (!taken.has(candidate) && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
   };
-}
 
-export type LayerOutcome = "pass" | "fail" | "not_provided" | "skipped";
-
-// The structure-layer outcome, driven by the OFFICIAL college-code list:
-// - list not loaded yet (empty)  -> 'not_provided' (never fail a student
-//   because our reference data is missing)
-// - code present in the list     -> 'pass'
-// - list loaded, code absent     -> 'fail' (still submittable — the row
-//   goes to manual review like everything doubtful)
-export function structureLayerFor(
-  structure: HallTicketStructure,
-  collegeCodes: ReadonlyArray<{ code: string }>,
-): LayerOutcome {
-  if (collegeCodes.length === 0) return "not_provided";
-  return collegeCodes.some((row) => row.code === structure.collegeCode)
-    ? "pass"
-    : "fail";
+  addCandidate(base);
+  for (const suffix of COLLEGE_CODE_SUFFIXES) {
+    addCandidate(
+      base.length < 4 ? `${base}${suffix}` : `${base.slice(0, 3)}${suffix}`,
+    );
+  }
+  return candidates;
 }
 
 // ── OneUco ID generation ───────────────────────────────────────────────────
@@ -113,7 +129,7 @@ export function accentHex(accentColor: string | null | undefined): string {
   return (found ?? ACCENT_COLORS[0]).hex;
 }
 
-// ── Upload guards (shared by ID-card and avatar uploads) ──────────────────
+// ── Upload guards (shared by avatar and other profile image uploads) ─────
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export function validateImageFile(file: File): string | null {

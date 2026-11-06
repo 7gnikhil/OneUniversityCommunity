@@ -28,10 +28,16 @@ export interface AccountRow {
   phone: string | null;
   role: Role;
   status: AccountStatus;
+  // Self-declared at profile completion. These stay on the private accounts
+  // row and are never part of public_profiles.
+  college_name: string | null;
+  college_code: string | null;
+  branch: string | null;
+  graduation_year: number | null;
 }
 
 const ACCOUNT_COLUMNS =
-  "id, auth_user_id, oneuco_id, username, email, phone, role, status";
+  "id, auth_user_id, oneuco_id, username, email, phone, role, status, college_name, college_code, branch, graduation_year";
 
 export function isAdminRole(role: Role | null | undefined): boolean {
   return role === "owner" || role === "admin";
@@ -39,7 +45,7 @@ export function isAdminRole(role: Role | null | undefined): boolean {
 
 // The Admin Pass gate: role 'owner'/'admin' on the account row, OR the
 // owner's own email (server-side bootstrap for the first admin sign-in,
-// see lib/server/owner.ts). Admin Pass skips student verification only —
+// see lib/server/owner.ts). Admin Pass skips student profile completion only —
 // the caller must already be authenticated; this function never replaces
 // authentication.
 export function passesAdminGate(
@@ -51,7 +57,7 @@ export function passesAdminGate(
 
 // Session lookup: the account row belonging to this auth user, or null when
 // the row doesn't exist yet (e.g. a first-time Google sign-in that has not
-// completed sign-up — callers treat null as "pending verification").
+// completed sign-up — callers treat null as "profile not completed yet").
 export async function getAccountByAuthUserId(
   supabase: SupabaseClient,
   authUserId: string,
@@ -121,8 +127,8 @@ export async function resolveAccountByIdentifier(
 // OneUco ID, no username and no profile — so the row is created here, on
 // the first admin sign-in, by the service-role client passed in.
 //
-// The new row is born `verified`: the Admin Pass IS the verification for
-// these accounts (it skips student verification only — authentication
+// The new row is born `verified`: the Admin Pass IS the activation for
+// these accounts (it skips student profile completion only — authentication
 // already happened before this runs). Idempotent: an existing row is
 // returned untouched, so the bootstrap username below is just a default
 // the owner can change later.

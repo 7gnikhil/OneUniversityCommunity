@@ -1,29 +1,28 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId, passesAdminGate } from "@/lib/auth/account";
 import {
-  getLatestVerification,
-  listCollegeCodes,
-  type VerificationRow,
-} from "@/lib/profile";
+  getAccountByAuthUserId,
+  passesAdminGate,
+  type AccountRow,
+} from "@/lib/auth/account";
+import { listCollegeCodes } from "@/lib/profile";
 import CompleteAccountForm from "./CompleteAccountForm";
-import VerificationForm, {
-  type VerificationInitial,
-} from "./VerificationForm";
+import CompleteProfileForm, {
+  type CompleteProfileInitial,
+} from "./CompleteProfileForm";
 
-// /verify — the home of two steps for signed-in, not-yet-verified students
-// (the middleware routes them here and nowhere else):
-//   1. No accounts row yet  -> "Complete your account" (claim a @username;
-//      the OneUco ID is generated server-side).
-//   2. Account exists       -> the student verification flow: ID-card
-//      uploads to the PRIVATE id-cards bucket + typed card fields +
-//      hall-ticket structure check, then manual review.
-// Admin Pass accounts and already-verified accounts get their status
-// screens instead (they are never gated here, but may land here directly).
-//
-// There is NO public JNTU verification API — nothing here claims a live
-// check against university records. A failed structure check is never a
-// dead end: the submission still lands in 'pending' for a human to review.
+// /verify — despite the route name, there is no document verification here
+// any more. This page is where a signed-in student finishes joining (the
+// middleware routes anyone who has not completed it here):
+//   1. No accounts row yet -> "Complete your account" (claim a @username;
+//      the OneUco ID is generated server-side). This is the main step.
+//   2. Account exists but is not active yet -> "Complete your profile":
+//      self-declared college / university, branch and graduation year.
+//      No documents, no uploads, no checks — saving activates the account
+//      immediately.
+// Admin Pass accounts and already-active accounts get their status screens
+// instead (they are never gated here, but may land here directly). The old
+// verifications table is dormant and is not read or written by this page.
 export default async function VerifyPage() {
   const supabase = await createClient();
   const {
@@ -45,13 +44,13 @@ export default async function VerifyPage() {
       {admin ? (
         <StatusBlock
           title="Admin Pass active"
-          body="Your account carries an admin role, so student verification doesn't apply to you."
+          body="Your account carries an admin role, so student profile completion doesn't apply to you."
           cta={{ href: "/", label: "Go to OneUco" }}
         />
       ) : account?.status === "verified" ? (
         <StatusBlock
-          title="You're verified"
-          body="Your student verification is complete — everything is open."
+          title="You're in"
+          body="Your profile is complete — everything is open."
           cta={{ href: "/", label: "Go to OneUco" }}
         />
       ) : account?.status === "suspended" ? (
@@ -64,15 +63,16 @@ export default async function VerifyPage() {
           <div className="text-center">
             <h2 className="text-lg font-medium">Complete your account</h2>
             <p className="mt-1 text-sm leading-relaxed text-neutral-400">
-              One last sign-up step: pick the @username other students will
-              know you by. Your OneUco ID is generated for you — after this,
-              student verification is the only thing left.
+              Start by picking the @username other students will know you
+              by. Your OneUco ID is generated for you — after this, you just
+              add a few study details and you&apos;re in. No documents
+              needed.
             </p>
           </div>
           <CompleteAccountForm />
         </section>
       ) : (
-        <VerificationSection accountId={account.id} username={account.username} />
+        <ProfileCompletionSection account={account} />
       )}
 
       <form action="/auth/logout" method="post" className="mt-auto pt-4">
@@ -112,149 +112,41 @@ function StatusBlock({
   );
 }
 
-// The verification flow proper. Needs its own async component because it
-// reads the student's latest attempt + the official college-code list.
-async function VerificationSection({
-  accountId,
-  username,
+// The self-declaration step. Needs its own async component because it reads
+// the open college registry (approved colleges + this student's own pending
+// additions) for the form's select.
+async function ProfileCompletionSection({
+  account,
 }: {
-  accountId: string;
-  username: string;
+  account: AccountRow;
 }) {
   const supabase = await createClient();
-  const [latest, collegeCodes] = await Promise.all([
-    getLatestVerification(supabase, accountId),
-    listCollegeCodes(supabase),
-  ]);
+  const collegeCodes = await listCollegeCodes(supabase, account.id);
 
-  const initial = toInitial(latest);
+  const initial: CompleteProfileInitial = {
+    collegeCode: account.college_code ?? "",
+    collegeName: account.college_name ?? "",
+    branch: account.branch ?? "",
+    gradYear:
+      account.graduation_year !== null ? String(account.graduation_year) : "",
+  };
 
   return (
     <section className="flex w-full flex-col gap-5">
       <div className="text-center">
-        <h2 className="text-lg font-medium">Student verification</h2>
+        <h2 className="text-lg font-medium">Complete your profile</h2>
         <p className="mt-1 text-sm leading-relaxed text-neutral-400">
-          OneUco is for JNTUH students only. Upload your college ID card and
-          confirm its details — a person reviews every submission, and
-          nothing here can reject or ban you automatically.
+          OneUco is open to students of any college or university. No
+          documents needed — just tell us where you study. Pick or add your
+          college, add your branch and graduation year, and you&apos;re in
+          straight away. These details stay private.
         </p>
         <p className="mx-auto mt-3 w-fit rounded-full border border-neutral-800 px-4 py-1.5 text-xs text-neutral-400">
-          @{username}
+          @{account.username}
         </p>
       </div>
 
-      {latest?.status === "pending" ? (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-left">
-          <p className="text-sm font-medium text-amber-300">
-            Under review — you&apos;re in the queue
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-amber-200/70">
-            Your submission is waiting for a manual review. You can update
-            the photos or details below any time while it&apos;s pending —
-            saving replaces what the reviewer sees.
-          </p>
-          <SubmittedDetails verification={latest} />
-        </div>
-      ) : latest?.status === "rejected" ? (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-left">
-          <p className="text-sm font-medium text-red-300">
-            The reviewer couldn&apos;t confirm this one
-          </p>
-          {latest.review_reason ? (
-            <p className="mt-1 text-xs leading-relaxed text-red-200/80">
-              Reason: {latest.review_reason}
-            </p>
-          ) : null}
-          <p className="mt-1 text-xs leading-relaxed text-red-200/70">
-            That&apos;s not the end of it — fix what you can below, add an
-            alternative proof (semester hall ticket, bonafide certificate or
-            fee receipt), and submit again.
-          </p>
-          <SubmittedDetails verification={latest} />
-        </div>
-      ) : latest?.status === "verified" ? (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-left">
-          <p className="text-sm font-medium text-emerald-300">
-            Verification approved
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-emerald-200/70">
-            Your student status is confirmed. If parts of the app still look
-            locked, log out and back in once.
-          </p>
-        </div>
-      ) : null}
-
-      {latest?.status !== "verified" ? (
-        <VerificationForm
-          accountId={accountId}
-          collegeCodes={collegeCodes}
-          initial={initial}
-          submitLabel={
-            latest?.status === "pending"
-              ? "Save changes"
-              : latest?.status === "rejected"
-                ? "Submit again for review"
-                : "Submit for review"
-          }
-        />
-      ) : null}
+      <CompleteProfileForm collegeCodes={collegeCodes} initial={initial} />
     </section>
   );
-}
-
-function SubmittedDetails({
-  verification,
-}: {
-  verification: VerificationRow;
-}) {
-  const fields = verification.parsed_fields;
-  const rows: Array<[string, string]> = [];
-  if (fields.name) rows.push(["Name on card", fields.name]);
-  if (verification.hall_ticket) {
-    rows.push(["Hall ticket", verification.hall_ticket]);
-  }
-  if (fields.college_name) rows.push(["College", fields.college_name]);
-  if (fields.branch) rows.push(["Branch", fields.branch]);
-  if (verification.claimed_grad_year) {
-    rows.push(["Graduation year", String(verification.claimed_grad_year)]);
-  }
-  const proofCount = verification.alt_proofs.proofs?.length ?? 0;
-  rows.push([
-    "Proofs",
-    `ID card front${verification.id_card_back_url ? " + back" : ""}${
-      proofCount > 0 ? ` + ${proofCount} alternative` : ""
-    }`,
-  ]);
-  if (rows.length === 0) return null;
-  return (
-    <dl className="mt-3 flex flex-col gap-1.5">
-      {rows.map(([label, value]) => (
-        <div key={label} className="flex justify-between gap-4 text-xs">
-          <dt className="text-neutral-400">{label}</dt>
-          <dd className="text-right font-medium text-neutral-100">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function toInitial(latest: VerificationRow | null): VerificationInitial | null {
-  if (!latest) return null;
-  const fields = latest.parsed_fields;
-  return {
-    name: fields.name ?? "",
-    hallTicket: latest.hall_ticket ?? fields.hall_ticket ?? "",
-    branch: fields.branch ?? "",
-    collegeName: fields.college_name ?? "",
-    collegeCode: latest.college_code ?? "",
-    gradYear:
-      latest.claimed_grad_year !== null
-        ? String(latest.claimed_grad_year)
-        : fields.grad_year !== undefined
-          ? String(fields.grad_year)
-          : "",
-    frontPath: latest.id_card_front_url,
-    backPath: latest.id_card_back_url,
-    altProofs: latest.alt_proofs.proofs ?? [],
-  };
 }

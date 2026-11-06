@@ -17,12 +17,13 @@ const EXISTS_ERROR = "An account with this email already exists.";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Email + password sign-up. Creates the Supabase Auth user with the
-// service-role admin client, signs the new user in on the session client
-// (so the session cookies land), then hands over to /verify, where the
-// existing completion step (username claim + OneUco ID, then ID-card
-// verification) takes over. The accounts row is deliberately NOT created
-// here — completion owns it, exactly like a first-time Google sign-in.
+// Email + password sign-up. Any personal email works — a college email is
+// never required. Creates the Supabase Auth user with the service-role
+// admin client, signs the new user in on the session client (so the
+// session cookies land), then hands over to /verify, where the completion
+// steps (username claim + OneUco ID, then self-declared study details)
+// take over. The accounts row is deliberately NOT created here —
+// completion owns it, exactly like a first-time Google sign-in.
 export async function signupAction(
   _prevState: SignupState,
   formData: FormData,
@@ -62,11 +63,10 @@ export async function signupAction(
     return { error: EXISTS_ERROR, code: "exists" };
   }
 
-  // email_confirm: true is deliberate. OneUco is a closed student beta and
-  // the real access gate is ID-card verification: a brand-new account sits
-  // in pending_verification with NO access to the app until verification
-  // passes, so confirming inbox ownership first would add a round-trip
-  // (and lose phone-only sign-ups) while granting nothing. Password reset
+  // email_confirm: true is deliberate. A brand-new account has NO access
+  // to the app until it finishes the joining steps on /verify (username
+  // claim + self-declared study details), so confirming inbox ownership
+  // first would add a round-trip while granting nothing. Password reset
   // still proves inbox ownership at the moment it matters.
   const { error: createError } = await admin.auth.admin.createUser({
     email,

@@ -5,7 +5,7 @@ import LoginForm from "./LoginForm";
 // Login — password OR direct Continue with Google. There is NO OTP login
 // anywhere in OneUco; the only OTP-style flow is the forgot-password email
 // reset. Admins have their own entry (/admin/login): an account with an
-// admin role skips student verification (Admin Pass) but never skips
+// admin role skips student profile completion (Admin Pass) but never skips
 // authentication.
 
 function safeNext(raw: string | undefined): string {
@@ -66,9 +66,10 @@ export default async function LoginPage({
       </p>
 
       <p className="text-center text-xs leading-relaxed text-neutral-600">
-        OneUco is for verified JNTUH students only. New here? Create an
-        account with your email or continue with Google — either way
-        you&apos;ll complete student verification before you get in.
+        OneUco is for students everywhere. New here? Create an account
+        with any personal email or continue with Google — no college email
+        is needed, and you&apos;ll just add a few study details before you
+        get in.
       </p>
     </main>
   );

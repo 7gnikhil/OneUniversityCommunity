@@ -11,7 +11,7 @@ export type Intention = "dating" | "friendship" | "study_partner" | "networking"
 
 // The ONLY fields other students may ever see. Server responses for decks,
 // search, profiles and Chirp must be built from this shape — private data
-// (year, college, hall ticket, phone) never leaves the server.
+// (graduation year, college, phone) never leaves the server.
 export interface PublicProfile {
   accountId: string;
   username: string;

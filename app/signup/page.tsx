@@ -2,11 +2,11 @@ import Link from "next/link";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 import SignupForm from "./SignupForm";
 
-// Sign up — email + password, or Google. Either way the account starts
-// with NO app access: after sign-up the student lands on /verify to claim
-// a username + OneUco ID and complete ID-card verification (Slice 2).
-// There is no email-confirmation step — ID verification is the gate (see
-// app/signup/actions.ts) — and no OTP sign-up anywhere in OneUco.
+// Sign up — email + password, or Google. Any personal email works; a
+// college email is never needed. After sign-up the student lands on
+// /verify to claim a username + OneUco ID and add self-declared study
+// details. There is no email-confirmation step and no OTP sign-up anywhere
+// in OneUco.
 export default function SignupPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-6 p-6">
@@ -38,8 +38,10 @@ export default function SignupPage() {
       </p>
 
       <p className="text-center text-xs leading-relaxed text-neutral-600">
-        OneUco is for JNTUH students only. After signing up you&apos;ll
-        verify with your college ID card before you can use the app.
+        OneUco is open to students of any college or university. Use any
+        personal email — no college email is needed. After signing up
+        you&apos;ll claim your username and add a few study details before
+        you can use the app. No documents needed.
       </p>
     </main>
   );

@@ -10,9 +10,9 @@ import {
 import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
 
 // Profile + Settings. Shows ONLY public fields (photo(s), name, bio,
-// branch) plus the owner's @username / OneUco ID. Year, college and
-// hall-ticket number are never read here — they live in the private
-// verifications table and are not part of a profile.
+// branch) plus the owner's @username / OneUco ID. The college and
+// graduation year declared at joining are never read here — they live on
+// the private accounts row and are not part of a public profile.
 // Portfolio links are edited here (Settings -> Portfolio), NOT at sign-up.
 // Nothing is mandatory: every field can stay empty.
 export default async function ProfilePage() {

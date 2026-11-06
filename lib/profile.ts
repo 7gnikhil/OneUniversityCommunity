@@ -90,18 +90,25 @@ export async function getLatestVerification(
   return (data ?? null) as VerificationRow | null;
 }
 
-// ── college codes (official JNTUH list; may legitimately be empty) ────────
+// ── college registry (open; approved rows + the caller's pending rows) ────
+export type CollegeStatus = "approved" | "pending";
+
 export interface CollegeCodeRow {
   code: string;
   college_name: string;
+  city: string | null;
+  status: CollegeStatus;
+  added_by: string | null;
 }
 
 export async function listCollegeCodes(
   supabase: SupabaseClient,
+  accountId: string,
 ): Promise<CollegeCodeRow[]> {
   const { data } = await supabase
     .from("college_codes")
-    .select("code, college_name")
+    .select("code, college_name, city, status, added_by")
+    .or(`status.eq.approved,added_by.eq.${accountId}`)
     .order("college_name", { ascending: true });
   return (data ?? []) as CollegeCodeRow[];
 }

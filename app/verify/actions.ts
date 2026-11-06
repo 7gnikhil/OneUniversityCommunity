@@ -7,17 +7,13 @@ import {
   passesAdminGate,
   type AccountRow,
 } from "@/lib/auth/account";
+import { listCollegeCodes, type CollegeCodeRow } from "@/lib/profile";
 import {
-  getLatestVerification,
-  listCollegeCodes,
-  type AltProof,
-} from "@/lib/profile";
-import {
+  collegeCodeCandidates,
   generateOneucoId,
-  normaliseHallTicket,
+  normaliseCollegeDisplayName,
+  normaliseCollegeName,
   normaliseUsername,
-  parseHallTicket,
-  structureLayerFor,
   validateUsername,
 } from "@/lib/validation";
 
@@ -27,6 +23,11 @@ export interface FormState {
 
 export interface UsernameCheck {
   available: boolean;
+  error: string | null;
+}
+
+export interface AddCollegeResult {
+  college: CollegeCodeRow | null;
   error: string | null;
 }
 
@@ -95,7 +96,7 @@ export async function completeAccountAction(
   }
 
   // Already completed (e.g. double submit): just make sure the profile row
-  // exists, then let the page move on to verification.
+  // exists, then let the page move on to the self-declared study details.
   const existing = await getAccountByAuthUserId(admin, authUserId);
   if (existing) {
     await ensureProfileRow(admin, existing, user.user_metadata);
@@ -116,7 +117,9 @@ export async function completeAccountAction(
         role: "student",
         status: "pending_verification",
       })
-      .select("id, auth_user_id, oneuco_id, username, email, phone, role, status")
+      .select(
+        "id, auth_user_id, oneuco_id, username, email, phone, role, status, college_name, college_code, branch, graduation_year",
+      )
       .single();
 
     if (!error && inserted) {
@@ -170,15 +173,125 @@ async function ensureProfileRow(
   });
 }
 
-// ── Verification submission ────────────────────────────────────────────────
-// The images were uploaded by the browser client straight into the PRIVATE
-// id-cards bucket (paths prefixed with the account id) before this action
-// runs; the action validates the paths belong to the account, re-checks
-// the hall-ticket structure server-side, and writes the verifications row.
-// layer_ocr stays 'not_provided' — OCR is a later phase and is never faked.
-// NO failure path here rejects or bans anyone: doubtful rows simply sit in
-// 'pending' for manual review.
-export async function submitVerificationAction(
+// ── Open college registry ─────────────────────────────────────────────────
+// Add a college / university that is not listed yet. The new row starts as
+// 'pending' and records its adder; it is returned immediately so the form
+// can select it. If the same normalised name is already approved — or is
+// already the caller's own pending entry — that row is returned instead of
+// creating a duplicate. The service-role client is used because the base
+// RLS policy reserves registry writes for admins/service role; this action
+// supplies the missing student path while stamping added_by from the
+// authenticated session, never from client input.
+export async function addCollegeAction(
+  rawName: string,
+  rawCity?: string | null,
+): Promise<AddCollegeResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      college: null,
+      error: "Your session has expired — please log in again.",
+    };
+  }
+  const account = await getAccountByAuthUserId(supabase, user.id);
+  if (!account) {
+    return {
+      college: null,
+      error: "Finish creating your account first (step 1 above).",
+    };
+  }
+  const accountId: string = account.id;
+
+  const collegeName = normaliseCollegeDisplayName(rawName);
+  if (collegeName.length < 2 || collegeName.length > 160) {
+    return {
+      college: null,
+      error: "Enter your college or university name (2–160 characters).",
+    };
+  }
+  const city = rawCity?.trim().replace(/\s+/g, " ") ?? "";
+  if (city.length > 80) {
+    return { college: null, error: "Keep the city under 80 characters." };
+  }
+
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { college: null, error: NOT_CONFIGURED };
+  }
+
+  const normalisedName = normaliseCollegeName(collegeName);
+
+  // A short retry loop covers the tiny race where two students derive the
+  // same new registry code at the same moment.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error: readError } = await admin
+      .from("college_codes")
+      .select("code, college_name, city, status, added_by")
+      .order("college_name", { ascending: true });
+    if (readError) {
+      return {
+        college: null,
+        error: "Couldn't reach the college registry — please try again.",
+      };
+    }
+    const rows = (data ?? []) as CollegeCodeRow[];
+    const duplicate = rows.find(
+      (row) =>
+        normaliseCollegeName(row.college_name) === normalisedName &&
+        (row.status === "approved" || row.added_by === accountId),
+    );
+    if (duplicate) return { college: duplicate, error: null };
+
+    const candidates = collegeCodeCandidates(collegeName, rows);
+    let collided = false;
+    for (const code of candidates) {
+      const { data: inserted, error } = await admin
+        .from("college_codes")
+        .insert({
+          code,
+          college_name: collegeName,
+          city: city || null,
+          status: "pending",
+          added_by: accountId,
+        })
+        .select("code, college_name, city, status, added_by")
+        .single();
+      if (!error && inserted) {
+        return { college: inserted as CollegeCodeRow, error: null };
+      }
+      const message = error?.message ?? "";
+      if (
+        message.includes("college_codes_pkey") ||
+        message.toLowerCase().includes("duplicate key")
+      ) {
+        collided = true;
+        continue;
+      }
+      return {
+        college: null,
+        error: "Couldn't add that college — please try again.",
+      };
+    }
+    if (!collided) break;
+  }
+
+  return {
+    college: null,
+    error: "Couldn't add that college — please try again.",
+  };
+}
+
+// ── Self-declared profile completion ──────────────────────────────────────
+// The student declares where they study: college / university, branch and
+// graduation year. There are NO documents and NO checks in this step. The
+// values are written to the PRIVATE accounts row (never to public_profiles)
+// and the account becomes verified immediately — the student is in.
+export async function completeProfileAction(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
@@ -193,124 +306,70 @@ export async function submitVerificationAction(
   if (!account) {
     return { error: "Finish creating your account first (step 1 above)." };
   }
-  if (passesAdminGate(user.email, account)) {
-    return { error: null };
+  if (passesAdminGate(user.email, account) || account.status === "verified") {
+    redirect("/");
   }
-  const accountId: string = account.id;
-  const pathPrefix = `${accountId}/`;
-
-  const name = String(formData.get("name") ?? "").trim();
-  const hallTicket = normaliseHallTicket(
-    String(formData.get("hallTicket") ?? ""),
-  );
-  const branch = String(formData.get("branch") ?? "").trim();
-  const collegeName = String(formData.get("collegeName") ?? "").trim();
-  const selectedCollegeCode = String(formData.get("collegeCode") ?? "").trim();
-  const gradYearRaw = Number(formData.get("gradYear") ?? "");
-  const frontPath = String(formData.get("frontPath") ?? "").trim();
-  const backPath = String(formData.get("backPath") ?? "").trim();
-
-  if (!name) return { error: "Enter your full name exactly as on the ID card." };
-  const structure = parseHallTicket(hallTicket);
-  if (!structure) {
+  if (account.status === "suspended") {
     return {
       error:
-        "That hall-ticket number doesn't look right — it's 10 characters, starting with your joining year (e.g. 22XY101Z99).",
+        "This account is suspended, so profile completion is unavailable.",
     };
+  }
+  const accountId: string = account.id;
+
+  const selectedCollegeCode = String(formData.get("collegeCode") ?? "").trim();
+  const typedCollegeName = normaliseCollegeDisplayName(
+    String(formData.get("collegeName") ?? ""),
+  );
+  const branch = String(formData.get("branch") ?? "").trim().replace(/\s+/g, " ");
+  const gradYearRaw = Number(formData.get("gradYear") ?? "");
+
+  if (typedCollegeName.length < 2 || typedCollegeName.length > 160) {
+    return { error: "Enter your college or university name." };
+  }
+  if (branch.length < 2 || branch.length > 80) {
+    return { error: "Enter your branch (for example, CSE (AI & ML))." };
   }
   if (
     !Number.isInteger(gradYearRaw) ||
     gradYearRaw < 2020 ||
     gradYearRaw > 2035
   ) {
-    return { error: "Enter your graduation year (e.g. 2027)." };
-  }
-  if (!frontPath) {
-    return { error: "Upload the front of your ID card first." };
-  }
-  if (!frontPath.startsWith(pathPrefix)) {
-    return { error: "That ID card upload didn't come through — please re-upload it." };
-  }
-  if (backPath && !backPath.startsWith(pathPrefix)) {
-    return { error: "That back-of-card upload didn't come through — please re-upload it." };
+    return { error: "Enter your graduation year (for example, 2027)." };
   }
 
-  // Alternative proofs arrive as JSON written by the form: [{kind, path}].
-  let altProofs: AltProof[] = [];
+  // A registry code is stored only when it is one this student may select:
+  // an approved college, or their own pending addition. A free-text college
+  // simply stores its name with no code.
+  const collegeCodes = await listCollegeCodes(supabase, accountId);
+  const selectedCollege = selectedCollegeCode
+    ? collegeCodes.find((row) => row.code === selectedCollegeCode) ?? null
+    : null;
+  const collegeName = selectedCollege
+    ? selectedCollege.college_name
+    : typedCollegeName;
+  const collegeCode = selectedCollege ? selectedCollege.code : null;
+
+  let admin: ReturnType<typeof createAdminClient>;
   try {
-    const parsed: unknown = JSON.parse(
-      String(formData.get("altProofs") ?? "[]"),
-    );
-    if (Array.isArray(parsed)) {
-      altProofs = parsed.filter((row): row is AltProof => {
-        if (typeof row !== "object" || row === null) return false;
-        const candidate = row as { kind?: unknown; path?: unknown };
-        return (
-          (candidate.kind === "hall_ticket" ||
-            candidate.kind === "bonafide" ||
-            candidate.kind === "fee_receipt") &&
-          typeof candidate.path === "string" &&
-          candidate.path.startsWith(pathPrefix)
-        );
-      });
-    }
+    admin = createAdminClient();
   } catch {
-    altProofs = [];
+    return { error: NOT_CONFIGURED };
   }
 
-  const collegeCodes = await listCollegeCodes(supabase);
-  const layerStructure = structureLayerFor(structure, collegeCodes);
-  // college_code is an FK into college_codes — only set it when the code
-  // (from the select, or derived from the ticket) exists in the list.
-  const knownCode =
-    collegeCodes.find((row) => row.code === selectedCollegeCode)?.code ??
-    collegeCodes.find((row) => row.code === structure.collegeCode)?.code ??
-    null;
-
-  const rowPayload = {
-    account_id: accountId,
-    hall_ticket: hallTicket,
-    id_card_front_url: frontPath,
-    id_card_back_url: backPath || null,
-    parsed_fields: {
-      name,
-      hall_ticket: hallTicket,
+  const { error } = await admin
+    .from("accounts")
+    .update({
       college_name: collegeName,
-      college_code: structure.collegeCode,
+      college_code: collegeCode,
       branch,
-      grad_year: gradYearRaw,
-    },
-    college_code: knownCode,
-    claimed_grad_year: gradYearRaw,
-    layer_ocr: "not_provided",
-    layer_structure: layerStructure,
-    layer_email_otp: "not_provided",
-    alt_proofs: { proofs: altProofs },
-    status: "pending" as const,
-  };
-
-  const latest = await getLatestVerification(supabase, accountId);
-  if (latest?.status === "verified") {
-    return { error: "You're already verified — no need to submit again." };
+      graduation_year: gradYearRaw,
+      status: "verified",
+    })
+    .eq("id", accountId);
+  if (error) {
+    return { error: "Couldn't save your profile — please try again." };
   }
 
-  if (latest?.status === "pending") {
-    // Edit / re-submit the pending attempt in place (RLS allows students
-    // to update their own pending row).
-    const { error } = await supabase
-      .from("verifications")
-      .update({ ...rowPayload, review_reason: null })
-      .eq("id", latest.id);
-    if (error) {
-      return { error: "Couldn't save your changes — please try again." };
-    }
-  } else {
-    // First submission, or a fresh attempt after a rejection.
-    const { error } = await supabase.from("verifications").insert(rowPayload);
-    if (error) {
-      return { error: "Couldn't submit your verification — please try again." };
-    }
-  }
-
-  redirect("/verify");
+  redirect("/");
 }

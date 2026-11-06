@@ -18,9 +18,9 @@ export default function PrivacyPage() {
       <section className="mt-8 space-y-3 text-sm leading-6">
         <h2 className="text-base font-semibold text-white">Who can use OneUco</h2>
         <p>
-          OneUco is a community app exclusively for students of JNTUH-affiliated
-          colleges. Access is limited to students who complete the in-app
-          verification described below.
+          OneUco is a community app open to students of any college or
+          university. Access is limited to students who complete the in-app
+          joining steps described below.
         </p>
 
         <h2 className="pt-4 text-base font-semibold text-white">What we collect</h2>
@@ -33,12 +33,12 @@ export default function PrivacyPage() {
           from Google.
         </p>
         <p>
-          <strong className="text-white">Verification data:</strong> to confirm
-          you are a JNTUH student, you may upload a photo of your college ID
-          card. We read the printed fields (such as name, hall-ticket number,
-          branch and college) to check the card. ID card images are stored in a
-          private bucket that other students cannot access; they are visible
-          only to you and to the app administrator for review.
+          <strong className="text-white">Study details you declare:</strong>{" "}
+          when you complete your profile, you tell us your college or
+          university, branch and graduation year. These are self-declared
+          private profile data on your account. We do not collect ID cards
+          or other documents, and we do not check these details against
+          institutional records.
         </p>
         <p>
           <strong className="text-white">Profile data:</strong> the name, bio,
@@ -53,8 +53,9 @@ export default function PrivacyPage() {
         <h2 className="pt-4 text-base font-semibold text-white">What other students can see</h2>
         <p>
           Only these profile fields are public to other students: your display
-          photo, name, bio and branch. Your year of study, college, hall-ticket
-          number and ID card are never shown to other students.
+          photo, name, bio and branch. The college or university and
+          graduation year you declare when joining are private account data
+          and are never shown to other students.
         </p>
         <p>
           Posts in the main channel (Maya Jwalam) are anonymous to members: your
@@ -64,11 +65,11 @@ export default function PrivacyPage() {
 
         <h2 className="pt-4 text-base font-semibold text-white">How we use data</h2>
         <p>
-          We use your data only to run the app: verifying student status,
-          showing your public profile, matching and messaging, moderation and
-          safety (including reports and blocks), and responding to requests you
-          send us in the app. We do not sell your data, and we do not use it for
-          advertising.
+          We use your data only to run the app: saving the study details you
+          declare, showing your public profile, matching and messaging,
+          moderation and safety (including reports and blocks), and responding
+          to requests you send us in the app. We do not sell your data, and we
+          do not use it for advertising.
         </p>
 
         <h2 className="pt-4 text-base font-semibold text-white">Where data is stored</h2>
