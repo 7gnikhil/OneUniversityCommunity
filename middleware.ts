@@ -68,6 +68,7 @@ export async function middleware(request: NextRequest) {
 
   const PUBLIC_AUTH_PAGES: string[] = [
     "/login",
+    "/signup",
     "/forgot-password",
     "/reset-password",
     "/admin/login",
@@ -96,8 +97,12 @@ export async function middleware(request: NextRequest) {
     return admin ? response : redirect("/");
   }
 
-  // Signed-in users don't need the login/forgot pages again.
-  if (pathname === "/login" || pathname === "/forgot-password") {
+  // Signed-in users don't need the login/sign-up/forgot pages again.
+  if (
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/forgot-password"
+  ) {
     return redirect(verified ? "/" : "/verify");
   }
   // Reached WITH a (recovery) session from the email link — always allowed.
