@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import PasswordInput from "@/components/PasswordInput";
 
 // Step 2 of the reset flow. The email link (via /auth/callback) establishes
 // a short-lived recovery session; this form sets the new password on that
@@ -94,11 +95,9 @@ export default function ResetPasswordForm() {
     <form onSubmit={onSubmit} className="flex w-full flex-col gap-3">
       <label className="flex flex-col gap-1 text-left">
         <span className="text-xs text-neutral-400">New password</span>
-        <input
+        <PasswordInput
           name="new-password"
-          type="password"
           autoComplete="new-password"
-          required
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white focus:border-neutral-500 focus:outline-none"
@@ -106,11 +105,9 @@ export default function ResetPasswordForm() {
       </label>
       <label className="flex flex-col gap-1 text-left">
         <span className="text-xs text-neutral-400">Confirm new password</span>
-        <input
+        <PasswordInput
           name="confirm-password"
-          type="password"
           autoComplete="new-password"
-          required
           value={confirm}
           onChange={(event) => setConfirm(event.target.value)}
           className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white focus:border-neutral-500 focus:outline-none"

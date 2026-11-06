@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { signupAction, type SignupState } from "./actions";
+import PasswordInput from "@/components/PasswordInput";
 
 // Email + password sign-up form. All validation that matters is repeated
 // server-side in the action (min length, match, existing account); this
@@ -36,22 +37,18 @@ export default function SignupForm() {
         </label>
         <label className="flex flex-col gap-1 text-left">
           <span className="text-xs text-neutral-400">Password</span>
-          <input
+          <PasswordInput
             name="password"
-            type="password"
             autoComplete="new-password"
-            required
             placeholder="At least 8 characters"
             className={INPUT_CLASS}
           />
         </label>
         <label className="flex flex-col gap-1 text-left">
           <span className="text-xs text-neutral-400">Confirm password</span>
-          <input
+          <PasswordInput
             name="confirmPassword"
-            type="password"
             autoComplete="new-password"
-            required
             className={INPUT_CLASS}
           />
         </label>

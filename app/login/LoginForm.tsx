@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { loginAction, type LoginState } from "./actions";
+import PasswordInput from "@/components/PasswordInput";
 
 // Password login form: a single identifier field (OneUco ID / username /
 // email / phone) + password, posted to the server action.
@@ -75,11 +76,9 @@ export default function LoginForm({ next }: { next: string }) {
         </label>
         <label className="flex flex-col gap-1 text-left">
           <span className="text-xs text-neutral-400">Password</span>
-          <input
+          <PasswordInput
             name="password"
-            type="password"
             autoComplete="current-password"
-            required
             className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
           />
         </label>
