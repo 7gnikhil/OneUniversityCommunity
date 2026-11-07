@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { listChirps } from "@/lib/chirp";
 import { accentHex } from "@/lib/validation";
@@ -11,10 +11,7 @@ import ChirpFeed from "./ChirpFeed";
 // records one view per visible chirp (best-effort, service role).
 export default async function ChirpPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  const account = await getMyAccount(supabase);
 
   if (!account) {
     return (

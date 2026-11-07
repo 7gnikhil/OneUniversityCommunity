@@ -2,7 +2,7 @@ import Link from "next/link";
 import DialNav, { type DialBadges } from "@/components/DialNav";
 import LiveClock from "@/components/LiveClock";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
 import { isOwnerEmail } from "@/lib/server/owner";
 import { getProfileByAccountId } from "@/lib/profile";
 import { getTotalDmUnread } from "@/lib/social";
@@ -21,10 +21,10 @@ import { accentHex } from "@/lib/validation";
 // unread count. Zero counts render no badge.
 export default async function DialHomePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  // Request-cached: the session resolves locally (JWT claims) and the
+  // account lookup runs once per render, however many components ask.
+  const account = await getMyAccount(supabase);
+  const sessionUser = await getMySessionUser(supabase);
 
   let badges: DialBadges | undefined;
   let inboxUnread = 0;
@@ -97,7 +97,7 @@ export default async function DialHomePage() {
             </span>
           ) : null}
         </Link>
-        {isOwnerEmail(user?.email) ? (
+        {isOwnerEmail(sessionUser?.email) ? (
           <Link href="/admin" className="transition hover:text-white">
             Admin
           </Link>

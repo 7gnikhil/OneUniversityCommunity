@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { listDeckCandidates } from "@/lib/social";
 import { accentHex } from "@/lib/validation";
@@ -16,11 +16,8 @@ import SwipeDeck from "./SwipeDeck";
 // not even selected.
 export default async function SwipePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  const account = await getMyAccount(supabase);
 
   if (!account) {
     return (

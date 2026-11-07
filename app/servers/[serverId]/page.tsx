@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import {
-  getAccountByAuthUserId,
-  passesAdminGate,
-} from "@/lib/auth/account";
+import { passesAdminGate } from "@/lib/auth/account";
+import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import {
   canViewServer,
@@ -51,10 +49,8 @@ export default async function ServerPage({
   const { channel: requestedChannel } = await searchParams;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  const account = await getMyAccount(supabase);
+  const sessionUser = await getMySessionUser(supabase);
   if (!account) {
     return (
       <Shell title="Server">
@@ -71,7 +67,7 @@ export default async function ServerPage({
     );
   }
   const me = account;
-  const isAppAdmin = passesAdminGate(user?.email, me);
+  const isAppAdmin = passesAdminGate(sessionUser?.email, me);
 
   let admin: ReturnType<typeof createAdminClient>;
   try {

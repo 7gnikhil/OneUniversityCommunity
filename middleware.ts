@@ -4,6 +4,7 @@ import {
   getAccountByAuthUserId,
   passesAdminGate,
 } from "@/lib/auth/account";
+import { getSessionUser } from "@/lib/auth/session";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -41,10 +42,13 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  // Refreshes the auth session cookie if needed.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Session resolution: local JWT claims first (getSessionUser verifies
+  // the token against the project JWKS — no Auth-server round trip on
+  // the every-request path). Whenever the token can't be validated
+  // locally it falls back to supabase.auth.getUser(), which is also the
+  // call that refreshes the auth session cookie when a refresh is due —
+  // so cookie rotation still happens exactly when it used to matter.
+  const user = await getSessionUser(supabase);
 
   const { pathname } = request.nextUrl;
 

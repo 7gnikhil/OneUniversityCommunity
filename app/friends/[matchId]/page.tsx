@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import {
   getMatchById,
@@ -24,11 +24,8 @@ export default async function ChatPage({
 }) {
   const { matchId } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  const account = await getMyAccount(supabase);
   if (!account) redirect("/friends");
   const me = account;
 

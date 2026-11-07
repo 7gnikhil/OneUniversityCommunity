@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import {
   EMPTY_PORTFOLIO,
@@ -17,11 +17,8 @@ import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
 // Nothing is mandatory: every field can stay empty.
 export default async function ProfilePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  const account = await getMyAccount(supabase);
 
   if (!account) {
     return (

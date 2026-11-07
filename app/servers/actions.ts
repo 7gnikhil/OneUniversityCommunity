@@ -6,6 +6,7 @@ import {
   passesAdminGate,
   type AccountRow,
 } from "@/lib/auth/account";
+import { getSessionUser } from "@/lib/auth/session";
 import {
   canViewServer,
   ensureDefaultChannel,
@@ -57,6 +58,31 @@ async function requireCtx(): Promise<Ctx | null> {
     account,
     admin,
     isAppAdmin: passesAdminGate(user.email, account),
+  };
+}
+
+// Polling-path variant of requireCtx: identical resolution, but the
+// session is read locally (JWT claims via getSessionUser, getUser
+// fallback) instead of paying an Auth-server round trip on every poll.
+// Used ONLY by the actions the chat views invoke from their poll loops —
+// fetchServerMessagesAction, fetchJwalamMessagesAction and
+// markServerReadAction. Every mutation keeps requireCtx above.
+async function requirePollCtx(): Promise<Ctx | null> {
+  const supabase = await createClient();
+  const sessionUser = await getSessionUser(supabase);
+  if (!sessionUser) return null;
+  const account = await getAccountByAuthUserId(supabase, sessionUser.id);
+  if (!account) return null;
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return null;
+  }
+  return {
+    account,
+    admin,
+    isAppAdmin: passesAdminGate(sessionUser.email, account),
   };
 }
 
@@ -419,7 +445,7 @@ export async function fetchServerMessagesAction(
   serverId: string,
   channelId: string | null,
 ): Promise<ServerMessageView[]> {
-  const ctx = await requireCtx();
+  const ctx = await requirePollCtx();
   if (!ctx) return [];
   // This is the chat polling path: the server row and my membership are
   // independent reads keyed by the same server id — fetch them together.
@@ -435,7 +461,7 @@ export async function fetchServerMessagesAction(
 export async function fetchJwalamMessagesAction(
   serverId: string,
 ): Promise<JwalamMessageView[]> {
-  const ctx = await requireCtx();
+  const ctx = await requirePollCtx();
   if (!ctx) return [];
   const server = await getServerById(ctx.admin, serverId);
   if (!server || !server.is_main_channel) return [];
@@ -444,7 +470,7 @@ export async function fetchJwalamMessagesAction(
 }
 
 export async function markServerReadAction(serverId: string): Promise<void> {
-  const ctx = await requireCtx();
+  const ctx = await requirePollCtx();
   if (!ctx) return;
   await ctx.admin
     .from("server_members")

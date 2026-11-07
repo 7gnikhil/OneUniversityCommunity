@@ -2,6 +2,7 @@
 
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getSessionUser } from "@/lib/auth/session";
 import {
   getMatchById,
   listMessages,
@@ -33,6 +34,23 @@ async function requireAccount(): Promise<
   } = await supabase.auth.getUser();
   if (!user) return null;
   const account = await getAccountByAuthUserId(supabase, user.id);
+  if (!account) return null;
+  return { accountId: account.id, supabase };
+}
+
+// Polling-path variant of requireAccount: identical resolution, but the
+// session is read locally (JWT claims via getSessionUser, getUser
+// fallback) instead of paying an Auth-server round trip on every poll.
+// Used ONLY by the two actions ChatView invokes from its poll loop —
+// fetchMessagesAction and markMatchReadAction. Mutations (send, unmatch,
+// block) keep the fully server-validated requireAccount above.
+async function requirePollAccount(): Promise<
+  { accountId: string; supabase: Awaited<ReturnType<typeof createClient>> } | null
+> {
+  const supabase = await createClient();
+  const sessionUser = await getSessionUser(supabase);
+  if (!sessionUser) return null;
+  const account = await getAccountByAuthUserId(supabase, sessionUser.id);
   if (!account) return null;
   return { accountId: account.id, supabase };
 }
@@ -98,7 +116,7 @@ export async function sendMessageAction(
 // Polling fetch for the chat view (no realtime publication in the schema —
 // the chat polls this every few seconds; see ChatView).
 export async function fetchMessagesAction(matchId: string): Promise<MessageRow[]> {
-  const ctx = await requireAccount();
+  const ctx = await requirePollAccount();
   if (!ctx) return [];
   const match = await requireMyMatch(ctx.supabase, matchId, ctx.accountId);
   if (!match) return [];
@@ -109,7 +127,7 @@ export async function fetchMessagesAction(matchId: string): Promise<MessageRow[]
 // read. The messages_mark_read RLS policy permits exactly this update and
 // no other, so the session client is sufficient.
 export async function markMatchReadAction(matchId: string): Promise<void> {
-  const ctx = await requireAccount();
+  const ctx = await requirePollAccount();
   if (!ctx) return;
   const match = await requireMyMatch(ctx.supabase, matchId, ctx.accountId);
   if (!match) return;

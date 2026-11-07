@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import {
   ensureMainServer,
@@ -17,10 +17,7 @@ import CreateServerForm from "./CreateServerForm";
 // server_members.last_read_at (lib/servers getServerUnreadCounts).
 export default async function ServersPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  const account = await getMyAccount(supabase);
 
   if (!account) {
     return (

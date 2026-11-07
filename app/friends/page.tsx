@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { listDmEntries, type DmListEntry } from "@/lib/social";
 import { accentHex } from "@/lib/validation";
@@ -13,11 +13,8 @@ import { accentHex } from "@/lib/validation";
 // matches.updated_at, which the send action bumps on every message.
 export default async function FriendsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
+  const account = await getMyAccount(supabase);
 
   if (!account) {
     return (
