@@ -3,6 +3,7 @@ import DialNav, { type DialBadges } from "@/components/DialNav";
 import LiveClock from "@/components/LiveClock";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getAccountByAuthUserId } from "@/lib/auth/account";
+import { isOwnerEmail } from "@/lib/server/owner";
 import { getProfileByAccountId } from "@/lib/profile";
 import { getTotalDmUnread } from "@/lib/social";
 import { getTotalServerUnread } from "@/lib/servers";
@@ -96,7 +97,7 @@ export default async function DialHomePage() {
             </span>
           ) : null}
         </Link>
-        {account && (account.role === "admin" || account.role === "owner") ? (
+        {isOwnerEmail(user?.email) ? (
           <Link href="/admin" className="transition hover:text-white">
             Admin
           </Link>

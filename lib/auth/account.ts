@@ -43,16 +43,18 @@ export function isAdminRole(role: Role | null | undefined): boolean {
   return role === "owner" || role === "admin";
 }
 
-// The Admin Pass gate: role 'owner'/'admin' on the account row, OR the
-// owner's own email (server-side bootstrap for the first admin sign-in,
-// see lib/server/owner.ts). Admin Pass skips student profile completion only —
+// The Admin Pass gate: ONLY the owner's own email passes (owner's rule,
+// 2026-11-07: "only my email id is only access to admin page" — no other
+// email works, and admin roles alone no longer open the gate; see
+// lib/server/owner.ts). Admin Pass skips student profile completion only —
 // the caller must already be authenticated; this function never replaces
-// authentication.
+// authentication. The `account` parameter is kept for call-site compatibility.
 export function passesAdminGate(
   email: string | null | undefined,
   account: AccountRow | null,
 ): boolean {
-  return isOwnerEmail(email) || isAdminRole(account?.role);
+  void account;
+  return isOwnerEmail(email);
 }
 
 // Session lookup: the account row belonging to this auth user, or null when
