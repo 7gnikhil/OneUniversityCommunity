@@ -96,6 +96,11 @@ export default async function DialHomePage() {
             </span>
           ) : null}
         </Link>
+        {account && (account.role === "admin" || account.role === "owner") ? (
+          <Link href="/admin" className="transition hover:text-white">
+            Admin
+          </Link>
+        ) : null}
         <Link href="/profile" className="transition hover:text-white">
           Settings
         </Link>
