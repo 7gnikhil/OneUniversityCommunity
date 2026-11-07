@@ -28,14 +28,22 @@ export default async function DialHomePage() {
   let badges: DialBadges | undefined;
   let inboxUnread = 0;
   if (account) {
-    const myProfile = await getProfileByAccountId(supabase, account.id);
+    // Independent reads run in parallel — the dial home used to wait on
+    // them one by one, which made the home screen feel asleep.
+    const [myProfile, dmUnread] = await Promise.all([
+      getProfileByAccountId(supabase, account.id),
+      getTotalDmUnread(supabase, account.id),
+    ]);
     const accent = accentHex(myProfile?.accent_color);
-    const dmUnread = await getTotalDmUnread(supabase, account.id);
     let serverUnread = 0;
     try {
       const admin = createAdminClient();
-      serverUnread = await getTotalServerUnread(admin, account.id);
-      inboxUnread = await getInboxUnreadCount(admin, account.id);
+      const counts = await Promise.all([
+        getTotalServerUnread(admin, account.id),
+        getInboxUnreadCount(admin, account.id),
+      ]);
+      serverUnread = counts[0];
+      inboxUnread = counts[1];
     } catch {
       // Badge counts are best-effort; the dial itself never breaks.
     }
