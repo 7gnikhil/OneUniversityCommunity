@@ -104,8 +104,13 @@ export default async function ServerPage({
   }
   const confirmedServer: ServerRow = server;
 
-  let membership = await getMembership(admin, confirmedServer.id, me.id);
-  const myProfile = await getProfileByAccountId(supabase, me.id);
+  // Membership and my own profile are independent reads — fetch both
+  // together instead of one after the other.
+  const [fetchedMembership, myProfile] = await Promise.all([
+    getMembership(admin, confirmedServer.id, me.id),
+    getProfileByAccountId(supabase, me.id),
+  ]);
+  let membership = fetchedMembership;
   const accent = accentHex(myProfile?.accent_color);
 
   // ── Maya Jwalam ──────────────────────────────────────────────────────────
@@ -163,21 +168,24 @@ export default async function ServerPage({
   }
 
   const staff = isServerStaff(membership, confirmedServer, me.id, isAppAdmin);
-  const channels = await ensureDefaultChannel(admin, confirmedServer.id);
-  const activeChannel =
-    channels.find((row) => row.id === requestedChannel) ?? channels[0] ?? null;
-  const [messages, flairs, reqFlair, memberEntries] = await Promise.all([
-    listServerMessages(
-      admin,
-      confirmedServer.id,
-      activeChannel?.id ?? null,
-      me.id,
-      100,
-    ),
+  // Only the message list depends on the channel set (it needs the
+  // active channel); flairs and the member list are independent, so
+  // they load alongside the channel ensure instead of behind it.
+  const [channels, flairs, reqFlair, memberEntries] = await Promise.all([
+    ensureDefaultChannel(admin, confirmedServer.id),
     listFlairs(admin, confirmedServer.id),
     getReqToAdminFlair(admin),
     listServerMembers(admin, confirmedServer.id),
   ]);
+  const activeChannel =
+    channels.find((row) => row.id === requestedChannel) ?? channels[0] ?? null;
+  const messages = await listServerMessages(
+    admin,
+    confirmedServer.id,
+    activeChannel?.id ?? null,
+    me.id,
+    100,
+  );
 
   const memberData: MemberEntryData[] = memberEntries
     .filter((entry) => entry.profile !== null)
@@ -189,31 +197,38 @@ export default async function ServerPage({
       role: entry.membership.role,
     }));
 
-  // Direct-add candidates: my matches who aren't already members.
+  // Direct-add candidates (my matches who aren't already members) and
+  // the share invite are independent loads — run them together.
   let addableFriends: AddableFriendData[] = [];
+  let shareInvite: Awaited<ReturnType<typeof getServerShareInvite>> = null;
   if (staff) {
-    const memberIds = new Set(memberEntries.map((entry) => entry.membership.account_id));
-    const matches = await getMyMatches(supabase, me.id);
-    const otherIds = matches
-      .map((match) => otherPartyId(match, me.id))
-      .filter((id) => !memberIds.has(id));
-    const profiles = await getPublicProfilesByIds(admin, otherIds);
-    addableFriends = otherIds
-      .map((id) => profiles.get(id))
-      .filter(
-        (profile): profile is NonNullable<typeof profile> => profile !== undefined,
-      )
-      .map((profile) => ({
-        accountId: profile.accountId,
-        name: profile.name,
-        username: profile.username,
-        photoUrl: profile.photoUrl,
-      }));
+    const loadAddableFriends = async (): Promise<AddableFriendData[]> => {
+      const memberIds = new Set(
+        memberEntries.map((entry) => entry.membership.account_id),
+      );
+      const matches = await getMyMatches(supabase, me.id);
+      const otherIds = matches
+        .map((match) => otherPartyId(match, me.id))
+        .filter((id) => !memberIds.has(id));
+      const profiles = await getPublicProfilesByIds(admin, otherIds);
+      return otherIds
+        .map((id) => profiles.get(id))
+        .filter(
+          (profile): profile is NonNullable<typeof profile> =>
+            profile !== undefined,
+        )
+        .map((profile) => ({
+          accountId: profile.accountId,
+          name: profile.name,
+          username: profile.username,
+          photoUrl: profile.photoUrl,
+        }));
+    };
+    [addableFriends, shareInvite] = await Promise.all([
+      loadAddableFriends(),
+      getServerShareInvite(admin, confirmedServer.id),
+    ]);
   }
-
-  const shareInvite = staff
-    ? await getServerShareInvite(admin, confirmedServer.id)
-    : null;
 
   return (
     <main className="mx-auto flex h-dvh w-full max-w-md flex-col px-4 pb-2 pt-4">

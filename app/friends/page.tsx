@@ -37,9 +37,13 @@ export default async function FriendsPage() {
     );
   }
 
-  const myProfile = await getProfileByAccountId(supabase, account.id);
+  // My profile (for the accent colour) and the DM list are independent
+  // reads — fetch them together.
+  const [myProfile, entries] = await Promise.all([
+    getProfileByAccountId(supabase, account.id),
+    listDmEntries(supabase, account.id),
+  ]);
   const accent = accentHex(myProfile?.accent_color);
-  const entries = await listDmEntries(supabase, account.id);
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">

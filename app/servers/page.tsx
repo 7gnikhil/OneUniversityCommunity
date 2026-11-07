@@ -41,18 +41,30 @@ export default async function ServersPage() {
   }
   const me = account;
 
+  const myProfilePromise = getProfileByAccountId(supabase, me.id);
+  // The profile fetch is awaited below on every path; this side handler
+  // just keeps an early rejection from surfacing as unhandled while the
+  // admin block runs. Awaiting the original promise still rethrows.
+  myProfilePromise.catch(() => undefined);
+
   let entries: ServerListEntry[] = [];
   let unread: Record<string, number> = {};
   let adminReady = true;
   try {
     const admin = createAdminClient();
     await ensureMainServer(admin);
+    // The list and the unread counts are independent once the main
+    // server exists — run them together, but keep the original
+    // assignment order: if the counts fail after the list succeeded,
+    // the page still renders the list (with the notice below).
+    const unreadPromise = getServerUnreadCounts(admin, me.id);
+    unreadPromise.catch(() => undefined);
     entries = await listServersForUser(admin, me.id);
-    unread = await getServerUnreadCounts(admin, me.id);
+    unread = await unreadPromise;
   } catch {
     adminReady = false;
   }
-  const myProfile = await getProfileByAccountId(supabase, me.id);
+  const myProfile = await myProfilePromise;
   const accent = accentHex(myProfile?.accent_color);
 
   return (

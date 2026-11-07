@@ -69,6 +69,21 @@ export default async function InboxPage() {
     items = await listInboxItems(supabase, me.id, 50);
   }
 
+  // Mark delivered notices read now that they've been rendered. This
+  // write depends only on `items`, so it starts here and runs alongside
+  // the username resolution below instead of waiting behind it; it is
+  // still awaited before the page returns.
+  const unreadIds = items.filter((item) => !item.is_read).map((item) => item.id);
+  const markReadPromise: Promise<void> = (async () => {
+    if (unreadIds.length > 0) {
+      await supabase
+        .from("inbox_items")
+        .update({ is_read: true })
+        .in("id", unreadIds)
+        .eq("recipient_id", me.id);
+    }
+  })();
+
   // For accepted reveal outcomes, resolve the poster's public username so
   // the notice can link to the revealed profile.
   let revealedUsernames = new Map<string, string>();
@@ -105,15 +120,7 @@ export default async function InboxPage() {
     // Links are a nicety; notices still render without them.
   }
 
-  // Mark delivered notices read now that they've been rendered.
-  const unreadIds = items.filter((item) => !item.is_read).map((item) => item.id);
-  if (unreadIds.length > 0) {
-    await supabase
-      .from("inbox_items")
-      .update({ is_read: true })
-      .in("id", unreadIds)
-      .eq("recipient_id", me.id);
-  }
+  await markReadPromise;
 
   const empty =
     items.length === 0 &&

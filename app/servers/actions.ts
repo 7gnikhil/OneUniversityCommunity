@@ -100,26 +100,34 @@ export async function createServerAction(
     return { error: "Couldn't create the server — please try again.", serverId: null };
   }
   const serverId: string = (data as { id: string }).id;
-  await ctx.admin.from("server_members").insert({
-    server_id: serverId,
-    account_id: ctx.account.id,
-    role: "owner",
-  });
-  await ctx.admin.from("channels").insert({
-    server_id: serverId,
-    name: "general",
-    topic: null,
-    position: 0,
-  });
+  // The owner's membership row and the default channel are independent
+  // inserts (both keyed only by the new server id) — run them together.
+  await Promise.all([
+    ctx.admin.from("server_members").insert({
+      server_id: serverId,
+      account_id: ctx.account.id,
+      role: "owner",
+    }),
+    ctx.admin.from("channels").insert({
+      server_id: serverId,
+      name: "general",
+      topic: null,
+      position: 0,
+    }),
+  ]);
   return { error: null, serverId };
 }
 
 export async function joinServerAction(serverId: string): Promise<ActionResult> {
   const ctx = await requireCtx();
   if (!ctx) return { error: "Please sign in again." };
-  const server = await getServerById(ctx.admin, serverId);
+  // The server row and my membership are independent reads keyed by
+  // the same server id — fetch them together.
+  const [server, existing] = await Promise.all([
+    getServerById(ctx.admin, serverId),
+    getMembership(ctx.admin, serverId, ctx.account.id),
+  ]);
   if (!server) return { error: "That server doesn't exist." };
-  const existing = await getMembership(ctx.admin, serverId, ctx.account.id);
   if (existing) return { error: null };
   // Public servers (incl. Maya Jwalam) are joinable directly; private
   // servers join via invite code/link/direct add only.
@@ -183,10 +191,15 @@ export async function sendServerMessageAction(
 ): Promise<SendServerMessageResult> {
   const ctx = await requireCtx();
   if (!ctx) return { error: "Please sign in again.", messageId: null };
-  const server = await getServerById(ctx.admin, serverId);
+  // The server row and my membership are independent reads keyed by
+  // the same server id — fetch them together.
+  const [server, fetchedMembership] = await Promise.all([
+    getServerById(ctx.admin, serverId),
+    getMembership(ctx.admin, serverId, ctx.account.id),
+  ]);
   if (!server) return { error: "That server doesn't exist.", messageId: null };
 
-  let membership = await getMembership(ctx.admin, serverId, ctx.account.id);
+  let membership = fetchedMembership;
   if (!membership) {
     // Public servers auto-join on first post (matches the join button's
     // one-tap model); private servers never auto-join.
@@ -286,8 +299,11 @@ export async function deleteServerMessageAction(
   } | null;
   if (!message) return { error: "That message is already gone." };
   if (message.author_id !== ctx.account.id && !ctx.isAppAdmin) {
-    const server = await getServerById(ctx.admin, message.server_id);
-    const membership = await getMembership(ctx.admin, message.server_id, ctx.account.id);
+    // Independent reads keyed by the message's server id — together.
+    const [server, membership] = await Promise.all([
+      getServerById(ctx.admin, message.server_id),
+      getMembership(ctx.admin, message.server_id, ctx.account.id),
+    ]);
     const staff =
       server !== null &&
       isServerStaff(membership, server, ctx.account.id, ctx.isAppAdmin) &&
@@ -379,9 +395,12 @@ export async function togglePinMessageAction(
     is_pinned: boolean;
   } | null;
   if (!message) return { error: "That message is gone." };
-  const server: ServerRow | null = await getServerById(ctx.admin, message.server_id);
+  // Independent reads keyed by the message's server id — together.
+  const [server, membership] = await Promise.all([
+    getServerById(ctx.admin, message.server_id),
+    getMembership(ctx.admin, message.server_id, ctx.account.id),
+  ]);
   if (!server) return { error: "That server doesn't exist." };
-  const membership = await getMembership(ctx.admin, message.server_id, ctx.account.id);
   // Main channel: app admins pin (official pins). Other servers: staff.
   const allowed = server.is_main_channel
     ? ctx.isAppAdmin
@@ -402,9 +421,13 @@ export async function fetchServerMessagesAction(
 ): Promise<ServerMessageView[]> {
   const ctx = await requireCtx();
   if (!ctx) return [];
-  const server = await getServerById(ctx.admin, serverId);
+  // This is the chat polling path: the server row and my membership are
+  // independent reads keyed by the same server id — fetch them together.
+  const [server, membership] = await Promise.all([
+    getServerById(ctx.admin, serverId),
+    getMembership(ctx.admin, serverId, ctx.account.id),
+  ]);
   if (!server || server.is_main_channel) return [];
-  const membership = await getMembership(ctx.admin, serverId, ctx.account.id);
   if (!canViewServer(server, membership, ctx.account.id, ctx.isAppAdmin)) return [];
   return listServerMessages(ctx.admin, serverId, channelId, ctx.account.id, 100);
 }
@@ -435,9 +458,12 @@ async function requireStaff(
   ctx: Ctx,
   serverId: string,
 ): Promise<{ server: ServerRow } | { error: string }> {
-  const server = await getServerById(ctx.admin, serverId);
+  // Independent reads keyed by the same server id — fetch them together.
+  const [server, membership] = await Promise.all([
+    getServerById(ctx.admin, serverId),
+    getMembership(ctx.admin, serverId, ctx.account.id),
+  ]);
   if (!server) return { error: "That server doesn't exist." };
-  const membership = await getMembership(ctx.admin, serverId, ctx.account.id);
   if (!isServerStaff(membership, server, ctx.account.id, ctx.isAppAdmin)) {
     return { error: "Only the server owner and mods can do that." };
   }
@@ -528,19 +554,23 @@ export async function directAddMemberAction(
   });
   if (error) return { error: "Couldn't add them — please try again." };
 
-  await ctx.admin.from("group_invites").insert({
-    server_id: serverId,
-    invite_code: generateInviteCode(),
-    created_by: ctx.account.id,
-    invitee_account_id: targetAccountId,
-  });
-  await deliverInboxItem(
-    ctx.admin,
-    targetAccountId,
-    "group_invite",
-    `You've been added to ${server.name}`,
-    "Open Servers to jump in.",
-    serverId,
-  );
+  // The invite record and the Inbox notice are independent writes —
+  // send them together.
+  await Promise.all([
+    ctx.admin.from("group_invites").insert({
+      server_id: serverId,
+      invite_code: generateInviteCode(),
+      created_by: ctx.account.id,
+      invitee_account_id: targetAccountId,
+    }),
+    deliverInboxItem(
+      ctx.admin,
+      targetAccountId,
+      "group_invite",
+      `You've been added to ${server.name}`,
+      "Open Servers to jump in.",
+      serverId,
+    ),
+  ]);
   return { error: null };
 }

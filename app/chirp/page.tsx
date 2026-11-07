@@ -35,8 +35,12 @@ export default async function ChirpPage() {
   }
   const me = account;
 
-  const chirps = await listChirps(supabase, me.id, 50);
-  const myProfile = await getProfileByAccountId(supabase, me.id);
+  // The feed and my own profile (for the accent colour) are independent
+  // reads — fetch them together.
+  const [chirps, myProfile] = await Promise.all([
+    listChirps(supabase, me.id, 50),
+    getProfileByAccountId(supabase, me.id),
+  ]);
   const accent = accentHex(myProfile?.accent_color);
 
   // Record views for what was just rendered (denormalised counter; the

@@ -39,13 +39,17 @@ export default async function ChatPage({
   const confirmedMatch = match;
 
   const otherId: string = otherPartyId(confirmedMatch, me.id);
-  const profilesById = await getPublicProfilesByIds(supabase, [otherId]);
+  // The other party's public profile, my own profile (for the accent
+  // colour) and the message history are independent reads — fetch all
+  // three together instead of one after the other.
+  const [profilesById, myProfile, initialMessages] = await Promise.all([
+    getPublicProfilesByIds(supabase, [otherId]),
+    getProfileByAccountId(supabase, me.id),
+    listMessages(supabase, confirmedMatch.id, 200),
+  ]);
   const other = profilesById.get(otherId);
   if (!other) redirect("/friends");
   const otherProfile = other;
-
-  const myProfile = await getProfileByAccountId(supabase, me.id);
-  const initialMessages = await listMessages(supabase, confirmedMatch.id, 200);
 
   return (
     <main className="mx-auto flex h-dvh w-full max-w-md flex-col px-4 pb-2 pt-4">
