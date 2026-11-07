@@ -6,7 +6,6 @@ import {
   passesAdminGate,
   type AccountRow,
 } from "@/lib/auth/account";
-import { getProfileByAccountId } from "@/lib/profile";
 import { getDiwaliMode } from "@/lib/server/diwali-settings";
 import DiwaliToggle from "@/components/DiwaliToggle";
 
@@ -112,14 +111,8 @@ export default async function AdminPage() {
   if (!passesAdminGate(user.email, account)) {
     redirect("/auth/admin-denied");
   }
-  const profile = account
-    ? await getProfileByAccountId(supabase, account.id)
-    : null;
-  const metadataName =
-    typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name
-      : "";
-  const displayName = profile?.name.trim() ? profile.name : metadataName || "Admin";
+  // The developer surface NEVER shows the owner's personal identity
+  // (name, @username, OneUco ID, photo, or mail) — only "OneUCo Developer".
   const roleLabel = account?.role === "owner" ? "Owner" : "Admin";
 
   const stats = await loadStats();
@@ -195,22 +188,13 @@ export default async function AdminPage() {
 
       {account ? (
         <section className="flex items-center gap-4 rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
-          {profile?.photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={profile.photo_url}
-              alt=""
-              className="h-12 w-12 rounded-full object-cover"
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-800 text-lg font-semibold text-neutral-300">
-              {displayName.slice(0, 1).toUpperCase()}
-            </div>
-          )}
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-800 text-lg font-semibold text-neutral-300">
+            D
+          </div>
           <div className="min-w-0">
-            <p className="truncate font-medium">{displayName}</p>
+            <p className="truncate font-medium">OneUCo Developer</p>
             <p className="truncate text-sm text-neutral-400">
-              @{account.username} · {account.oneuco_id}
+              Signed in with the owner account
             </p>
           </div>
           <span className="ml-auto shrink-0 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] uppercase tracking-widest text-neutral-300">
@@ -272,8 +256,8 @@ export default async function AdminPage() {
         Joining no longer involves ID-card review, so there is no
         verification queue: the &quot;Pending verification&quot; and
         &quot;Verification queue&quot; counts above only cover legacy rows.
-        Granting the admin role grants the Admin Pass — profile completion
-        is skipped for those accounts, but sign-in never is.
+        Admin access is restricted to the owner&apos;s mail only — no other
+        account can open these pages, whatever role it holds.
       </p>
     </main>
   );
