@@ -3,9 +3,9 @@ import AdminLoginForm from "./AdminLoginForm";
 
 // Admin entry — separate from student login, and mail + password only
 // (owner decision 2026-11-07: no Google on the admin door). Signing in is
-// not enough: the action verifies (server-side) that the account carries
-// an admin role / is the owner's mail, and signs anyone else straight back
-// out. No email address is ever shown on this page.
+// not enough: the action verifies (server-side) that the sign-in is the
+// owner's own mail — the only address the Admin Pass accepts — and signs
+// anyone else straight back out. No email address is ever shown here.
 export default async function AdminLoginPage({
   searchParams,
 }: {
@@ -38,13 +38,13 @@ export default async function AdminLoginPage({
       <AdminLoginForm />
 
       <p className="text-center text-xs leading-relaxed text-neutral-600">
-        Owner access only — restricted to the owner&apos;s mail and
-        appointed admin accounts. First time here? Set a password first via{" "}
-        <Link href="/forgot-password" className="text-neutral-400 underline underline-offset-2 transition hover:text-white">
-          Forgot password
+        Owner access only — restricted to the owner&apos;s mail. Forgot
+        the password?{" "}
+        <Link href="/admin/forgot-password" className="text-neutral-400 underline underline-offset-2 transition hover:text-white">
+          Admin password recovery
         </Link>{" "}
-        on the student sign-in — the reset link goes to the owner&apos;s
-        mail. The Admin Pass skips student profile completion, never
+        emails a reset link only if the address can recover the admin
+        account. The Admin Pass skips student profile completion, never
         sign-in.
       </p>
 

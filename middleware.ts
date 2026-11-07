@@ -13,9 +13,9 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 //   - no session             -> /login (auth pages stay reachable)
 //   - session + not verified -> only /verify (verification-pending shell)
 //                               and sign-out are reachable
-//   - /admin                 -> session + Admin Pass (accounts.role
-//                               'owner'/'admin', or the owner's account —
-//                               checked server-side in lib/auth/account)
+//   - /admin                 -> session + Admin Pass (ONLY the owner's
+//                               own email passes — checked server-side
+//                               in lib/auth/account / lib/server/owner)
 //   - Admin Pass holders are never held at the verification gate.
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -72,6 +72,7 @@ export async function middleware(request: NextRequest) {
     "/forgot-password",
     "/reset-password",
     "/admin/login",
+    "/admin/forgot-password",
     // Public legal pages: readable signed-out (Google OAuth branding links
     // to /privacy, and students should read both before signing up).
     "/privacy",
@@ -90,7 +91,11 @@ export async function middleware(request: NextRequest) {
   const verified = admin || account?.status === "verified";
 
   // Admin sign-in flow pages decide for themselves.
-  if (pathname === "/admin/login" || pathname === "/admin/check") {
+  if (
+    pathname === "/admin/login" ||
+    pathname === "/admin/check" ||
+    pathname === "/admin/forgot-password"
+  ) {
     return response;
   }
   if (pathname.startsWith("/admin")) {

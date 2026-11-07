@@ -3,15 +3,17 @@ import { redirect } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import {
   getAccountByAuthUserId,
+  passesAdminGate,
   type AccountRow,
 } from "@/lib/auth/account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { getDiwaliMode } from "@/lib/server/diwali-settings";
 import DiwaliToggle from "@/components/DiwaliToggle";
 
-// Admin landing — owner/admin only. The Admin Pass gate itself is enforced
-// by middleware (accounts.role 'owner' | 'admin', or owner recognition);
-// this page only renders for accounts that already passed it.
+// Admin landing — owner/admin only. Middleware enforces the Admin Pass
+// gate on /admin, and this page re-checks the same gate itself (like the
+// subpages do via requireAdminPage) so the page never renders its
+// service-role stats for a session the gate would refuse.
 //
 // The counts below are REAL queries against the live tables, run on the
 // service-role client so RLS can never undercount an admin's own numbers.
@@ -107,6 +109,9 @@ export default async function AdminPage() {
     supabase,
     user.id,
   );
+  if (!passesAdminGate(user.email, account)) {
+    redirect("/auth/admin-denied");
+  }
   const profile = account
     ? await getProfileByAccountId(supabase, account.id)
     : null;

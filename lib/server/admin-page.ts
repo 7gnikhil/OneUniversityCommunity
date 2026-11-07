@@ -7,9 +7,9 @@ import {
 } from "@/lib/auth/account";
 
 // Shared guard for the /admin/* pages: resolves the session, requires the
-// Admin Pass (role owner/admin or owner recognition), and hands back the
-// service-role client the queues read through. Middleware gates these
-// routes as well; this is the page-level belt to that braces.
+// Admin Pass (passesAdminGate — only the owner's own email passes), and
+// hands back the service-role client the queues read through. Middleware
+// gates these routes as well; this is the page-level belt to that braces.
 export interface AdminPageCtx {
   account: AccountRow;
   admin: ReturnType<typeof createAdminClient>;
