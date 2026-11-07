@@ -9,6 +9,7 @@ import { INTENTIONS, normalisePortfolio, type Portfolio } from "@/lib/preference
 import type { FollowUiState } from "@/app/follow/actions";
 import FollowButton from "@/components/FollowButton";
 import { accentHex, normaliseUsername } from "@/lib/validation";
+import { isOwnerEmail } from "@/lib/server/owner";
 
 // Public profile of another student — read-only. Everyone signed in sees
 // the basics (photo, name, @username, bio, branch). The DETAIL fields —
@@ -49,12 +50,18 @@ export default async function PublicProfilePage({
   // Follow state + friendship, resolved server-side on the service role
   // (follow_requests has no client policies). A pending request TO me
   // maps to a plain "Follow" button — answering it happens in my Inbox.
+  //
+  // DEVELOPER ANONYMITY (owner's rule): the OneUCo Developer's own profile
+  // is NEVER unlocked — not by a match, not by an accepted follow. The
+  // page renders a masked identity ("OneUCo Developer", no photo, bio,
+  // branch or details) and no Follow button at all.
   let followUiState: FollowUiState | null = null;
   let canSeeDetails = false;
+  let isDeveloperProfile = false;
   let viewerAccent = accentHex(null);
   if (account) {
     const viewer = account;
-    const [myProfile, followState] = await Promise.all([
+    const [myProfile, followState, targetEmail] = await Promise.all([
       getProfileByAccountId(supabase, viewer.id),
       (async (): Promise<FollowState | null> => {
         try {
@@ -64,9 +71,26 @@ export default async function PublicProfilePage({
           return null;
         }
       })(),
+      (async (): Promise<string | null> => {
+        try {
+          const admin = createAdminClient();
+          const { data } = await admin
+            .from("accounts")
+            .select("email")
+            .eq("id", publicProfile.accountId)
+            .maybeSingle();
+          return ((data ?? null) as { email: string } | null)?.email ?? null;
+        } catch {
+          return null;
+        }
+      })(),
     ]);
     viewerAccent = accentHex(myProfile?.accent_color);
-    if (followState === "friends" || followState === "accepted") {
+    isDeveloperProfile = isOwnerEmail(targetEmail);
+    if (isDeveloperProfile) {
+      followUiState = null;
+      canSeeDetails = false;
+    } else if (followState === "friends" || followState === "accepted") {
       followUiState = "friends";
       canSeeDetails = true;
     } else if (followState === "pending_out") {
@@ -75,6 +99,10 @@ export default async function PublicProfilePage({
       followUiState = "follow";
     }
   }
+  // Display name is optional at sign-up — fall back to the @handle.
+  const displayName = publicProfile.name.trim()
+    ? publicProfile.name
+    : `@${publicProfile.username}`;
 
   // Detail fields — read ONLY for friends (see header note).
   let gallery: string[] = [];
@@ -117,41 +145,55 @@ export default async function PublicProfilePage({
         </p>
       </div>
 
-      <div className="flex flex-col items-center gap-3 text-center">
-        {publicProfile.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={publicProfile.photoUrl}
-            alt={publicProfile.name}
-            className="h-28 w-28 rounded-full object-cover"
-          />
-        ) : (
+      {isDeveloperProfile ? (
+        <div className="flex flex-col items-center gap-3 text-center">
           <span className="flex h-28 w-28 items-center justify-center rounded-full bg-neutral-800 text-4xl font-semibold text-neutral-400">
-            {publicProfile.name.charAt(0).toUpperCase() || "?"}
+            D
           </span>
-        )}
-        <div>
-          <h1 className="text-xl font-semibold">{publicProfile.name}</h1>
-          <p className="text-sm text-neutral-500">@{publicProfile.username}</p>
+          <div>
+            <h1 className="text-xl font-semibold">OneUCo Developer</h1>
+            <p className="text-sm text-neutral-500">
+              The developer stays anonymous
+            </p>
+          </div>
         </div>
-        {publicProfile.branch ? (
-          <span className="rounded-full border border-neutral-700 px-3 py-0.5 text-xs text-neutral-300">
-            {publicProfile.branch}
-          </span>
-        ) : null}
-        {publicProfile.bio ? (
-          <p className="max-w-sm text-sm leading-relaxed text-neutral-300">
-            {publicProfile.bio}
-          </p>
-        ) : null}
-        {account && followUiState ? (
-          <FollowButton
-            targetAccountId={publicProfile.accountId}
-            initialState={followUiState}
-            accentHex={viewerAccent}
-          />
-        ) : null}
-      </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 text-center">
+          {publicProfile.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={publicProfile.photoUrl}
+              alt={displayName}
+              className="h-28 w-28 rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex h-28 w-28 items-center justify-center rounded-full bg-neutral-800 text-4xl font-semibold text-neutral-400">
+              {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
+            </span>
+          )}
+          <div>
+            <h1 className="text-xl font-semibold">{displayName}</h1>
+            <p className="text-sm text-neutral-500">@{publicProfile.username}</p>
+          </div>
+          {publicProfile.branch ? (
+            <span className="rounded-full border border-neutral-700 px-3 py-0.5 text-xs text-neutral-300">
+              {publicProfile.branch}
+            </span>
+          ) : null}
+          {publicProfile.bio ? (
+            <p className="max-w-sm text-sm leading-relaxed text-neutral-300">
+              {publicProfile.bio}
+            </p>
+          ) : null}
+          {account && followUiState ? (
+            <FollowButton
+              targetAccountId={publicProfile.accountId}
+              initialState={followUiState}
+              accentHex={viewerAccent}
+            />
+          ) : null}
+        </div>
+      )}
 
       {canSeeDetails ? (
         <>
@@ -204,6 +246,11 @@ export default async function PublicProfilePage({
             </div>
           ) : null}
         </>
+      ) : account && isDeveloperProfile ? (
+        <p className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm leading-relaxed text-neutral-400">
+          🔒 The OneUCo Developer&apos;s profile stays private — it is never
+          unlocked, even for friends.
+        </p>
       ) : account ? (
         <p className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm leading-relaxed text-neutral-400">
           🔒 Follow @{publicProfile.username} and get accepted to see their

@@ -93,6 +93,9 @@ function formatTime(iso: string): string {
 
 function DmRow({ entry, accent }: { entry: DmListEntry; accent: string }) {
   const { other, lastMessage } = entry;
+  // Display name is optional at sign-up — fall back to the @handle so a
+  // friend who skipped it never renders as a blank row.
+  const displayName = other.name.trim() ? other.name : `@${other.username}`;
   const preview = lastMessage
     ? lastMessage.body
       ? `${lastMessage.fromMe ? "You: " : ""}${lastMessage.body}`
@@ -110,17 +113,17 @@ function DmRow({ entry, accent }: { entry: DmListEntry; accent: string }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={other.photoUrl}
-            alt={other.name}
+            alt={displayName}
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
         ) : (
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-base font-semibold text-neutral-400">
-            {other.name.charAt(0).toUpperCase() || "?"}
+            {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
           </span>
         )}
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-sm font-medium">{other.name}</span>
+            <span className="truncate text-sm font-medium">{displayName}</span>
             {lastMessage ? (
               <span className="shrink-0 text-[11px] text-neutral-500">
                 {formatTime(lastMessage.createdAt)}

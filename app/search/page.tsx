@@ -190,11 +190,15 @@ export default async function SearchPage({
                 />
               ) : (
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-base font-semibold text-neutral-400">
-                  {profile.name.charAt(0).toUpperCase() || "?"}
+                  {(profile.name.trim() ? profile.name : profile.username)
+                    .charAt(0)
+                    .toUpperCase() || "?"}
                 </span>
               )}
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{profile.name}</span>
+                <span className="block truncate text-sm font-medium">
+                  {profile.name.trim() ? profile.name : `@${profile.username}`}
+                </span>
                 <span className="block truncate text-xs text-neutral-500">
                   @{profile.username}
                   {profile.branch ? ` · ${profile.branch}` : ""}

@@ -142,7 +142,12 @@ export default function SwipeDeck({
         if (result.error) {
           setError(result.error);
         } else if (result.matched && result.matchId) {
-          setMatched({ matchId: result.matchId, name: card.profile.name });
+          setMatched({
+            matchId: result.matchId,
+            name: card.profile.name.trim()
+              ? card.profile.name
+              : `@${card.profile.username}`,
+          });
           playMatchChime();
         }
       }, FLY_MS);
@@ -343,23 +348,25 @@ export default function SwipeDeck({
 function CardFace({ candidate }: { candidate: DeckCandidate }) {
   const photo: string | null = candidate.photos[0] ?? null;
   const { profile } = candidate;
+  // Name is optional at sign-up — fall back to the @handle.
+  const displayName = profile.name.trim() ? profile.name : `@${profile.username}`;
   return (
     <div className="relative h-full w-full">
       {photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={photo}
-          alt={profile.name}
+          alt={displayName}
           className="h-full w-full object-cover"
           draggable={false}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-neutral-800 text-6xl font-semibold text-neutral-500">
-          {profile.name.charAt(0).toUpperCase() || "?"}
+          {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
         </div>
       )}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-5 pt-16">
-        <p className="text-xl font-semibold">{profile.name}</p>
+        <p className="text-xl font-semibold">{displayName}</p>
         <p className="text-sm text-neutral-400">@{profile.username}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {profile.branch ? (
