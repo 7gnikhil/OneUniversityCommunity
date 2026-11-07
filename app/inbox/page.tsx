@@ -11,6 +11,11 @@ import {
 } from "@/lib/inbox";
 import { getPublicProfilesByIds } from "@/lib/social";
 import {
+  listPendingFollowRequests,
+  type PendingFollowEntry,
+} from "@/lib/follows";
+import {
+  FollowRequestButtons,
   InviteButtons,
   RevealRequestButtons,
   RevealedProfileLink,
@@ -18,6 +23,7 @@ import {
 } from "./InboxActions";
 
 // Inbox — everything addressed to me that isn't a chat:
+//   - follow requests (accept/decline — accepting makes us friends)
 //   - reveal requests on my anonymous Maya Jwalam posts (accept/decline)
 //   - reveals I granted that are still live (revoke)
 //   - group invites addressed to me (accept/decline)
@@ -49,18 +55,21 @@ export default async function InboxPage() {
   const me = account;
 
   let items: InboxItemRow[] = [];
+  let pendingFollows: PendingFollowEntry[] = [];
   let pendingReveals: RevealRequestRow[] = [];
   let grantedReveals: RevealRequestRow[] = [];
   let pendingInvites: Awaited<ReturnType<typeof listPendingDirectInvites>> = [];
   let adminReady = true;
   try {
     const admin = createAdminClient();
-    [items, pendingReveals, grantedReveals, pendingInvites] = await Promise.all([
-      listInboxItems(supabase, me.id, 50),
-      listPendingRevealsForPoster(admin, me.id),
-      listGrantedReveals(admin, me.id),
-      listPendingDirectInvites(admin, me.id),
-    ]);
+    [items, pendingFollows, pendingReveals, grantedReveals, pendingInvites] =
+      await Promise.all([
+        listInboxItems(supabase, me.id, 50),
+        listPendingFollowRequests(admin, me.id),
+        listPendingRevealsForPoster(admin, me.id),
+        listGrantedReveals(admin, me.id),
+        listPendingDirectInvites(admin, me.id),
+      ]);
   } catch {
     adminReady = false;
     items = await listInboxItems(supabase, me.id, 50);
@@ -121,6 +130,7 @@ export default async function InboxPage() {
 
   const empty =
     items.length === 0 &&
+    pendingFollows.length === 0 &&
     pendingReveals.length === 0 &&
     grantedReveals.length === 0 &&
     pendingInvites.length === 0;
@@ -147,10 +157,53 @@ export default async function InboxPage() {
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 px-6 py-10 text-center">
           <p className="text-base font-semibold">All quiet</p>
           <p className="text-sm leading-relaxed text-neutral-400">
-            Reveal requests, group invites, developer-request updates and
-            admin notices will land here.
+            Follow requests, reveal requests, group invites,
+            developer-request updates and admin notices will land here.
           </p>
         </div>
+      ) : null}
+
+      {pendingFollows.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-xs font-medium uppercase tracking-widest text-neutral-500">
+            Follow requests
+          </h2>
+          {pendingFollows.map(({ request, requester }) =>
+            requester ? (
+              <article
+                key={request.id}
+                className="flex flex-col gap-2 rounded-3xl border border-neutral-800 bg-neutral-950 p-4"
+              >
+                <div className="flex items-center gap-3">
+                  {requester.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={requester.photoUrl}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-sm font-semibold text-neutral-400">
+                      {requester.name.charAt(0).toUpperCase() || "?"}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{requester.name}</p>
+                    <p className="truncate text-xs text-neutral-500">
+                      @{requester.username} wants to follow you
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed text-neutral-400">
+                  Accepting makes you friends: you can message each other and
+                  see each other&apos;s full profile. Declining keeps things
+                  as they are.
+                </p>
+                <FollowRequestButtons requestId={request.id} />
+              </article>
+            ) : null,
+          )}
+        </section>
       ) : null}
 
       {pendingReveals.length > 0 ? (

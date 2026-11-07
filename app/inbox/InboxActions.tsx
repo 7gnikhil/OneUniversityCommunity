@@ -4,14 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { acceptInviteAction, declineInviteAction } from "./actions";
+import { respondFollowRequestAction } from "../follow/actions";
 import {
   respondRevealAction,
   revokeRevealAction,
 } from "../servers/reveal-actions";
 
-// Small client islands for the Inbox's actionable entries: reveal
-// requests (accept/decline), granted reveals (revoke), group invites
-// (accept/decline). Everything else in the Inbox is read-only notices.
+// Small client islands for the Inbox's actionable entries: follow
+// requests (accept/decline), reveal requests (accept/decline), granted
+// reveals (revoke), group invites (accept/decline). Everything else in
+// the Inbox is read-only notices.
 
 export function RevealRequestButtons({ requestId }: { requestId: string }) {
   const router = useRouter();
@@ -43,6 +45,51 @@ export function RevealRequestButtons({ requestId }: { requestId: string }) {
           className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50"
         >
           Accept — share my profile
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void respond(false)}
+          className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs text-neutral-300 transition hover:bg-neutral-900 disabled:opacity-50"
+        >
+          Decline
+        </button>
+      </div>
+      {error ? <p className="text-xs text-red-400">{error}</p> : null}
+    </div>
+  );
+}
+
+export function FollowRequestButtons({ requestId }: { requestId: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  async function respond(accept: boolean): Promise<void> {
+    setBusy(true);
+    setError(null);
+    const result = await respondFollowRequestAction(requestId, accept);
+    setBusy(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDone(accept ? "Friends now ✓" : "Declined");
+    router.refresh();
+  }
+
+  if (done) return <p className="text-xs text-emerald-400">{done}</p>;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void respond(true)}
+          className="rounded-full bg-white px-4 py-1.5 text-xs font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50"
+        >
+          Accept — become friends
         </button>
         <button
           type="button"

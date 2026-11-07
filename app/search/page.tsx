@@ -6,6 +6,10 @@ import {
   toPublicProfile,
   type PublicProfileRow,
 } from "@/lib/social";
+import { getProfileByAccountId } from "@/lib/profile";
+import type { FollowUiState } from "@/app/follow/actions";
+import FollowButton from "@/components/FollowButton";
+import { accentHex } from "@/lib/validation";
 import type { PublicProfile } from "@/lib/types";
 
 // Student search: OneUco ID is an EXACT lookup; @username is a partial
@@ -29,6 +33,8 @@ export default async function SearchPage({
   const account = user ? await getAccountByAuthUserId(supabase, user.id) : null;
 
   let results: PublicProfile[] = [];
+  let followStates = new Map<string, FollowUiState>();
+  let viewerAccent = accentHex(null);
   let searched = false;
   if (account && query) {
     searched = true;
@@ -77,6 +83,58 @@ export default async function SearchPage({
         });
       }
       results = [...found.values()];
+
+      // Follow state per result (batched; follow_requests is
+      // service-role only). friends = matched or an accepted follow;
+      // requested = my pending ask; anything else = follow.
+      if (results.length > 0) {
+        const me = account;
+        const myProfile = await getProfileByAccountId(supabase, me.id);
+        viewerAccent = accentHex(myProfile?.accent_color);
+        const ids = results.map((profile) => profile.accountId);
+        const [matchData, outData, inData] = await Promise.all([
+          admin
+            .from("matches")
+            .select("account_a, account_b")
+            .or(
+              `and(account_a.eq.${me.id},account_b.in.(${ids.join(",")})),and(account_b.eq.${me.id},account_a.in.(${ids.join(",")}))`,
+            ),
+          admin
+            .from("follow_requests")
+            .select("target_id, status")
+            .eq("requester_id", me.id)
+            .in("target_id", ids),
+          admin
+            .from("follow_requests")
+            .select("requester_id, status")
+            .eq("target_id", me.id)
+            .in("requester_id", ids),
+        ]);
+        const friendIds = new Set<string>();
+        ((matchData.data ?? []) as Array<{ account_a: string; account_b: string }>).forEach(
+          (row) => friendIds.add(row.account_a === me.id ? row.account_b : row.account_a),
+        );
+        const requestedIds = new Set<string>();
+        ((outData.data ?? []) as Array<{ target_id: string; status: string }>).forEach(
+          (row) => {
+            if (row.status === "accepted") friendIds.add(row.target_id);
+            if (row.status === "pending") requestedIds.add(row.target_id);
+          },
+        );
+        ((inData.data ?? []) as Array<{ requester_id: string; status: string }>).forEach(
+          (row) => {
+            if (row.status === "accepted") friendIds.add(row.requester_id);
+          },
+        );
+        const resolved = new Map<string, FollowUiState>();
+        ids.forEach((id) => {
+          resolved.set(
+            id,
+            friendIds.has(id) ? "friends" : requestedIds.has(id) ? "requested" : "follow",
+          );
+        });
+        followStates = resolved;
+      }
     } catch {
       results = [];
     }
@@ -118,10 +176,10 @@ export default async function SearchPage({
 
       <ul className="flex flex-col divide-y divide-neutral-900">
         {results.map((profile) => (
-          <li key={profile.accountId}>
+          <li key={profile.accountId} className="flex items-center gap-2">
             <Link
               href={`/profile/${profile.username}`}
-              className="flex items-center gap-3 py-3 transition hover:bg-neutral-950"
+              className="flex min-w-0 flex-1 items-center gap-3 py-3 transition hover:bg-neutral-950"
             >
               {profile.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -143,6 +201,16 @@ export default async function SearchPage({
                 </span>
               </span>
             </Link>
+            {followStates.has(profile.accountId) ? (
+              <span className="shrink-0">
+                <FollowButton
+                  targetAccountId={profile.accountId}
+                  initialState={followStates.get(profile.accountId) as FollowUiState}
+                  accentHex={viewerAccent}
+                  small
+                />
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

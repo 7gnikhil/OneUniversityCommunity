@@ -1,15 +1,28 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getAccountByAuthUserId } from "@/lib/auth/account";
 import { getPublicProfileByUsername } from "@/lib/social";
-import { normaliseUsername } from "@/lib/validation";
+import { getProfileByAccountId } from "@/lib/profile";
+import { getFollowState, type FollowState } from "@/lib/follows";
+import { INTENTIONS, normalisePortfolio, type Portfolio } from "@/lib/preferences";
+import type { FollowUiState } from "@/app/follow/actions";
+import FollowButton from "@/components/FollowButton";
+import { accentHex, normaliseUsername } from "@/lib/validation";
 
-// Public profile of another student — read-only. Built ONLY from the
-// public_profiles view (photo, name, @username, bio, branch) plus their
-// gallery photos from profiles (public fields; profiles_select_public).
-// Year, college, hall-ticket number and preferences are never read here —
-// they are not public and this page must not become a leak path.
+// Public profile of another student — read-only. Everyone signed in sees
+// the basics (photo, name, @username, bio, branch). The DETAIL fields —
+// gallery photos, portfolio links, stated intention — are friends-only:
+// they render only when the viewer owns the page (impossible here; own
+// page redirects to /profile) or is matched with this student (accepted
+// follow or mutual swipe). Year, college, hall-ticket number and
+// preferences are never read here — they are not public and this page
+// must not become a leak path.
+//
+// NOTE: this gating is at the app level. The base profiles table's RLS
+// (profiles_select_public) still lets any signed-in student read those
+// columns through the API directly — the product surfaces are gated,
+// the raw table is not (tracked as a separate hardening item).
 export default async function PublicProfilePage({
   params,
 }: {
@@ -33,16 +46,62 @@ export default async function PublicProfilePage({
   if (!profile) notFound();
   const publicProfile = profile;
 
-  // Gallery photos (public field, not a view column — see lib/social.ts).
-  const { data: galleryData } = await supabase
-    .from("profiles")
-    .select("photo_urls")
-    .eq("account_id", publicProfile.accountId)
-    .maybeSingle();
-  const galleryRow = (galleryData ?? null) as { photo_urls: string[] } | null;
-  const gallery: string[] = (galleryRow?.photo_urls ?? []).filter(
-    (url) => url && url !== publicProfile.photoUrl,
-  );
+  // Follow state + friendship, resolved server-side on the service role
+  // (follow_requests has no client policies). A pending request TO me
+  // maps to a plain "Follow" button — answering it happens in my Inbox.
+  let followUiState: FollowUiState | null = null;
+  let canSeeDetails = false;
+  let viewerAccent = accentHex(null);
+  if (account) {
+    const viewer = account;
+    const [myProfile, followState] = await Promise.all([
+      getProfileByAccountId(supabase, viewer.id),
+      (async (): Promise<FollowState | null> => {
+        try {
+          const admin = createAdminClient();
+          return await getFollowState(admin, viewer.id, publicProfile.accountId);
+        } catch {
+          return null;
+        }
+      })(),
+    ]);
+    viewerAccent = accentHex(myProfile?.accent_color);
+    if (followState === "friends" || followState === "accepted") {
+      followUiState = "friends";
+      canSeeDetails = true;
+    } else if (followState === "pending_out") {
+      followUiState = "requested";
+    } else if (followState !== null) {
+      followUiState = "follow";
+    }
+  }
+
+  // Detail fields — read ONLY for friends (see header note).
+  let gallery: string[] = [];
+  let portfolio: Portfolio | null = null;
+  let intentionLabel: string | null = null;
+  if (canSeeDetails) {
+    const { data: detailData } = await supabase
+      .from("profiles")
+      .select("photo_urls, portfolio, intention")
+      .eq("account_id", publicProfile.accountId)
+      .maybeSingle();
+    const detailRow = (detailData ?? null) as {
+      photo_urls: string[];
+      portfolio: Record<string, string>;
+      intention: string | null;
+    } | null;
+    gallery = (detailRow?.photo_urls ?? []).filter(
+      (url) => url && url !== publicProfile.photoUrl,
+    );
+    const normalised = normalisePortfolio(detailRow?.portfolio ?? {});
+    portfolio =
+      normalised.github || normalised.linkedin || normalised.website || normalised.other
+        ? normalised
+        : null;
+    intentionLabel =
+      INTENTIONS.find((row) => row.id === detailRow?.intention)?.label ?? null;
+  }
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 p-6">
@@ -85,20 +144,71 @@ export default async function PublicProfilePage({
             {publicProfile.bio}
           </p>
         ) : null}
+        {account && followUiState ? (
+          <FollowButton
+            targetAccountId={publicProfile.accountId}
+            initialState={followUiState}
+            accentHex={viewerAccent}
+          />
+        ) : null}
       </div>
 
-      {gallery.length > 0 ? (
-        <div className="grid grid-cols-3 gap-2">
-          {gallery.map((url) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={url}
-              src={url}
-              alt={`${publicProfile.name}'s photo`}
-              className="aspect-square w-full rounded-2xl object-cover"
-            />
-          ))}
-        </div>
+      {canSeeDetails ? (
+        <>
+          {intentionLabel ? (
+            <p className="text-center text-sm text-neutral-400">
+              Looking for: <span className="text-neutral-200">{intentionLabel}</span>
+            </p>
+          ) : null}
+          {gallery.length > 0 ? (
+            <div className="grid grid-cols-3 gap-2">
+              {gallery.map((url) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={url}
+                  src={url}
+                  alt={`${publicProfile.name}'s photo`}
+                  className="aspect-square w-full rounded-2xl object-cover"
+                />
+              ))}
+            </div>
+          ) : null}
+          {portfolio ? (
+            <div className="flex flex-col gap-2">
+              <h2 className="text-xs font-medium uppercase tracking-widest text-neutral-500">
+                Portfolio
+              </h2>
+              <ul className="flex flex-col gap-1.5">
+                {(
+                  [
+                    ["github", "GitHub"],
+                    ["linkedin", "LinkedIn"],
+                    ["website", "Website"],
+                    ["other", "Other"],
+                  ] as const
+                ).map(([key, label]) =>
+                  portfolio && portfolio[key] ? (
+                    <li key={key}>
+                      <a
+                        href={portfolio[key]}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-sky-300 transition hover:underline"
+                      >
+                        {label} →
+                      </a>
+                    </li>
+                  ) : null,
+                )}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : account ? (
+        <p className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm leading-relaxed text-neutral-400">
+          🔒 Follow @{publicProfile.username} and get accepted to see their
+          full profile.
+        </p>
       ) : null}
     </main>
   );
