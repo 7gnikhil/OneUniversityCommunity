@@ -1,16 +1,18 @@
 # OneUco — One University Community
 
-A students-only social app for JNTUH: swipe & match, servers (including the
-anonymous, Telegram-style main channel **Maya Jwalam**), a Chirp feed,
-friend DMs, profile-reveal requests and an Inbox — gated by real student
-verification (ID-card parse + hall-ticket structure check + review queue).
+A students-only social app, open to **every college and university**:
+swipe & match, a follow system (profile details unlock only when a follow
+is accepted), servers (including the anonymous, Telegram-style main
+channel **Maya Jwalam**), a Chirp feed, friend DMs, profile-reveal
+requests and an Inbox. Joining is simple: sign up with a personal email
+(or Google), claim a @username and OneUco ID, and self-declare your
+college, branch and graduation year — no ID-card checking, and declared
+study details stay private.
+
+**Live:** https://one-university-community.vercel.app
 
 **Stack:** Next.js (TypeScript, App Router) · Supabase (Postgres / Auth /
 Storage) · Vercel.
-
-> This repo is the **production scaffold**. It contains the route structure,
-> the full database schema and the setup wiring — the app features are
-> ported into these routes in the next phase. See `STATUS.md`.
 
 ---
 
@@ -18,15 +20,14 @@ Storage) · Vercel.
 
 1. Go to [supabase.com](https://supabase.com) → **New project**.
    - Name: `oneuco`
-   - Region: **South Asia (Mumbai) — ap-south-1** (closest to JNTUH users)
+   - Region: **South Asia (Mumbai) — ap-south-1**
    - Set a strong database password and save it in your password manager.
 2. **Run the schema:** Dashboard → **SQL Editor** → New query → paste the
    entire contents of `supabase/schema.sql` → **Run**. This creates all
    tables, indexes, triggers, the public-profile view and the RLS policies.
-3. **Load the college codes:** insert JNTUH's *officially published*
-   college-code list into `college_codes (code, college_name)`. Do not
-   invent entries — verification validates the college code inside each
-   hall-ticket number against this table.
+3. **College registry:** `college_codes` is an open registry — students
+   pick their institution or add their own (additions land as *pending*
+   for admin approval and are selectable by the student who added them).
 4. **Create the storage buckets** (Dashboard → Storage → New bucket):
 
    | Bucket          | Public? | Contents                                  |
@@ -34,11 +35,10 @@ Storage) · Vercel.
    | `avatars`       | Public  | Profile photos                            |
    | `chirp-images`  | Public  | Chirp and DM images                       |
    | `server-images` | Public  | Server icons and server message images    |
-   | `id-cards`      | **Private** | ID-card photos for verification review |
+   | `id-cards`      | **Private** | Legacy bucket, unused (no ID-card checking) |
 
    Then add `storage.objects` policies: public buckets — public read,
-   writes scoped to a folder named by the uploader's account id;
-   `id-cards` — owner upload only, reads restricted to admin/service-role.
+   writes scoped to a folder named by the uploader's account id.
 5. **Copy your keys** (Dashboard → Settings → API) into `.env.local`
    (see `.env.example`): Project URL, anon key, and the **service_role**
    key (server-only — never ship it to the browser).
@@ -63,19 +63,17 @@ Storage) · Vercel.
    (git-ignored) `.env.local` / Vercel env vars.
 
 > Login design (fixed): password (OneUco ID / username / email + password)
-> **or** direct Continue with Google. There is **no OTP login** — the only
-> OTP in OneUco is the forgot-password email OTP (next step). The owner's
-> admin entry checks the owner email **server-side only**; it is never
-> displayed anywhere in the app.
+> **or** direct Continue with Google. There is **no OTP login** — password
+> recovery is a reset **link** emailed by Supabase Auth. The owner's admin
+> entry checks the owner email **server-side only**; it is never displayed
+> anywhere in the app, and the developer's own profile is permanently
+> anonymous (never unlocked, even for accepted friends).
 
-## 3. Email sender (forgot-password OTP)
+## 3. Email (password recovery)
 
-1. Create an account with an email provider, e.g. [Resend](https://resend.com)
-   (free tier is enough for a beta), verify your sending domain/address.
-2. Create an API key → put it in `.env.local` as `RESEND_API_KEY` and set
-   `EMAIL_FROM`.
-3. The forgot-password flow sends a one-time code to the account's email;
-   codes expire in ~5 minutes with attempt limits.
+Password-reset mail is sent by Supabase Auth itself (Dashboard →
+Authentication → Email Templates). No separate email provider or API key
+is needed for the built-in flow.
 
 ## 4. Run locally
 
@@ -121,7 +119,7 @@ git push -u origin main
 - All tables have RLS enabled; review `supabase/schema.sql` policies before
   public launch and tighten the starter policies (e.g. move count
   increments and match creation fully into audited server functions).
-- `id-cards` must stay private: ID photos are verification evidence, shown
-  only in the admin review queue.
+- OneUco collects **no ID cards or documents**; study details are
+  self-declared at sign-up and kept private on the account.
 - Maya Jwalam anonymity is enforced in server code (author fields are
   stripped from member-facing responses) — RLS alone cannot hide a column.
