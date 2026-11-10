@@ -5,7 +5,12 @@ import { getTotalDmUnread } from "@/lib/social";
 import { getTotalServerUnread } from "@/lib/servers";
 import { getInboxUnreadCount } from "@/lib/inbox";
 import { accentHex } from "@/lib/validation";
-import type { DialBadges } from "@/components/DialNav";
+import { getTheme, type AppTheme } from "@/lib/themes";
+import {
+  getAdminTheme,
+  getProfileThemeId,
+} from "@/lib/server/theme-settings";
+import type { DialBadges, DialThemePicker } from "@/components/DialNav";
 
 // Server-side dial data — the ONE computation behind both dial
 // placements: the big home dial (app/page.tsx) and the compact shell
@@ -19,6 +24,8 @@ import type { DialBadges } from "@/components/DialNav";
 export interface DialData {
   badges: DialBadges | undefined;
   inboxUnread: number;
+  /** State for the dial's long-press interface mode (DialNav). */
+  themePicker: DialThemePicker;
 }
 
 export async function getDialData(
@@ -45,11 +52,58 @@ export async function getDialData(
   } catch {
     // Badge counts are best-effort; the dial itself never breaks.
   }
+
+  // App interface (lib/themes.ts): the dial wears the APPLIED
+  // interface — the user's own pick (profiles.theme_id) over the
+  // admin's app-wide default. When one applies, its accent replaces
+  // the per-user profile accent on the dial and its skin tokens drive
+  // the dial's face/ring/ticks (DialNav reads badges.theme). All
+  // fail-soft: no interface → the dial exactly as before.
+  let themePicker: DialThemePicker = {
+    savedId: null,
+    appliedId: null,
+    defaultId: null,
+  };
+  let dialAccent = accent;
+  let dialTheme: DialBadges["theme"];
+  try {
+    const [savedId, adminTheme] = await Promise.all([
+      getProfileThemeId(supabase, accountId),
+      getAdminTheme(),
+    ]);
+    const appliedTheme: AppTheme | null =
+      getTheme(savedId) ?? adminTheme;
+    themePicker = {
+      savedId,
+      appliedId: appliedTheme?.id ?? null,
+      defaultId: adminTheme?.id ?? null,
+    };
+    if (appliedTheme) {
+      dialAccent = appliedTheme.tokens.accent;
+      dialTheme = {
+        face: appliedTheme.tokens.dial.face,
+        ring: appliedTheme.tokens.dial.ring,
+        tick: appliedTheme.tokens.dial.tick,
+        glow: appliedTheme.tokens.dial.glow,
+        blur: appliedTheme.tokens.dial.blur,
+        surface: appliedTheme.tokens.surface,
+        surface2: appliedTheme.tokens.surface2,
+        text: appliedTheme.tokens.text,
+        dim: appliedTheme.tokens.muted,
+        border: appliedTheme.tokens.border,
+      };
+    }
+  } catch {
+    // Interface data is decoration for the dial — never break it.
+  }
+
   return {
     badges: {
       counts: { "/friends": dmUnread, "/servers": serverUnread },
-      accentHex: accent,
+      accentHex: dialAccent,
+      theme: dialTheme,
     },
     inboxUnread,
+    themePicker,
   };
 }

@@ -7,6 +7,15 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useRouter } from "next/navigation";
+import {
+  applyThemeToRoot,
+  getTheme,
+  interfaceItems,
+  restoreRootTheme,
+  snapshotRootTheme,
+  type RootThemeSnapshot,
+} from "@/lib/themes";
+import { setMyThemeAction } from "@/app/profile/theme-actions";
 
 // The round rotating dial — OneUco's home navigation.
 //
@@ -27,9 +36,40 @@ import { useRouter } from "next/navigation";
 // plus the viewer's accent colour; a stop with count > 0 shows a badge
 // bubble capped at 99+.
 
+/**
+ * The applied interface's dial palette (lib/themes.ts tokens, resolved
+ * server-side in lib/dial-badges). When present, the dial wears the
+ * interface: skin face/ring/ticks/glow plus its surface/text tones.
+ * Absent in seasonal-auto — the dial renders in its classic palette.
+ */
+export interface DialThemePalette {
+  face: string;
+  ring: string;
+  tick: string;
+  glow: string;
+  blur: string;
+  surface: string;
+  surface2: string;
+  text: string;
+  dim: string;
+  border: string;
+}
+
+/**
+ * What the dial needs for its long-press INTERFACE MODE: the user's
+ * own saved pick, the interface currently applied to them, and the
+ * admin's app-wide default (the "App Default" entry's preview).
+ */
+export interface DialThemePicker {
+  savedId: string | null;
+  appliedId: string | null;
+  defaultId: string | null;
+}
+
 export interface DialBadges {
   counts: Record<string, number>;
   accentHex: string;
+  theme?: DialThemePalette;
 }
 
 interface DialStopDef {
@@ -345,15 +385,82 @@ export interface DialNavProps {
    * "you are here" indicator next to the open section.
    */
   activePath?: string;
+  /**
+   * Interface-mode state (lib/dial-badges). When provided, a long-press
+   * on the dial switches it into interface mode: the stops become the
+   * app interfaces, drag-rotating previews each one live across the
+   * whole app, and tapping the centre saves the pick to the user's
+   * profile (profiles.theme_id). Absent → no interface mode.
+   */
+  themePicker?: DialThemePicker;
 }
 
 export default function DialNav({
   badges,
   size: sizeProp = "home",
   activePath,
+  themePicker,
 }: DialNavProps) {
   const router = useRouter();
-  const accent = badges?.accentHex ?? FALLBACK_ACCENT;
+
+  // ── Interface mode ────────────────────────────────────────────────
+  // The wheel's second life: stops become interfaces. `items[0]` is
+  // always "App Default" (no personal pick); the rest are lib/themes
+  // THEMES. Previewing stamps the candidate on the document root via
+  // the same helpers the layout's server stamp mirrors, so what you
+  // see while browsing IS what gets saved.
+  const ifaceItems = interfaceItems(getTheme(themePicker?.defaultId ?? null));
+  const IFACE_COUNT = ifaceItems.length;
+  const ISPACING = 360 / IFACE_COUNT;
+  const [ifaceMode, setIfaceMode] = useState<boolean>(false);
+  const [ifaceIdx, setIfaceIdx] = useState<number>(0);
+  const [savedId, setSavedId] = useState<string | null>(
+    themePicker?.savedId ?? null,
+  );
+  const [enteredPulse, setEnteredPulse] = useState<boolean>(false);
+  const ifaceModeRef = useRef<boolean>(false);
+  ifaceModeRef.current = ifaceMode;
+  const ifaceIdxRef = useRef<number>(0);
+  const rootSnapshotRef = useRef<RootThemeSnapshot | null>(null);
+  const pickSavedRef = useRef<boolean>(false);
+  const enteredPathRef = useRef<string | undefined>(undefined);
+  const pressTimerRef = useRef<number | null>(null);
+  const suppressClickRef = useRef<boolean>(false);
+
+  const previewTheme = ifaceMode
+    ? (ifaceItems[ifaceIdx]?.theme ?? null)
+    : null;
+
+  // Palette: in interface mode the dial wears the PREVIEWED interface;
+  // otherwise the applied interface riding on badges; otherwise the
+  // classic demo palette constants.
+  const pal: DialThemePalette | undefined = previewTheme
+    ? {
+        face: previewTheme.tokens.dial.face,
+        ring: previewTheme.tokens.dial.ring,
+        tick: previewTheme.tokens.dial.tick,
+        glow: previewTheme.tokens.dial.glow,
+        blur: previewTheme.tokens.dial.blur,
+        surface: previewTheme.tokens.surface,
+        surface2: previewTheme.tokens.surface2,
+        text: previewTheme.tokens.text,
+        dim: previewTheme.tokens.muted,
+        border: previewTheme.tokens.border,
+      }
+    : badges?.theme;
+  const face = pal?.face ?? FACE;
+  const ring = pal?.ring ?? RING;
+  const tick = pal?.tick ?? DIM;
+  const glow = pal?.glow ?? "none";
+  const blur = pal?.blur ?? "";
+  const surf = pal?.surface ?? SURFACE;
+  const surf2 = pal?.surface2 ?? SURFACE_2;
+  const textTone = pal?.text ?? TEXT;
+  const dim = pal?.dim ?? DIM;
+  const borderTone = pal?.border ?? BORDER;
+
+  const accent =
+    previewTheme?.tokens.accent ?? badges?.accentHex ?? FALLBACK_ACCENT;
   const accentStrong = readableAccent(accent);
 
   const routeIdx = stopIndexForPath(activePath);
@@ -368,6 +475,8 @@ export default function DialNav({
     startAngle: number;
     lastTickAngle: number;
     moved: boolean;
+    /** Set when a long-press fired mid-press: the release is spent. */
+    consumed: boolean;
   } | null>(null);
   const animRef = useRef<number>(0);
   const velRef = useRef<number>(0);
@@ -436,6 +545,10 @@ export default function DialNav({
     if (routeIdx === prevRouteIdx.current) return;
     prevRouteIdx.current = routeIdx;
     if (routeIdx === null) return;
+    // In interface mode the wheel belongs to the interfaces; the
+    // route-exit effect below cancels the mode (restoring the stamp)
+    // rather than letting the wheel snap mid-browse.
+    if (ifaceModeRef.current) return;
     cancelAnimationFrame(animRef.current);
     setSelIdx(routeIdx);
     setAngle(-routeIdx * SPACING);
@@ -455,6 +568,123 @@ export default function DialNav({
     });
   };
 
+  // ── Interface mode ────────────────────────────────────────────────
+  // Long-press (~500ms, no movement) on the dial face or any stop
+  // enters it; the press that triggered it is consumed so it can
+  // neither drag nor navigate. Inside: drag rotates between
+  // interfaces (snap per interface), every landing previews live on
+  // the document root, tapping the centre hub saves the centred
+  // interface as the user's own pick, and ✕ / route change / unmount
+  // cancels back to whatever was stamped before.
+
+  const ifaceIndexFor = (a: number): number =>
+    ((Math.round(-a / ISPACING) % IFACE_COUNT) + IFACE_COUNT) % IFACE_COUNT;
+
+  const clearPressTimer = (): void => {
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  /** Spring the wheel back to the current section stop (mode exit). */
+  const springBackToSection = (): void => {
+    const idx = routeIdx ?? selIdx;
+    const cur = angleRef.current;
+    const base = -idx * SPACING;
+    const turns = Math.round((cur - base) / 360);
+    springTo(cur, base + turns * 360);
+  };
+
+  const enterIfaceMode = (): void => {
+    if (!themePicker || ifaceModeRef.current) return;
+    rootSnapshotRef.current = snapshotRootTheme();
+    pickSavedRef.current = false;
+    enteredPathRef.current = activePath;
+    // Start on the user's own pick, or on "App Default" when they
+    // follow the default — the centred entry is what a tap would save.
+    const found = savedId
+      ? ifaceItems.findIndex((item) => item.id === savedId)
+      : 0;
+    const startIdx = found >= 0 ? found : 0;
+    ifaceIdxRef.current = startIdx;
+    setIfaceIdx(startIdx);
+    setIfaceMode(true);
+    cancelAnimationFrame(animRef.current);
+    setAngle(-startIdx * ISPACING);
+    applyThemeToRoot(ifaceItems[startIdx]?.theme ?? null);
+    playLock();
+    haptic(30);
+    setEnteredPulse(true);
+    window.setTimeout(() => setEnteredPulse(false), 240);
+  };
+
+  const exitIfaceCancel = (): void => {
+    if (rootSnapshotRef.current) restoreRootTheme(rootSnapshotRef.current);
+    rootSnapshotRef.current = null;
+    suppressClickRef.current = false;
+    setIfaceMode(false);
+    springBackToSection();
+  };
+
+  const confirmIface = (): void => {
+    const item = ifaceItems[ifaceIdxRef.current];
+    if (!item) return;
+    // The preview stamp stays — it IS the saved look now; the server
+    // re-stamps the identical interface on the next render.
+    pickSavedRef.current = true;
+    rootSnapshotRef.current = null;
+    suppressClickRef.current = false;
+    setIfaceMode(false);
+    setSavedId(item.id);
+    playLock();
+    haptic(20);
+    springBackToSection();
+    void setMyThemeAction(item.id).then(() => router.refresh());
+  };
+
+  /** Keyboard / programmatic interface step (interface mode only). */
+  const stepIface = (step: number): void => {
+    const idx =
+      ((ifaceIdxRef.current + step) % IFACE_COUNT + IFACE_COUNT) %
+      IFACE_COUNT;
+    ifaceIdxRef.current = idx;
+    setIfaceIdx(idx);
+    applyThemeToRoot(ifaceItems[idx]?.theme ?? null);
+    const cur = angleRef.current;
+    const base = -idx * ISPACING;
+    const turns = Math.round((cur - base) / 360);
+    springTo(cur, base + turns * 360);
+  };
+
+  // Leaving the route mid-browse cancels (restores the old stamp).
+  useEffect(() => {
+    if (!ifaceMode) return;
+    if (
+      enteredPathRef.current !== undefined &&
+      activePath !== enteredPathRef.current
+    ) {
+      exitIfaceCancel();
+    }
+    // exitIfaceCancel is stable enough for this guard's purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePath, ifaceMode]);
+
+  // Unmounting mid-browse (e.g. home dial navigating away) also
+  // cancels — unless the pick was already saved.
+  useEffect(
+    () => () => {
+      if (
+        ifaceModeRef.current &&
+        !pickSavedRef.current &&
+        rootSnapshotRef.current
+      ) {
+        restoreRootTheme(rootSnapshotRef.current);
+      }
+    },
+    [],
+  );
+
   const pointerAngle = (e: ReactPointerEvent): number => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return 0;
@@ -471,9 +701,22 @@ export default function DialNav({
       startAngle: angleRef.current,
       lastTickAngle: angleRef.current,
       moved: false,
+      consumed: false,
     };
     velRef.current = 0;
     setDragging(true);
+    // Long-press → interface mode. Armed only outside the mode and
+    // only when the picker is wired; any real movement disarms it
+    // (onPointerMove), so it never fights drag-to-spin.
+    if (!ifaceModeRef.current && themePicker) {
+      clearPressTimer();
+      pressTimerRef.current = window.setTimeout(() => {
+        pressTimerRef.current = null;
+        if (drag.current) drag.current.consumed = true;
+        suppressClickRef.current = true;
+        enterIfaceMode();
+      }, 500);
+    }
   };
 
   const onPointerMove = (e: ReactPointerEvent): void => {
@@ -483,10 +726,25 @@ export default function DialNav({
     let diff = pa - d.pointerAngle;
     if (diff > 180) diff -= 360;
     if (diff < -180) diff += 360;
-    if (Math.abs(diff) > 2) d.moved = true;
+    if (Math.abs(diff) > 2) {
+      d.moved = true;
+      clearPressTimer();
+    }
     const next = d.startAngle + diff;
     velRef.current = next - angleRef.current;
     setAngle(next);
+    if (ifaceModeRef.current) {
+      // Browsing interfaces: every landing previews live + ticks.
+      const idx = ifaceIndexFor(next);
+      if (idx !== ifaceIdxRef.current) {
+        ifaceIdxRef.current = idx;
+        setIfaceIdx(idx);
+        applyThemeToRoot(ifaceItems[idx]?.theme ?? null);
+        playTick();
+        haptic(4);
+      }
+      return;
+    }
     // Ratchet ticks like a real rotary dial: the pawl clicks over a gear
     // tooth about every 13° of drag, so a slow pull ticks slowly and a
     // fast spin rattles — not one tick per stop.
@@ -498,11 +756,27 @@ export default function DialNav({
   };
 
   const endDrag = (): void => {
+    clearPressTimer();
     const d = drag.current;
     drag.current = null;
     setDragging(false);
     if (!d) return;
+    // The long-press that opened interface mode spends this release.
+    if (d.consumed) return;
     const cur = angleRef.current;
+    if (ifaceModeRef.current) {
+      // Settle on the nearest interface; its preview is already live.
+      const idx = d.moved ? ifaceIndexFor(cur) : ifaceIdxRef.current;
+      if (d.moved) {
+        ifaceIdxRef.current = idx;
+        setIfaceIdx(idx);
+        applyThemeToRoot(ifaceItems[idx]?.theme ?? null);
+      }
+      const base = -idx * ISPACING;
+      const turns = Math.round((cur - base) / 360);
+      springTo(cur, base + turns * 360, d.moved ? velRef.current * 22 : 0);
+      return;
+    }
     // A drag explores: on release the wheel springs to the nearest stop
     // and the readout follows — navigation is a tap's job (goTo).
     const idx = d.moved ? wrappedIndex(cur) : selIdx;
@@ -540,10 +814,30 @@ export default function DialNav({
       <div
         ref={wrapRef}
         role="slider"
-        aria-label="Page dial"
-        aria-valuetext={STOPS[activeIdx]?.label}
+        aria-label={ifaceMode ? "Interface dial" : "Page dial"}
+        aria-valuetext={
+          ifaceMode
+            ? (ifaceItems[ifaceIdx]?.label ?? "")
+            : STOPS[activeIdx]?.label
+        }
         tabIndex={0}
         onKeyDown={(e) => {
+          if (ifaceMode) {
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+              e.preventDefault();
+              stepIface(1);
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+              e.preventDefault();
+              stepIface(-1);
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              confirmIface();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              exitIfaceCancel();
+            }
+            return;
+          }
           if (e.key === "ArrowRight" || e.key === "ArrowDown") {
             e.preventDefault();
             goTo((selIdx + 1) % STOPS.length);
@@ -553,7 +847,13 @@ export default function DialNav({
           }
         }}
         className={`relative touch-none outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 rounded-full ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
-        style={{ width: size, height: size }}
+        style={{
+          width: size,
+          height: size,
+          // Haptic-like pulse the moment interface mode engages.
+          transform: enteredPulse ? "scale(1.045)" : undefined,
+          transition: "transform 200ms ease",
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -577,10 +877,23 @@ export default function DialNav({
           aria-hidden
           className="absolute inset-0 rounded-full border shadow-[inset_0_2px_10px_rgba(0,0,0,0.08),0_10px_30px_rgba(0,0,0,0.10)]"
           style={{
-            background: FACE,
-            borderColor: RING,
+            background: face,
+            borderColor: ring,
             borderWidth: 2,
             transform: `rotate(${angle}deg)`,
+            // A skinned dial (interface applied / being previewed)
+            // trades the neutral drop shadow for its own glow, and
+            // frosted skins blur what's behind the face.
+            ...(pal
+              ? {
+                  boxShadow:
+                    glow !== "none"
+                      ? glow
+                      : "0 10px 30px rgba(0, 0, 0, 0.10)",
+                  backdropFilter: blur || undefined,
+                  WebkitBackdropFilter: blur || undefined,
+                }
+              : {}),
           }}
         >
           {/* tick marks */}
@@ -592,7 +905,7 @@ export default function DialNav({
                 width: i % 3 === 0 ? 3 : 2,
                 height: i % 3 === 0 ? 12 : 7,
                 marginLeft: i % 3 === 0 ? -1.5 : -1,
-                background: DIM,
+                background: tick,
                 opacity: i % 3 === 0 ? 0.55 : 0.3,
                 borderRadius: 2,
                 transform: `rotate(${i * 10}deg) translateY(${-(size / 2 - 16)}px)`,
@@ -603,11 +916,12 @@ export default function DialNav({
           {/* grip ridges near rim */}
           <div
             className="absolute inset-3 rounded-full border border-dashed"
-            style={{ borderColor: RING }}
+            style={{ borderColor: ring }}
           />
         </div>
-        {/* Stops (labels stay upright; the stop at the notch is active) */}
-        {STOPS.map((stop, i) => {
+        {/* Stops (labels stay upright; the stop at the notch is active).
+            Hidden in interface mode — dots mark the interfaces then. */}
+        {!ifaceMode ? STOPS.map((stop, i) => {
           const stopAngle = angle + i * SPACING;
           const rad = (stopAngle * Math.PI) / 180;
           const x = Math.sin(rad) * radius;
@@ -621,9 +935,29 @@ export default function DialNav({
               aria-label={`Go to ${stop.label}${count > 0 ? ` (${count} unread)` : ""}`}
               onClick={(e) => {
                 e.stopPropagation();
+                // A click that follows a long-press is already spent.
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  return;
+                }
                 goTo(i);
               }}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                // Holding a stop also opens interface mode (the dial
+                // face arms the same timer in its own pointerdown).
+                if (themePicker) {
+                  clearPressTimer();
+                  pressTimerRef.current = window.setTimeout(() => {
+                    pressTimerRef.current = null;
+                    suppressClickRef.current = true;
+                    enterIfaceMode();
+                  }, 500);
+                }
+              }}
+              onPointerUp={() => clearPressTimer()}
+              onPointerLeave={() => clearPressTimer()}
+              onPointerCancel={() => clearPressTimer()}
               className="absolute z-10 flex flex-col items-center justify-center rounded-full transition-transform"
               style={{
                 width: 76 * (size / 264),
@@ -638,9 +972,9 @@ export default function DialNav({
                 style={{
                   width: 52 * (size / 264),
                   height: 52 * (size / 264),
-                  color: active ? "#ffffff" : TEXT,
-                  background: active ? accent : SURFACE,
-                  borderColor: active ? accentStrong : BORDER,
+                  color: active ? "#ffffff" : textTone,
+                  background: active ? accent : surf,
+                  borderColor: active ? accentStrong : borderTone,
                 }}
               >
                 <DialIcon d={stop.iconPath} circle={stop.iconCircle} />
@@ -657,40 +991,117 @@ export default function DialNav({
               </span>
               <span
                 className="mt-1 text-[11px] font-semibold"
-                style={{ color: active ? accentStrong : DIM }}
+                style={{ color: active ? accentStrong : dim }}
               >
                 {stop.label}
               </span>
               <span className="sr-only">{active ? "(selected)" : ""}</span>
             </button>
           );
-        })}
-        {/* Centre hub — fixed readout: the stop resting at the notch */}
-        <div
-          aria-hidden
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center shadow-inner"
-          style={{
-            width: 74 * (size / 264),
-            height: 74 * (size / 264),
-            background: SURFACE_2,
-            border: `2px solid ${RING}`,
-          }}
-        >
-          <span
-            className="px-1 text-center font-extrabold leading-tight tracking-tight"
-            style={{ color: accentStrong, fontSize: 13 * (size / 264) }}
+        }) : null}
+        {/* Interface mode: one dot per interface around the rim; the
+            dot at the notch is the centred (previewing) interface. */}
+        {ifaceMode
+          ? ifaceItems.map((item, i) => {
+              const dotAngle = angle + i * ISPACING;
+              const rad = (dotAngle * Math.PI) / 180;
+              const x = Math.sin(rad) * radius;
+              const y = -Math.cos(rad) * radius;
+              const active = Math.abs(delta(0, dotAngle)) < ISPACING / 2 + 1;
+              return (
+                <span
+                  key={item.id ?? "default"}
+                  aria-hidden
+                  className="absolute z-10 rounded-full"
+                  style={{
+                    width: active ? 13 : 8,
+                    height: active ? 13 : 8,
+                    left: size / 2 + x - (active ? 6.5 : 4),
+                    top: size / 2 + y - (active ? 6.5 : 4),
+                    background: active ? accent : dim,
+                    opacity: active ? 1 : 0.45,
+                  }}
+                />
+              );
+            })
+          : null}
+        {/* Centre hub — fixed readout: the stop resting at the notch.
+            In interface mode it becomes the confirm: it names the
+            centred interface and tapping it applies that pick. */}
+        {ifaceMode ? (
+          <button
+            type="button"
+            aria-label={`Apply interface ${ifaceItems[ifaceIdx]?.label ?? ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              confirmIface();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center justify-center rounded-full shadow-inner"
+            style={{
+              width: 74 * (size / 264),
+              height: 74 * (size / 264),
+              background: surf2,
+              border: `2px solid ${ring}`,
+            }}
           >
-            {STOPS[activeIdx]?.label ?? "OneUCo"}
-          </span>
-        </div>
+            <span
+              className="px-1 text-center font-extrabold leading-tight tracking-tight"
+              style={{ color: accentStrong, fontSize: 11.5 * (size / 264) }}
+            >
+              {ifaceItems[ifaceIdx]?.label ?? "Interface"}
+            </span>
+            <span
+              className="px-1 text-center leading-tight"
+              style={{ color: dim, fontSize: 8.5 * (size / 264) }}
+            >
+              {ifaceItems[ifaceIdx]?.sub ?? ""}
+            </span>
+          </button>
+        ) : (
+          <div
+            aria-hidden
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center shadow-inner"
+            style={{
+              width: 74 * (size / 264),
+              height: 74 * (size / 264),
+              background: surf2,
+              border: `2px solid ${ring}`,
+            }}
+          >
+            <span
+              className="px-1 text-center font-extrabold leading-tight tracking-tight"
+              style={{ color: accentStrong, fontSize: 13 * (size / 264) }}
+            >
+              {STOPS[activeIdx]?.label ?? "OneUCo"}
+            </span>
+          </div>
+        )}
       </div>
-      {sizeProp === "shell" ? null : (
+      {ifaceMode ? (
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <p
+            className="text-center text-xs md:text-[11px]"
+            style={{ color: dim }}
+          >
+            Swipe to browse interfaces — tap the centre to apply
+          </p>
+          <button
+            type="button"
+            onClick={exitIfaceCancel}
+            className="rounded-full border px-4 py-1.5 text-xs font-medium transition"
+            style={{ borderColor: borderTone, color: textTone }}
+          >
+            ✕ Cancel
+          </button>
+        </div>
+      ) : sizeProp === "shell" ? null : (
         <p
           className="mt-3 text-xs md:mt-2 md:text-[11px]"
-          style={{ color: DIM }}
+          style={{ color: dim }}
         >
           Drag the dial, flick it, or tap a stop — it clicks and whirs like
-          a real rotary dial
+          a real rotary dial. Hold it to change your interface.
         </p>
       )}
     </div>

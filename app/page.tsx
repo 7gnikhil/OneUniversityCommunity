@@ -1,5 +1,8 @@
 import Link from "next/link";
-import DialNav, { type DialBadges } from "@/components/DialNav";
+import DialNav, {
+  type DialBadges,
+  type DialThemePicker,
+} from "@/components/DialNav";
 import LiveClock from "@/components/LiveClock";
 import { createClient } from "@/lib/supabase/server";
 import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
@@ -23,12 +26,14 @@ export default async function DialHomePage() {
   const sessionUser = await getMySessionUser(supabase);
 
   let badges: DialBadges | undefined;
+  let themePicker: DialThemePicker | undefined;
   let inboxUnread = 0;
   if (account) {
     // Shared with the desktop shell dial — one computation, both
     // placements (lib/dial-badges).
     const dialData = await getDialData(supabase, account.id);
     badges = dialData.badges;
+    themePicker = dialData.themePicker;
     inboxUnread = dialData.inboxUnread;
   }
   const accent = badges?.accentHex ?? "#171717";
@@ -60,7 +65,7 @@ export default async function DialHomePage() {
       </form>
 
       <div className="flex flex-1 items-center justify-center py-8">
-        <DialNav badges={badges} />
+        <DialNav badges={badges} themePicker={themePicker} />
       </div>
 
       <footer className="flex items-center justify-center gap-6 pb-2 text-xs text-neutral-500">

@@ -170,6 +170,12 @@ export default async function AdminPage() {
       waiting: null,
     },
     {
+      title: "Appearance & interfaces",
+      body: "Pick the app-wide default interface — full looks (dial skin, background pattern, card style), not just colour. Students who long-press the dial and pick their own keep theirs.",
+      href: "/admin/appearance",
+      waiting: null,
+    },
+    {
       title: "Developer requests inbox",
       body: "“Req to Developer” submissions from Settings → Help — set a status and the student gets an Inbox update.",
       href: "/admin/developer-requests",

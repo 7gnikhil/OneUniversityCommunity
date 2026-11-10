@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import DialNav, { type DialBadges } from "@/components/DialNav";
+import DialNav, {
+  type DialBadges,
+  type DialThemePicker,
+} from "@/components/DialNav";
 
 // The dial IS the navigation — on every screen size (owner's design,
 // corrected 2026-11-10; this replaces the short-lived SideNav rail).
@@ -35,9 +38,11 @@ const HIDDEN_PREFIXES: ReadonlyArray<string> = [
 
 export default function DialShell({
   badges,
+  themePicker,
   children,
 }: {
   badges?: DialBadges;
+  themePicker?: DialThemePicker;
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
@@ -62,7 +67,12 @@ export default function DialShell({
             One University Community
           </span>
         </Link>
-        <DialNav badges={badges} size="shell" activePath={pathname} />
+        <DialNav
+          badges={badges}
+          size="shell"
+          activePath={pathname}
+          themePicker={themePicker}
+        />
       </div>
       <div className="min-w-0 flex-1">{children}</div>
     </div>

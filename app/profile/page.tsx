@@ -13,6 +13,11 @@ import {
   normalisePreferences,
 } from "@/lib/preferences";
 import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
+import InterfacePicker from "@/components/InterfacePicker";
+import {
+  getAdminTheme,
+  getProfileThemeId,
+} from "@/lib/server/theme-settings";
 
 // Profile + Settings. Shows ONLY public fields (photo(s), name, bio,
 // branch) plus the owner's @username / OneUco ID. The college and
@@ -90,6 +95,14 @@ export default async function ProfilePage() {
         </p>
       </div>
       <ProfileEditor initial={initial} />
+      {/* Interface picker — the list twin of the dial's long-press
+          interface mode; both save profiles.theme_id via the same
+          action. Reads fail soft (no pick / no default) until
+          migration 0008 lands. */}
+      <InterfacePicker
+        currentId={await getProfileThemeId(supabase, account.id)}
+        defaultId={(await getAdminTheme())?.id ?? null}
+      />
     </main>
   );
 }

@@ -271,19 +271,25 @@ function ChirpCard({
           <img src={chirp.author.photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
         ) : (
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-sm font-semibold text-neutral-400">
-            {(chirp.author?.name ?? "?").charAt(0).toUpperCase()}
+            {chirp.author?.developer
+              ? "D"
+              : (chirp.author?.name ?? "?").charAt(0).toUpperCase()}
           </span>
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
-            {chirp.author ? (
+            {chirp.author?.developer ? (
+              // Masked developer projection: plain name, no profile
+              // link, no @handle (developer anonymity rule).
+              <span className="text-sm font-medium">{chirp.author.name}</span>
+            ) : chirp.author ? (
               <Link href={`/profile/${chirp.author.username}`} className="text-sm font-medium transition hover:underline">
                 {chirp.author.name}
               </Link>
             ) : (
               <span className="text-sm font-medium text-neutral-400">A student</span>
             )}
-            {chirp.author ? (
+            {chirp.author && !chirp.author.developer ? (
               <span className="text-xs text-neutral-500">@{chirp.author.username}</span>
             ) : null}
             <span className="text-[11px] text-neutral-600">{time}</span>
@@ -324,14 +330,18 @@ function ChirpCard({
                 comments.map((comment) => (
                   <div key={comment.id} className="flex gap-2">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-[10px] font-semibold text-neutral-400">
-                      {(comment.author?.name ?? "?").charAt(0).toUpperCase()}
+                      {comment.author?.developer
+                        ? "D"
+                        : (comment.author?.name ?? "?").charAt(0).toUpperCase()}
                     </span>
                     <p className="min-w-0 text-xs leading-relaxed text-neutral-300">
                       <span className="font-medium text-white">
                         {comment.author?.name ?? "A student"}
                       </span>{" "}
                       <span className="text-neutral-500">
-                        {comment.author ? `@${comment.author.username}` : ""}
+                        {comment.author && !comment.author.developer
+                          ? `@${comment.author.username}`
+                          : ""}
                       </span>
                       <br />
                       {comment.body}

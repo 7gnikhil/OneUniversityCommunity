@@ -39,6 +39,48 @@ export function toPublicProfile(row: PublicProfileRow): PublicProfile {
   };
 }
 
+// ── Developer anonymity (owner's rule, 2026-11-07) ────────────────────────
+// The OneUCo Developer is NEVER linkable to a personal identity on a
+// public surface: the same rule the profile page implements (masked
+// "OneUCo Developer", generic avatar, no follow/details — see
+// app/profile/[username]/page.tsx). Public author-attribution surfaces
+// (Chirp posts + comments, normal-server messages + member lists,
+// server typing names) resolve the developer's account id server-side
+// via lib/server/owner.ts getDeveloperAccountId (keyed on the owner
+// email, which never leaves the server) and swap the real public
+// profile for this projection BEFORE anything is serialised to the
+// client — so the name, @handle and photo never ship at all.
+// Relationship surfaces (DMs, friends, own views) deliberately do NOT
+// use this: people there already know him.
+export const DEVELOPER_DISPLAY_NAME = "OneUCo Developer";
+
+export function developerPublicProfile(accountId: string): PublicProfile {
+  return {
+    accountId,
+    username: "",
+    name: DEVELOPER_DISPLAY_NAME,
+    bio: null,
+    branch: null,
+    photoUrl: null,
+    developer: true,
+  };
+}
+
+// Swap the developer's entry in a profiles map for the masked
+// projection. No-op when the id is unknown (fail-soft resolution) or
+// the developer isn't among the authors.
+export function maskDeveloperProfiles(
+  profiles: Map<string, PublicProfile>,
+  developerAccountId: string | null,
+): Map<string, PublicProfile> {
+  if (!developerAccountId || !profiles.has(developerAccountId)) {
+    return profiles;
+  }
+  const masked = new Map(profiles);
+  masked.set(developerAccountId, developerPublicProfile(developerAccountId));
+  return masked;
+}
+
 // Public rows for a set of accounts, keyed by account_id. Missing ids are
 // simply absent from the map (e.g. an account that lost `verified` status
 // drops out of the view and therefore out of every social surface).
@@ -115,12 +157,17 @@ export async function listDeckCandidates(
   myAccountId: string,
   myIntention: Intention | null,
   limit: number,
+  // Extra accounts never to deal (the caller passes the developer's id:
+  // his card would expose the identity + gallery his masked profile
+  // page never unlocks — developer anonymity rule, see above).
+  excludeAccountIds?: ReadonlyArray<string>,
 ): Promise<DeckCandidate[]> {
+  const excluded = new Set(excludeAccountIds ?? []);
   const { data: viewData } = await session
     .from("public_profiles")
     .select(PUBLIC_PROFILE_COLUMNS);
   const viewRows = ((viewData ?? []) as PublicProfileRow[]).filter(
-    (row) => row.account_id !== myAccountId,
+    (row) => row.account_id !== myAccountId && !excluded.has(row.account_id),
   );
   if (viewRows.length === 0) return [];
 

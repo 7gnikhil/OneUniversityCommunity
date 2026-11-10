@@ -1,12 +1,20 @@
 // Chirp data layer. Identities are NORMAL here (unlike Maya Jwalam):
 // authors appear with their public profile (public_profiles projection
-// via lib/social.ts). Counts on the chirps row (like_count/comment_count/
+// via lib/social.ts) — with ONE exception: the developer's author entry
+// is swapped for the masked "OneUCo Developer" projection before it
+// leaves the server (developer anonymity rule; see lib/social.ts
+// maskDeveloperProfiles). That needs the service-role client to resolve
+// the developer's account id from the owner email, so callers pass an
+// admin client when they have one; without it the feed renders
+// unmasked rather than breaking (fail-soft, same as the profile page).
+// Counts on the chirps row (like_count/comment_count/
 // view_count) are denormalised; the source tables (chirp_likes,
 // chirp_comments) are authoritative and the actions recount into the row.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PublicProfile } from "@/lib/types";
-import { getPublicProfilesByIds } from "@/lib/social";
+import { getPublicProfilesByIds, maskDeveloperProfiles } from "@/lib/social";
+import { getDeveloperAccountId } from "@/lib/server/owner";
 
 export interface ChirpRow {
   id: string;
@@ -49,6 +57,7 @@ export async function listChirps(
   supabase: SupabaseClient,
   myAccountId: string,
   limit: number,
+  admin?: SupabaseClient | null,
 ): Promise<ChirpView[]> {
   const { data } = await supabase
     .from("chirps")
@@ -58,7 +67,7 @@ export async function listChirps(
   const rows = (data ?? []) as ChirpRow[];
   if (rows.length === 0) return [];
 
-  const [profiles, likesResult] = await Promise.all([
+  const [rawProfiles, likesResult] = await Promise.all([
     getPublicProfilesByIds(
       supabase,
       rows.map((row) => row.author_id),
@@ -74,6 +83,10 @@ export async function listChirps(
   ]);
   const liked = new Set(
     ((likesResult.data ?? []) as Array<{ chirp_id: string }>).map((row) => row.chirp_id),
+  );
+  const profiles = maskDeveloperProfiles(
+    rawProfiles,
+    admin ? await getDeveloperAccountId(admin) : null,
   );
 
   return rows.map((row) => ({
@@ -94,6 +107,7 @@ export async function listChirpComments(
   supabase: SupabaseClient,
   chirpId: string,
   myAccountId: string,
+  admin?: SupabaseClient | null,
 ): Promise<ChirpCommentView[]> {
   const { data } = await supabase
     .from("chirp_comments")
@@ -107,9 +121,13 @@ export async function listChirpComments(
     body: string;
     created_at: string;
   }>;
-  const profiles = await getPublicProfilesByIds(
+  const rawProfiles = await getPublicProfilesByIds(
     supabase,
     rows.map((row) => row.author_id),
+  );
+  const profiles = maskDeveloperProfiles(
+    rawProfiles,
+    admin ? await getDeveloperAccountId(admin) : null,
   );
   return rows.map((row) => ({
     id: row.id,

@@ -28,7 +28,8 @@ import {
   getPrivacyMap,
   isTypingAt,
 } from "@/lib/presence";
-import { getPublicProfilesByIds } from "@/lib/social";
+import { DEVELOPER_DISPLAY_NAME, getPublicProfilesByIds } from "@/lib/social";
+import { getDeveloperAccountId } from "@/lib/server/owner";
 
 // Server actions. All data work runs on the service-role client AFTER
 // explicit membership/role checks here — several of these operations
@@ -504,16 +505,20 @@ export async function fetchServerMessagesAction(
           isTypingAt(presenceById.get(id), "server", channelId),
       );
       if (typingIds.length === 0) return [];
-      const profiles = await getPublicProfilesByIds(ctx.admin, typingIds);
+      const [profiles, developerId] = await Promise.all([
+        getPublicProfilesByIds(ctx.admin, typingIds),
+        getDeveloperAccountId(ctx.admin),
+      ]);
       return typingIds
-        .map((id) => profiles.get(id))
-        .filter(
-          (profile): profile is NonNullable<typeof profile> =>
-            profile !== undefined,
-        )
-        .map((profile) =>
-          profile.name.trim() ? profile.name : `@${profile.username}`,
-        );
+        .map((id) => {
+          // Developer anonymity: his typing shows only as the neutral
+          // developer name, never his real name or @handle.
+          if (developerId && id === developerId) return DEVELOPER_DISPLAY_NAME;
+          const profile = profiles.get(id);
+          if (!profile) return null;
+          return profile.name.trim() ? profile.name : `@${profile.username}`;
+        })
+        .filter((name): name is string => name !== null);
     } catch {
       return [];
     }

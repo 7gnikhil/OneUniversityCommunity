@@ -135,10 +135,21 @@ export async function addChirpCommentAction(
   return { error: null };
 }
 
+// The service-role client the feed's developer masking resolves
+// through (see lib/chirp.ts). Fail-soft: null leaves the feed unmasked
+// rather than breaking it.
+function tryAdmin(): ReturnType<typeof createAdminClient> | null {
+  try {
+    return createAdminClient();
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchChirpsAction(): Promise<ChirpView[]> {
   const ctx = await requireCtx();
   if (!ctx) return [];
-  return listChirps(ctx.supabase, ctx.account.id, 50);
+  return listChirps(ctx.supabase, ctx.account.id, 50, tryAdmin());
 }
 
 export async function fetchChirpCommentsAction(
@@ -146,7 +157,7 @@ export async function fetchChirpCommentsAction(
 ): Promise<ChirpCommentView[]> {
   const ctx = await requireCtx();
   if (!ctx) return [];
-  return listChirpComments(ctx.supabase, chirpId, ctx.account.id);
+  return listChirpComments(ctx.supabase, chirpId, ctx.account.id, tryAdmin());
 }
 
 // ── Live news + weather (the "Live" block above the feed) ───────────

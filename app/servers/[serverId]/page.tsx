@@ -191,6 +191,7 @@ export default async function ServerPage({
       username: entry.profile?.username ?? "",
       photoUrl: entry.profile?.photoUrl ?? null,
       role: entry.membership.role,
+      developer: entry.profile?.developer ?? false,
     }));
 
   // Direct-add candidates (my matches who aren't already members) and

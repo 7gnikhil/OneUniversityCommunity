@@ -19,6 +19,11 @@ export interface PublicProfile {
   bio: string | null;
   branch: string | null;
   photoUrl: string | null;
+  // Set ONLY on the masked developer projection (lib/social.ts
+  // developerPublicProfile): the row is the OneUCo Developer with the
+  // real name/@handle/photo stripped server-side. Renderers must treat
+  // it as unlinkable — no profile link, no @handle — wherever it shows.
+  developer?: boolean;
 }
 
 export interface Account {

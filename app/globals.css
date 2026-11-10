@@ -12,3 +12,164 @@ html,
 body {
   height: 100%;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   APP INTERFACES (lib/themes.ts) — full-app themes, admin-defaulted
+   and per-user pickable from the dial. The root layout stamps the
+   applied interface on <html> as data-theme / data-theme-mode /
+   data-pattern / data-surface plus the token variables inline
+   (--bg-from, --surface, --accent, …). With NO stamp (seasonal auto),
+   none of the rules below match and the app renders exactly as the
+   black/minimal base above. Everything here is keyed overrides of the
+   app's most repeated Tailwind surfaces — semantic colours (report
+   red, online emerald, amber warnings) are deliberately untouched.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Page ground + base text. Beats body's bg-black/text-white utilities
+   on specificity (html[attr] body = 0,1,2 against a lone class). */
+html[data-theme] body {
+  background: linear-gradient(165deg, var(--bg-from), var(--bg-to)) fixed;
+  background-color: var(--bg-solid);
+  color: var(--text);
+  --pattern-line: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+/* Cards, panels, inputs, sheets — the neutral scale remapped. */
+html[data-theme] .bg-neutral-950 {
+  background-color: var(--surface);
+}
+html[data-theme] .bg-neutral-900 {
+  background-color: var(--surface-2);
+}
+html[data-theme] .bg-neutral-800 {
+  background-color: var(--surface-2);
+}
+html[data-theme] .bg-black {
+  background-color: var(--bg-solid);
+}
+html[data-theme] .border-neutral-800,
+html[data-theme] .border-neutral-700 {
+  border-color: var(--border);
+}
+html[data-theme] .hover\:border-neutral-600:hover,
+html[data-theme] .hover\:border-neutral-500:hover,
+html[data-theme] .focus\:border-neutral-500:focus {
+  border-color: color-mix(in srgb, var(--border) 45%, var(--text) 55%);
+}
+html[data-theme] .hover\:bg-neutral-900:hover,
+html[data-theme] .hover\:bg-neutral-800:hover {
+  background-color: var(--surface-2);
+}
+
+/* Text tones — the neutral greys become the theme's text ramp. */
+html[data-theme] .text-neutral-300 {
+  color: var(--text-2);
+}
+html[data-theme] .text-neutral-400,
+html[data-theme] .text-neutral-500 {
+  color: var(--muted);
+}
+html[data-theme] .placeholder\:text-neutral-600::placeholder {
+  color: var(--muted);
+}
+
+/* Primary actions: every primary button in the app is the
+   bg-white + text-black pair — under an interface it becomes the
+   accent with the theme's on-accent text colour. (A lone bg-white,
+   e.g. a toggle knob, is NOT a button and stays white.) */
+html[data-theme] .bg-white.text-black {
+  background-color: var(--accent);
+  color: var(--accent-text);
+}
+html[data-theme] .hover\:bg-neutral-200:hover {
+  background-color: color-mix(in srgb, var(--accent) 80%, #ffffff);
+}
+
+/* ── Surface styles ────────────────────────────────────────────────── */
+html[data-surface="glass"] .bg-neutral-950 {
+  background-color: color-mix(in srgb, var(--surface) 68%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+html[data-surface="soft"] .rounded-xl {
+  border-radius: 1.25rem;
+}
+html[data-surface="soft"] .rounded-2xl {
+  border-radius: 1.75rem;
+}
+html[data-surface="soft"] .rounded-3xl {
+  border-radius: 2.25rem;
+}
+html[data-surface="bordered"] .border-neutral-800,
+html[data-surface="bordered"] .border-neutral-700 {
+  border-color: color-mix(in srgb, var(--border) 55%, var(--text) 45%);
+}
+
+/* ── Background patterns ─────────────────────────────────────────────
+   A fixed, non-interactive texture layer above the page ground but
+   below sticky headers (z-10+) and modals (z-40+). */
+html[data-pattern="grid"] body::after,
+html[data-pattern="dots"] body::after,
+html[data-pattern="stars"] body::after,
+html[data-pattern="glow"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+html[data-pattern="grid"] body::after {
+  background-image:
+    linear-gradient(var(--pattern-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--pattern-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+html[data-pattern="dots"] body::after {
+  background-image: radial-gradient(
+    var(--pattern-line) 1.5px,
+    transparent 1.6px
+  );
+  background-size: 22px 22px;
+}
+html[data-pattern="stars"] body::after {
+  background-image:
+    radial-gradient(
+      color-mix(in srgb, var(--text) 26%, transparent) 1px,
+      transparent 1.4px
+    ),
+    radial-gradient(
+      color-mix(in srgb, var(--accent) 30%, transparent) 1.2px,
+      transparent 1.6px
+    );
+  background-size:
+    90px 90px,
+    140px 140px;
+  background-position:
+    0 0,
+    34px 52px;
+}
+html[data-pattern="glow"] body::after {
+  background-image: radial-gradient(
+    62% 42% at 50% 0%,
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    transparent 70%
+  );
+}
+
+/* ── Light interfaces ────────────────────────────────────────────────
+   The app's copy is written text-white-first; on a light ground those
+   classes must read as the theme's dark text ramp instead. */
+html[data-theme-mode="light"] .text-white {
+  color: var(--text);
+}
+html[data-theme-mode="light"] .text-neutral-100,
+html[data-theme-mode="light"] .text-neutral-200 {
+  color: var(--text);
+}
+html[data-theme-mode="light"] .bg-neutral-200 {
+  background-color: var(--surface-2);
+}
+html[data-theme-mode="light"] .border-white\/20,
+html[data-theme-mode="light"] .border-white\/25 {
+  border-color: var(--border);
+}

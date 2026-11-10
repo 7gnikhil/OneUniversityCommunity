@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import "./globals.css";
 import { isDiwaliLive } from "@/lib/server/diwali-settings";
 import { createClient } from "@/lib/supabase/server";
-import { getMySessionUser } from "@/lib/auth/my-account";
+import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
+import { themeCssVars, type AppTheme } from "@/lib/themes";
+import { resolveAppliedTheme } from "@/lib/server/theme-settings";
 import DiwaliBanner from "@/components/DiwaliBanner";
 import PresenceHeartbeat from "@/components/PresenceHeartbeat";
 import DialShellServer from "@/components/DialShellServer";
@@ -31,8 +34,34 @@ export default async function RootLayout({
   const sessionUser = await getMySessionUser(supabase);
   const signedIn = sessionUser !== null;
 
+  // App interface (lib/themes.ts): the signed-in user's own pick
+  // (profiles.theme_id) wins, then the owner's app-wide default from
+  // /admin/appearance (app_settings 'theme'), else nothing — seasonal
+  // auto, no stamp, the app exactly as it has always looked. Stamping
+  // means data-* attributes + the token CSS variables inline on <html>;
+  // the restyle itself lives in globals.css ("APP INTERFACES" section)
+  // and the dial reads the same tokens via lib/dial-badges. Resolution
+  // fails soft to no stamp on any error (e.g. before migration 0008).
+  const account = signedIn ? await getMyAccount(supabase) : null;
+  const appliedTheme: AppTheme | null = await resolveAppliedTheme(
+    supabase,
+    account?.id ?? null,
+  );
+
   return (
-    <html lang="en" className="dark">
+    <html
+      lang="en"
+      className="dark"
+      data-theme={appliedTheme?.id}
+      data-theme-mode={appliedTheme?.mode}
+      data-pattern={appliedTheme?.bgPattern}
+      data-surface={appliedTheme?.surfaceStyle}
+      style={
+        appliedTheme
+          ? (themeCssVars(appliedTheme) as unknown as CSSProperties)
+          : undefined
+      }
+    >
       <body className="min-h-dvh bg-black text-white antialiased">
         {diwali ? <DiwaliBanner variant="app" /> : null}
         {signedIn ? <PresenceHeartbeat /> : null}

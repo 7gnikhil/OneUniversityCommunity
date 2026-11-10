@@ -466,12 +466,23 @@ function MessageItem({
         />
       ) : (
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-semibold text-neutral-400">
-          {(row.author?.name ?? "?").charAt(0).toUpperCase()}
+          {row.author?.developer
+            ? "D"
+            : (row.author?.name ?? "?").charAt(0).toUpperCase()}
         </span>
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
-          {row.author ? (
+          {row.author?.developer ? (
+            // Masked developer projection: plain name, no profile link
+            // (developer anonymity rule).
+            <span
+              className="text-sm font-medium"
+              style={{ color: accent === "#171717" ? "#fff" : accent }}
+            >
+              {row.author.name}
+            </span>
+          ) : row.author ? (
             <Link
               href={`/profile/${row.author.username}`}
               className="text-sm font-medium transition hover:underline"

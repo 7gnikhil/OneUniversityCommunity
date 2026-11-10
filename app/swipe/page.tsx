@@ -3,6 +3,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { listDeckCandidates } from "@/lib/social";
+import { getDeveloperAccountId } from "@/lib/server/owner";
 import { accentHex } from "@/lib/validation";
 import SwipeDeck from "./SwipeDeck";
 
@@ -42,12 +43,17 @@ export default async function SwipePage() {
   let candidates: Awaited<ReturnType<typeof listDeckCandidates>> = [];
   try {
     const admin = createAdminClient();
+    // Developer anonymity: the developer is never dealt as a deck
+    // card — a card would expose the identity and gallery his masked
+    // profile page never unlocks (see lib/social.ts).
+    const developerId = await getDeveloperAccountId(admin);
     candidates = await listDeckCandidates(
       admin,
       supabase,
       account.id,
       myProfile?.intention ?? null,
       30,
+      developerId ? [developerId] : [],
     );
   } catch {
     candidates = [];

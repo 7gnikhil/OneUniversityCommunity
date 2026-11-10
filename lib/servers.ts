@@ -16,7 +16,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PublicProfile, ServerType } from "@/lib/types";
-import { getPublicProfilesByIds } from "@/lib/social";
+import { getPublicProfilesByIds, maskDeveloperProfiles } from "@/lib/social";
+import { getDeveloperAccountId } from "@/lib/server/owner";
 
 // ── Row shapes (mirror supabase/schema.sql) ────────────────────────────────
 export interface ServerRow {
@@ -321,9 +322,15 @@ export async function listServerMembers(
     .eq("server_id", serverId)
     .order("joined_at", { ascending: true });
   const rows = (data ?? []) as ServerMemberRow[];
-  const profiles = await getPublicProfilesByIds(
+  const rawProfiles = await getPublicProfilesByIds(
     admin,
     rows.map((row) => row.account_id),
+  );
+  // Developer anonymity: the developer appears in member lists only as
+  // the masked "OneUCo Developer" projection (see lib/social.ts).
+  const profiles = maskDeveloperProfiles(
+    rawProfiles,
+    await getDeveloperAccountId(admin),
   );
   return rows.map((membership) => ({
     membership,
@@ -396,9 +403,15 @@ export async function listServerMessages(
   if (channelId) query = query.eq("channel_id", channelId);
   const { data } = await query;
   const rows = ((data ?? []) as ServerMessageRow[]).reverse();
-  const profiles = await getPublicProfilesByIds(
+  const rawProfiles = await getPublicProfilesByIds(
     admin,
     rows.map((row) => row.author_id),
+  );
+  // Developer anonymity: his messages in normal (non-Jwalam) servers
+  // carry the masked projection, never his real name/photo/handle.
+  const profiles = maskDeveloperProfiles(
+    rawProfiles,
+    await getDeveloperAccountId(admin),
   );
   return rows.map((row) => ({
     id: row.id,

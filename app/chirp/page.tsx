@@ -13,7 +13,9 @@ import NewsSection from "@/components/NewsSection";
 import ChirpFeed from "./ChirpFeed";
 
 // Chirp — the global public feed. Identities are normal here: authors
-// show their public profile. View counts are real: opening the feed
+// show their public profile — except the developer, whose author entry
+// is masked server-side (developer anonymity rule; see lib/chirp.ts).
+// View counts are real: opening the feed
 // records one view per visible chirp (best-effort, service role).
 export default async function ChirpPage() {
   const supabase = await createClient();
@@ -38,10 +40,20 @@ export default async function ChirpPage() {
   }
   const me = account;
 
+  // Service role, shared by the feed's developer masking and the view
+  // counting below. Fail-soft: without it the feed still renders (the
+  // masking resolves to a no-op) and views simply go unrecorded.
+  let admin: ReturnType<typeof createAdminClient> | null = null;
+  try {
+    admin = createAdminClient();
+  } catch {
+    admin = null;
+  }
+
   // The feed and my own profile (for the accent colour) are independent
   // reads — fetch them together.
   const [chirps, myProfile] = await Promise.all([
-    listChirps(supabase, me.id, 50),
+    listChirps(supabase, me.id, 50, admin),
     getProfileByAccountId(supabase, me.id),
   ]);
   const accent = accentHex(myProfile?.accent_color);
@@ -56,9 +68,8 @@ export default async function ChirpPage() {
 
   // Record views for what was just rendered (denormalised counter; the
   // feed is the view, so no per-chirp view table exists in the schema).
-  if (chirps.length > 0) {
+  if (chirps.length > 0 && admin) {
     try {
-      const admin = createAdminClient();
       await Promise.all(
         chirps.map((chirp) =>
           admin

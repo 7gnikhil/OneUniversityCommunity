@@ -396,3 +396,214 @@ Commons by the fallback), Regional (default AP+Telangana and
 Hyderabad) 12 items each, and weather returned a full card for the
 default region. NOT verified: Openverse (sandbox 504, above) and
 the in-browser rendering (parent's live check after deploy).
+
+---
+
+# Addendum 2026-11-10 (later) — App interfaces: admin default + dial-picked per-user themes
+
+Owner ask: "add any interfaces for the admin so i can change it — like
+some 15-20 interfaces, full app, not just for header." Redirected
+mid-build: interfaces are NOT colour swaps — each bundles palette +
+dial skin + background treatment + surface style; the ADMIN pick is
+only the app-wide DEFAULT; every student picks their OWN interface by
+long-pressing the dial and swiping through live previews; a list in
+Profile settings is the accessibility fallback.
+
+## Theme definitions — lib/themes.ts (single source of truth)
+18 interfaces, each: id, name, vibe, mode (dark/light), dialSkin
+(display name), bgPattern (none|grid|dots|stars|glow), surfaceStyle
+(flat|glass|soft|bordered) and a full token set:
+--bg-from/--bg-to/--bg-solid (page gradient), --surface, --surface-2,
+--border, --accent, --accent-2, --accent-text, --text, --text-2,
+--muted, plus dial tokens (face background, ring, tick, glow shadow,
+frosted blur).
+Roster: Default Midnight (carbon, the current look), Diwali (brass,
+stars, bordered), Ocean Deep (chrome, glow, glass), Sunset Vibes
+(copper, glow, soft), Forest (moss, dots), Royal Violet (chrome,
+stars, bordered), Crimson (carbon, glow), Rose Pink (blush, dots,
+soft), Cyber Neon (neon ring, grid, bordered), Sakura (light; pastel,
+dots, soft), Lavender Haze (light; frosted glass), Mint Fresh
+(chrome, dots, glass), Coffee House (wood, soft), Solar Amber (brass,
+glow), Ice Blue (frosted, stars, glass), Monochrome (mono metal,
+grid, bordered), Peachy Light (light; pastel, dots, soft), Paper
+Light (light; porcelain, bordered).
+
+## Application mechanism
+- Root layout (app/layout.tsx) resolves the applied interface
+  server-side and stamps <html> with data-theme / data-theme-mode /
+  data-pattern / data-surface + the token variables inline. NO stamp
+  in seasonal-auto → zero rules match → the app renders exactly as
+  before (black/minimal + Diwali banner logic untouched, dates
+  unchanged).
+- globals.css gained a delimited "APP INTERFACES" section: body
+  gradient/text under html[data-theme]; overrides remapping the app's
+  most repeated hard-coded surfaces — bg-neutral-950→--surface,
+  bg-neutral-900/800→--surface-2, bg-black→--bg-solid,
+  border-neutral-800/700→--border, text-neutral-300→--text-2,
+  text-neutral-400/500→--muted, placeholder colour, neutral hovers;
+  the primary-button pair .bg-white.text-black→accent/accent-text
+  (a lone bg-white, e.g. the privacy toggle knob, is NOT remapped);
+  surface styles (glass = translucent surface + blur on
+  bg-neutral-950; soft = larger radii on rounded-xl/2xl/3xl; bordered
+  = stronger border mix); background patterns as a fixed body::after
+  texture (z-index 1 — below sticky headers and modals, pointer-events
+  none); light-mode fixes under [data-theme-mode="light"] (text-white
+  and neutral-100/200 read as the theme's dark text ramp).
+- The DIAL follows via lib/dial-badges: when an interface applies,
+  badges.accentHex becomes the theme accent and badges.theme carries
+  the dial palette; DialNav renders face/ring/ticks/glow/blur and its
+  surface/text tones from it (classic constants as fallback). Skin
+  rendering is token-driven — no per-skin CSS classes in the dial.
+- Fail-soft everywhere: any read error/missing table/missing column →
+  no stamp, classic dial, seasonal look.
+
+## Honest limits — what an interface can NOT restyle here
+- One-off hard-coded colours outside the remapped utility set (e.g.
+  bg-neutral-800 chips in a few components use the surface-2 mapping
+  fine, but bespoke hexes inline in SVG/canvas-ish code stay).
+- Semantic colours deliberately excluded: online emerald, report/
+  logout red, warning amber, status chips — they mean something.
+- Photos, avatars and user images are never tinted.
+- The Diwali BANNER keeps its own gold styling; it is a seasonal
+  layer, not part of the interface tokens.
+- Per-user PROFILE accent (accent_color) still drives profile-page
+  flourishes; on the dial it yields to the applied interface's accent
+  whenever one applies (interface > profile accent), and returns in
+  seasonal-auto with no pick.
+
+## Storage + resolution (migration-0008.sql — APPLY FIRST, code is fail-soft before it)
+- app_settings key 'theme' = admin default, JSON text
+  {"mode":"auto"} | {"mode":"manual","id":"…"}. The table ALREADY
+  EXISTS in production (migration 0003, value TEXT — Diwali mode
+  lives there), so the migration's create-if-not-exists (jsonb, for
+  fresh DBs) is a no-op live; the writer stores JSON.stringify and
+  parseThemeSetting accepts string-or-object, so both column types
+  work. Seed row inserted on conflict do nothing. RLS on, no
+  policies (service-role only), same as diwali_mode.
+- profiles.theme_id text (nullable) = the user's own pick.
+  DELIBERATELY not added to lib/profile's PROFILE_COLUMNS — that read
+  feeds every profile surface and would break until the migration
+  lands; instead lib/server/theme-settings.getProfileThemeId does a
+  dedicated fail-soft select of just theme_id.
+- Admin read is unstable_cache'd (30s, tag 'app-theme', mirroring
+  diwali-settings) because the layout asks on every render;
+  setThemeSetting revalidateTags so the owner sees it immediately,
+  everyone else within ~30s ("within a minute" on the admin page).
+- Resolution order: profiles.theme_id (valid id) > app_settings
+  manual > seasonal auto (no stamp). The layout's profile read is one
+  extra narrow query per signed-in render (getProfileThemeId); the
+  session/account resolution itself was already there (getMyAccount
+  is request-cached). getDialData independently resolves the same
+  pair (its profile fetch doesn't carry theme_id — separate narrow
+  read, cached admin setting shared) so dial and page always agree.
+
+## The dial gesture (components/DialNav.tsx) — spec as built
+- Enter: press-and-hold ≥500ms with no >2° movement, on the dial face
+  OR any stop (both arm the same timer; movement disarms). The firing
+  press is consumed (drag ref flag + click suppression) so it never
+  drags or navigates. Entry feedback: clunk + 30ms haptic + a 1.045
+  scale pulse for 240ms. Physics/sound/navigation code otherwise
+  untouched.
+- Inside: stops hide; 19 dots (App Default + 18 interfaces) ring the
+  rim at 360/19° spacing. Drag rotates; landing on a new index plays
+  the ratchet tick, haptics, and PREVIEWS LIVE — applyThemeToRoot
+  stamps the candidate on document.documentElement (same attrs/vars
+  the layout stamps server-side, lib/themes helpers shared), so the
+  whole app behind the dial re-skins in real time, and DialNav's own
+  palette swaps to the previewed skin. Release springs to the nearest
+  interface (existing spring, spacing-parameterised targets). Centre
+  hub becomes a button naming the centred interface + its skin —
+  tap = APPLY. Below the dial: hint "Swipe to browse interfaces —
+  tap the centre to apply" + a ✕ Cancel button. Keyboard: arrows
+  step, Enter applies, Escape cancels.
+- Apply: stamp stays (it equals the server stamp), setMyThemeAction
+  writes profiles.theme_id (session client, RLS owner-only), then
+  router.refresh(). Starts centred on the user's saved pick (or App
+  Default). "App Default"'s preview = the admin default theme (or
+  stamp-clearing when the default is seasonal).
+- Cancel paths: ✕ button, Escape, route change (activePath differs
+  from entry path), and unmount — all restore the exact pre-entry
+  root snapshot (attrs + inline vars) unless a pick was saved.
+- Also shipped: components/InterfacePicker.tsx in Profile settings
+  (list twin using setMyThemeFormAction — App Default row + all 18
+  with gradient/surface/accent previews), and /admin/appearance
+  (requireAdminPage gate; action re-checks passesAdminGate) framed
+  as the app-wide DEFAULT with an Auto (seasonal) control; admin home
+  gained an "Appearance & interfaces" tool card.
+
+## Verification done here
+Same constraint as previous builds (no node_modules; Vercel build is
+the typecheck): all 14 touched/new TS/TSX files — lib/themes.ts,
+lib/server/theme-settings.ts, app/layout.tsx, lib/dial-badges.ts,
+components/DialNav.tsx, components/DialShell.tsx,
+components/DialShellServer.tsx, app/page.tsx, app/profile/page.tsx,
+app/profile/theme-actions.ts, components/InterfacePicker.tsx,
+app/admin/appearance/{page,actions}.ts(x), app/admin/page.tsx —
+passed a TypeScript syntax parse (compiler API, zero diagnostics);
+globals.css brace balance verified. NOT verified here: the Vercel
+typecheck/build, live gesture feel, and the visual result of each
+interface (parent's post-deploy live check). Chirp/news files and
+BUILD_NOTES' news section untouched — this addendum only appends.
+
+---
+
+# Addendum — Developer anonymity on public surfaces (2026-11-10)
+
+Bug reported by the owner from the live app: his Chirp post rendered
+as "Developer @7gnikhil" — name/handle/photo publicly linkable to the
+Developer label, breaking the 2026-11-07 anonymity rule (already
+honoured by the masked /profile page and the neutral admin card).
+
+## Mechanism (one shared path, mask at the data layer)
+
+- `lib/server/owner.ts` — NEW `getDeveloperAccountId(admin)`: resolves
+  the developer's account id from the owner email (service-role read
+  on accounts; the email never leaves the server). Fail-soft → null.
+- `lib/social.ts` — NEW pure helpers: `DEVELOPER_DISPLAY_NAME`
+  ("OneUCo Developer", matching the profile page / admin card),
+  `developerPublicProfile(id)` (masked projection: name swapped,
+  username "", photo/bio/branch null, `developer: true`),
+  `maskDeveloperProfiles(map, id)` (swaps the developer's entry in a
+  PublicProfile map BEFORE serialisation, so the real name/@handle/
+  photo never ship to the client at all).
+- `lib/types.ts` — `PublicProfile.developer?: boolean`; renderers
+  treat a flagged author as unlinkable (plain name, no @handle, "D"
+  avatar tile — same glyph as the masked profile page).
+
+## Surfaces audited
+
+| Surface | Leaked? | Action |
+| --- | --- | --- |
+| Chirp posts (lib/chirp.ts listChirps → ChirpFeed) | YES — the reported bug | Masked at data layer; ChirpFeed renders flagged author unlinked, no @, "D" avatar. listChirps gained an optional admin param; page + fetchChirpsAction pass one (fail-soft). |
+| Chirp comments (listChirpComments → ChirpFeed) | YES | Same masking + renderer treatment. |
+| Normal-server messages (lib/servers.ts listServerMessages → ServerChat) | YES (name + photo + profile link) | Masked at data layer; ServerChat renders flagged author unlinked, "D" avatar. |
+| Normal-server member list (listServerMembers → server page → ServerSettings) | YES (name + @ + photo) | Masked at data layer; MemberEntryData gained `developer`, row renders unlinked with no @ line. Membership accountId/role untouched (kick/ban keys unaffected). |
+| Normal-server typing names (app/servers/actions.ts poll) | YES (name, or @handle fallback) | Owner's entry replaced with "OneUCo Developer". |
+| Swipe deck (lib/social.ts listDeckCandidates) | YES (card: photo gallery + name + @handle) | Developer is never dealt: swipe page resolves his id and passes it via the new optional `excludeAccountIds` param. A masked card makes no sense in a deck; exclusion matches "details never unlock, even for friends". FLAG for owner/parent: behaviour change beyond the reported bug — trivially revertible (drop the exclusion) if he disagrees. |
+| Maya Jwalam (listJwalamMessages projection) | NO | Verified, untouched: anonymous by default, "admin-post" is badge-only, moderation shape is admin-only. The "revealed" shape shows a poster's real profile only under that poster's own accepted reveal grant — the developer accepting a reveal is his deliberate act, by design. |
+| Search rows (app/search/page.tsx) | Handle only, NO Developer label | Left per brief: @handle exposure is uniform for every user and the row links to his already-masked profile page. |
+| Public profile page | NO | Already masked (email-keyed); unchanged. |
+| Home page "Admin" link | NO | Rendered only for the owner's own session. |
+| DMs / friends list / own Inbox / own views | — | Out of scope per brief (relationship surfaces; people there already know him). Includes: other users' Inboxes showing his follow requests, ServerSettings "addable friends" (the viewer's own matches). Unchanged. |
+| Admin pages | — | Owner-only already; moderation needs real identities. Unchanged. |
+
+Notes: masking is unconditional per surface (not per-viewer) — in his
+own feed the owner sees his chirps exactly as everyone else does
+("OneUCo Developer"); `mine` is computed from author_id independently,
+so his Delete/edit affordances still work. ServerMessageView.authorId
+stays the real id (staff flair/moderation plumbing keys off it; it is
+never rendered as identity text). No flair logic changed: a
+"Developer" flair chip may still appear — the label is allowed, the
+identity linkage is what died.
+
+## Verification done here
+
+All 13 touched TS/TSX files (lib/types.ts, lib/server/owner.ts,
+lib/social.ts, lib/chirp.ts, lib/servers.ts, app/chirp/page.tsx,
+app/chirp/actions.ts, app/chirp/ChirpFeed.tsx,
+app/servers/[serverId]/page.tsx, ServerChat.tsx, ServerSettings.tsx,
+app/servers/actions.ts, app/swipe/page.tsx) passed a syntax parse
+(Bun transpiler, zero failures). No node_modules locally, so the
+Vercel build remains the real typecheck; no live/E2E check was run
+(parent verifies post-deploy). Forbidden files untouched (layout,
+DialNav, globals.css, admin/appearance, themes, news files).
