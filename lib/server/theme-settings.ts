@@ -1,4 +1,5 @@
 import { unstable_cache, revalidateTag } from "next/cache";
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
@@ -82,8 +83,18 @@ export async function setThemeSetting(setting: ThemeSetting): Promise<boolean> {
  * exist — a dedicated fail-soft read keeps the rest of the app immune.
  * One narrow query per call; the root layout and the dial data are the
  * only callers, once per render each.
+ *
+ * Wrapped in React cache(): within one request the layout's
+ * resolveAppliedTheme, the dial data and the profile page can all ask,
+ * and — with createClient() cache()-shared (lib/supabase/server) —
+ * they pass the identical client, so the query runs ONCE per request
+ * instead of once per caller. (Writes go through
+ * app/profile/theme-actions, which updates profiles.theme_id directly
+ * and never reads it back in the same request.)
  */
-export async function getProfileThemeId(
+export const getProfileThemeId = cache(readProfileThemeId);
+
+async function readProfileThemeId(
   supabase: SupabaseClient,
   accountId: string,
 ): Promise<string | null> {
@@ -111,10 +122,16 @@ export async function resolveAppliedTheme(
   supabase: SupabaseClient,
   accountId: string | null,
 ): Promise<AppTheme | null> {
-  if (accountId) {
-    const ownId = await getProfileThemeId(supabase, accountId);
-    const own = getTheme(ownId);
-    if (own) return own;
-  }
-  return getAdminTheme();
+  // The two reads are independent — the user's pick and the admin
+  // default — so run them together instead of serially. Precedence is
+  // unchanged: a valid own pick still wins; the admin read is
+  // unstable_cache'd (30s), so consulting it even when the user has a
+  // pick costs no round trip in the steady state.
+  const [ownId, adminTheme] = await Promise.all([
+    accountId
+      ? getProfileThemeId(supabase, accountId)
+      : Promise.resolve(null),
+    getAdminTheme(),
+  ]);
+  return getTheme(ownId) ?? adminTheme;
 }

@@ -108,7 +108,7 @@ export default function InterfacePicker({
                 />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-white">
+                <span className="block text-sm font-medium leading-snug text-white">
                   {row.name}
                   {row.active ? (
                     <span className="ml-2 text-[11px] font-medium text-neutral-400">

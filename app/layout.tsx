@@ -21,10 +21,18 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Data flow (perf pass, 2026-11-10): everything independent runs
+  // concurrently instead of in a serial chain. The Diwali check starts
+  // first and is awaited last; the session/account/theme reads proceed
+  // underneath it. Rendered output is identical — only the waiting
+  // changed. All of these helpers are request-cached (React cache()
+  // over the one shared client from lib/supabase/server), so the page
+  // and the dial shell re-asking costs nothing extra.
+
   // Diwali launch theme: when live (auto window 8–12 Nov IST, or the
   // owner's /admin toggle), a slim gold banner sits above every page —
   // login, dial home and all sections. Fails soft to off.
-  const diwali: boolean = await isDiwaliLive();
+  const diwaliPromise: Promise<boolean> = isDiwaliLive();
 
   // The app shell needs to know whether anyone is signed in (dial
   // shell + presence heartbeat). The session resolves locally (JWT
@@ -33,6 +41,7 @@ export default async function RootLayout({
   const supabase = await createClient();
   const sessionUser = await getMySessionUser(supabase);
   const signedIn = sessionUser !== null;
+  const account = signedIn ? await getMyAccount(supabase) : null;
 
   // App interface (lib/themes.ts): the signed-in user's own pick
   // (profiles.theme_id) wins, then the owner's app-wide default from
@@ -42,11 +51,11 @@ export default async function RootLayout({
   // the restyle itself lives in globals.css ("APP INTERFACES" section)
   // and the dial reads the same tokens via lib/dial-badges. Resolution
   // fails soft to no stamp on any error (e.g. before migration 0008).
-  const account = signedIn ? await getMyAccount(supabase) : null;
-  const appliedTheme: AppTheme | null = await resolveAppliedTheme(
-    supabase,
-    account?.id ?? null,
-  );
+  const [diwali, appliedTheme]: [boolean, AppTheme | null] =
+    await Promise.all([
+      diwaliPromise,
+      resolveAppliedTheme(supabase, account?.id ?? null),
+    ]);
 
   return (
     <html

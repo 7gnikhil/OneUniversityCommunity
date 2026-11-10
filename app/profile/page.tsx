@@ -14,6 +14,7 @@ import {
 } from "@/lib/preferences";
 import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
 import InterfacePicker from "@/components/InterfacePicker";
+import PageIntro from "@/components/PageIntro";
 import {
   getAdminTheme,
   getProfileThemeId,
@@ -94,6 +95,7 @@ export default async function ProfilePage() {
           Profile & Settings
         </p>
       </div>
+      <PageIntro section="profile" />
       <ProfileEditor initial={initial} />
       {/* Interface picker — the list twin of the dial's long-press
           interface mode; both save profiles.theme_id via the same

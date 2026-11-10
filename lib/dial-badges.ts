@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getProfileByAccountId } from "@/lib/profile";
@@ -28,7 +29,16 @@ export interface DialData {
   themePicker: DialThemePicker;
 }
 
-export async function getDialData(
+// Request-scoped via React cache(): on the dial home the shell
+// (DialShellServer) and the page BOTH ask for this, and used to each
+// pay the full computation (~5 queries) — the counts were computed
+// twice per home render. With createClient() also cache()-shared
+// (lib/supabase/server), both callers pass the identical client +
+// accountId, so cache() collapses them into ONE computation per
+// request. Data returned is unchanged.
+export const getDialData = cache(computeDialData);
+
+async function computeDialData(
   supabase: SupabaseClient,
   accountId: string,
 ): Promise<DialData> {

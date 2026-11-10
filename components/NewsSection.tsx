@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { NewsCategory, NewsItem, WeatherView } from "@/lib/news";
 import { getNewsAction, getWeatherAction } from "@/app/chirp/actions";
 
@@ -64,11 +64,17 @@ function NewsCard({
       className="flex flex-col overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-950 transition hover:border-neutral-600"
     >
       {showImage ? (
+        // referrerPolicy="no-referrer": publisher CDNs (The Hindu's
+        // th-i.thgim.com in particular) intermittently refuse hotlinked
+        // loads that carry a Referer, while the same URLs answer 200
+        // with none — sending no referrer is the verified-good case.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={item.imageUrl ?? undefined}
           alt=""
           loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
           onError={() => setImgFailed(true)}
           className="aspect-[16/9] w-full object-cover"
         />
@@ -117,8 +123,18 @@ export default function NewsSection({
   const [weather, setWeather] = useState<WeatherView | null>(initialWeather);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
+  // Categories already fetched in this mount (Top arrives with the
+  // page). The background prefetcher and the tab lazy-loader share
+  // this set so a category is never fetched twice; only the 5-minute
+  // refresh forces a re-fetch.
+  const fetchedRef = useRef<Set<NewsCategory>>(new Set(["top"]));
 
-  async function loadCategory(cat: NewsCategory): Promise<void> {
+  async function loadCategory(
+    cat: NewsCategory,
+    force = false,
+  ): Promise<void> {
+    if (!force && fetchedRef.current.has(cat)) return;
+    fetchedRef.current.add(cat);
     setLoading(cat);
     try {
       const items = await getNewsAction(cat);
@@ -131,7 +147,7 @@ export default function NewsSection({
   }
 
   async function refreshLive(cat: NewsCategory): Promise<void> {
-    await loadCategory(cat);
+    await loadCategory(cat, true);
     try {
       const fresh = await getWeatherAction();
       if (fresh) setWeather(fresh);
@@ -153,6 +169,40 @@ export default function NewsSection({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  // Warmth: shortly after first paint, prefetch the remaining
+  // categories one by one in the background. A cold category costs
+  // real seconds server-side (feed fetch + photo fallback), but the
+  // result rides the 10-minute server cache — so warming it here
+  // makes later tab switches feel instant instead of paying the cold
+  // cost on tap. Sequential + idle-scheduled to stay out of the way
+  // of the first paint and the chirp feed below.
+  useEffect(() => {
+    let cancelled = false;
+    const warm = async (): Promise<void> => {
+      for (const tab of TABS) {
+        if (cancelled) return;
+        if (tab.key === "top") continue;
+        await loadCategory(tab.key);
+      }
+    };
+    const start = (): void => {
+      if (!cancelled) void warm();
+    };
+    let idleId: number | undefined;
+    let timer: number | undefined;
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(start, { timeout: 2500 });
+    } else {
+      timer = window.setTimeout(start, 1500);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined) window.cancelIdleCallback?.(idleId);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-refresh the open tab + weather every 5 minutes; keep the
   // time-ago labels honest every minute.

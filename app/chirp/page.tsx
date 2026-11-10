@@ -10,6 +10,7 @@ import {
 } from "@/lib/news";
 import { accentHex } from "@/lib/validation";
 import NewsSection from "@/components/NewsSection";
+import PageIntro from "@/components/PageIntro";
 import ChirpFeed from "./ChirpFeed";
 
 // Chirp — the global public feed. Identities are normal here: authors
@@ -93,6 +94,8 @@ export default async function ChirpPage() {
           Chirp
         </p>
       </div>
+
+      <PageIntro section="chirp" />
 
       <NewsSection
         initialNews={initialNews}

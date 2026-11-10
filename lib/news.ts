@@ -1,7 +1,7 @@
 // Live news + weather for the Chirp "Live" block — SERVER SIDE ONLY.
 //
 // Sources are free and keyless: publisher RSS feeds for headlines,
-// Open-Meteo for weather, and Openverse → Wikimedia Commons for a
+// Open-Meteo for weather, and Wikimedia Commons → Openverse for a
 // topical photo when a feed item carries no image of its own. Every
 // read fails soft: a dead feed yields an empty list or a placeholder
 // tile, never a crashed page.
@@ -405,7 +405,7 @@ function parseRss(xml: string, source: string): NewsItem[] {
         summaryText.length > 0
           ? summaryText.slice(0, 180) + (summaryText.length > 180 ? "…" : "")
           : null,
-      imageUrl: extractImage(block, rawDescription),
+      imageUrl: normaliseImageUrl(extractImage(block, rawDescription)),
     });
   }
   return items;
@@ -428,11 +428,35 @@ async function fetchFeed(def: FeedDef): Promise<NewsItem[]> {
   }
 }
 
-// ── Photo fallback (Openverse → Wikimedia Commons) ──────────────────
+// Image URLs are normalised to https at the point they enter an item:
+// some sources (and older feed items) still hand out http:// URLs,
+// which an https page cannot load at all (mixed content). Protocol-
+// relative //host URLs get https too. Applied to feed images in the
+// parser and to fallback results alike.
+function normaliseImageUrl(url: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("http://")) return "https://" + trimmed.slice(7);
+  if (trimmed.startsWith("//")) return "https:" + trimmed;
+  return trimmed;
+}
+
+// ── Photo fallback (Wikimedia Commons → Openverse) ──────────────────
 // For items whose feed gave no image. Runs inside getNews, so the
 // lookups ride the same 10-minute fetch cache as the feeds themselves
 // and happen at most once per category per cache window — never per
-// page view. Capped by the 12-item page size.
+// page view.
+//
+// ORDER + TIMING (measured 2026-11-10, see BUILD_NOTES perf addendum):
+// Commons answers in ~1s; Openverse took 8.6s to a 504 from the build
+// sandbox and 13.4s for a single call in production, where it ran
+// FIRST and serially per item — that wait was the 20–25s cold tab
+// load. So: Commons first, Openverse second, every lookup capped by a
+// hard 3s timeout, lookups for a category run in parallel with a
+// small concurrency cap, and only the first 8 items of a category are
+// eligible. A timeout/failure degrades that one card to its gradient
+// tile — it can never stall the category response.
 
 const STOPWORDS = new Set([
   "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
@@ -453,6 +477,8 @@ function photoQuery(title: string): string {
   return words.slice(0, 5).join(" ");
 }
 
+const FALLBACK_TIMEOUT_MS = 3000;
+
 async function openverseImage(query: string): Promise<string | null> {
   try {
     const url =
@@ -462,6 +488,7 @@ async function openverseImage(query: string): Promise<string | null> {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
       next: { revalidate: 600 },
+      signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const json = (await res.json()) as {
@@ -492,6 +519,7 @@ async function commonsImage(query: string): Promise<string | null> {
         Accept: "application/json",
       },
       next: { revalidate: 600 },
+      signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const json = (await res.json()) as {
@@ -515,15 +543,34 @@ async function commonsImage(query: string): Promise<string | null> {
   }
 }
 
+const FALLBACK_CONCURRENCY = 4;
+const FALLBACK_ITEM_LIMIT = 8;
+
 async function fillMissingImages(items: NewsItem[]): Promise<void> {
-  const missing = items.filter((item) => !item.imageUrl);
-  await Promise.all(
-    missing.map(async (item) => {
+  // Only the first FALLBACK_ITEM_LIMIT items of the category are
+  // eligible; of those, only the ones the feed left imageless.
+  const missing = items
+    .slice(0, FALLBACK_ITEM_LIMIT)
+    .filter((item) => !item.imageUrl);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < missing.length) {
+      const item = missing[next];
+      next += 1;
       const query = photoQuery(item.title);
-      if (!query) return;
-      item.imageUrl =
-        (await openverseImage(query)) ?? (await commonsImage(query));
-    }),
+      if (!query) continue;
+      // Commons first (fast, reliable), Openverse second — each with
+      // its own hard timeout inside the lookup helpers.
+      item.imageUrl = normaliseImageUrl(
+        (await commonsImage(query)) ?? (await openverseImage(query)),
+      );
+    }
+  }
+  await Promise.all(
+    Array.from(
+      { length: Math.min(FALLBACK_CONCURRENCY, missing.length) },
+      () => worker(),
+    ),
   );
 }
 

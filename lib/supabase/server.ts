@@ -1,13 +1,26 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 // Session-aware server client (anon key + the user's auth cookie).
 // Use in Server Components, Route Handlers and Server Actions for anything
 // that acts as the signed-in user — RLS applies.
-export async function createClient() {
+//
+// Wrapped in React cache(): ONE client instance per request, shared by
+// the root layout, the page and every nested server component. This is
+// load-bearing for the request-scoped memoisation in
+// lib/auth/my-account (getMySessionUser / getMyAccount) and
+// lib/dial-badges (getDialData): their cache() keys include the client
+// object, so when every caller built its own client, every cache
+// missed and the same session/account/badge queries ran two or three
+// times per render. The client is a thin cookie-backed wrapper, so
+// sharing it within a request changes nothing about what any caller
+// reads or writes. (Middleware does not use this helper — it builds
+// its own client in middleware.ts.)
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient(
@@ -31,7 +44,7 @@ export async function createClient() {
       },
     },
   );
-}
+});
 
 // Service-role client — SERVER ONLY. Bypasses RLS.
 // Reserved for: admin review decisions, verification pipeline writes,

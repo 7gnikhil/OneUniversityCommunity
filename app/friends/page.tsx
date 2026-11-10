@@ -13,6 +13,7 @@ import {
   isOnline,
 } from "@/lib/presence";
 import { accentHex } from "@/lib/validation";
+import PageIntro from "@/components/PageIntro";
 
 // Friends — the dial's chat stop: my matches and their DM threads.
 //
@@ -94,6 +95,8 @@ export default async function FriendsPage() {
           Friends
         </p>
       </div>
+
+      <PageIntro section="friends" />
 
       {entries.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 px-6 py-10 text-center">

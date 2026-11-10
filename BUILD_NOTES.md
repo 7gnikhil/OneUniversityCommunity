@@ -607,3 +607,183 @@ app/servers/actions.ts, app/swipe/page.tsx) passed a syntax parse
 Vercel build remains the real typecheck; no live/E2E check was run
 (parent verifies post-deploy). Forbidden files untouched (layout,
 DialNav, globals.css, admin/appearance, themes, news files).
+
+---
+
+# Addendum — 2026-11-10 (evening): performance pass + page brief lines
+
+Two briefs in one push, both driven by production measurements taken
+the same day: opening a cold news tab took 20–25s, one Openverse call
+took 13.4s, and every page render chained ~12–18 sequential Supabase
+round trips. Working-tree only: nothing pushed, deployed, or applied
+to Supabase.
+
+## A) News photos + cold-load speed (lib/news.ts, components/NewsSection.tsx)
+
+### The Hindu image diagnosis (empirical, curl — not guessed)
+- Every wired Hindu feed (front page, National, Sci-Tech, Sport, the
+  city feeders) serves item images the same way: `media:content`
+  URLs, ALL of them `https://th-i.thgim.com/...` — across five feeds
+  sampled, ZERO http:// image URLs and zero description <img>s. So
+  the http→https theory does NOT explain the Hindu failures (the
+  upgrade is still applied at parse time as defence for other
+  sources/fallbacks — see below).
+- Sampled thgim images (front page + sport, incl. a `.jpg.jpg`
+  filename) returned `200 image/jpeg` in EVERY combination tried:
+  no Referer, the app Referer
+  (https://one-university-community.vercel.app/ and …/chirp), a
+  random external Referer, default curl UA, and a full browser
+  header set (Chrome UA, `Accept: image/avif,image/webp,…`,
+  Sec-Fetch-Site/Mode/Dest cross-site/no-cors/image).
+- Conclusion: nothing about the URLs or plain referer cases fails at
+  the HTTP layer from here; the in-browser failures are consistent
+  with the CDN refusing some hotlinked loads depending on the
+  requesting browser/egress (which a sandbox curl cannot reproduce).
+  The matching standard countermeasure is applied client-side: news
+  <img>s now send `referrerPolicy="no-referrer"` — the request then
+  arrives with NO Referer, which is exactly the combination verified
+  200 above — plus `decoding="async"` (lazy loading was already on).
+  If thgim images still fail for a given user after this, the
+  remaining lever is proxying those images through our own origin;
+  deliberately NOT built here (out of brief scope).
+
+### Photo fallback, rebuilt for speed
+Measured from the build sandbox on the day: Wikimedia Commons
+search API → 200 in ~1.0s. Openverse API → 504 after ~8.6s (and
+13.4s for one call in production). The old chain ran Openverse
+FIRST, per item: any category with several imageless items paid
+that wait repeatedly on a cold cache — the 20–25s Sports tab.
+- New order: Commons first, Openverse second.
+- Every lookup carries a hard 3s timeout
+  (`AbortSignal.timeout(3000)`); a slow provider now costs at most
+  ~6s of background time for one item (Commons timeout → Openverse
+  timeout) and usually ~1s, and NEVER blocks siblings.
+- Lookups run in PARALLEL across items with a concurrency cap of 4
+  (a tiny worker pool in fillMissingImages), and only the first 8
+  items of a category are eligible for fallback (feed-own images are
+  unaffected at any position).
+- A failed/timed-out lookup leaves imageUrl null → the card renders
+  its gradient tile immediately, as before.
+- Image URLs are https-normalised where they enter an item
+  (parser + fallback results): http:// → https://, //host → https://.
+
+### Client warmth
+NewsSection now prefetches the remaining categories after first
+paint: requestIdleCallback (2.5s timeout) where available, else a
+1.5s setTimeout; strictly sequential, skipping anything already
+fetched (a shared fetched-set also dedupes the tab lazy-loader;
+only the 5-minute refresh forces a re-fetch). Cold categories cost
+their seconds ONCE against the 10-minute server cache in the
+background, so a tab switch afterwards reads warm cache instead of
+paying the cold cost on tap. First paint, tab lazy-load and the
+5-minute auto-refresh are otherwise unchanged.
+
+## B) Page-render round trips (plumbing only — rendered output identical)
+
+Root cause found while verifying the brief's premise: the
+request-scoped cache() helpers in lib/auth/my-account key on the
+Supabase client object, but lib/supabase/server's createClient()
+built a NEW client per call — so the layout, the shell and the page
+each held a different instance and every cache() missed. On `/` the
+account lookup ran up to 3× and getDialData ran 2× (shell + page).
+
+- `lib/supabase/server.ts` — createClient is now wrapped in React
+  cache(): ONE session client per request, shared by layout, shell,
+  page and actions. (Middleware untouched — it builds its own
+  client.) This one change makes the existing getMySessionUser /
+  getMyAccount memoisation actually dedupe.
+- `lib/dial-badges.ts` — getDialData is now React cache()-wrapped:
+  shell + home page share ONE badge computation per request.
+- `lib/server/theme-settings.ts` — getProfileThemeId is now React
+  cache()-wrapped (layout resolve, dial data and the profile page
+  share one narrow query per request; the theme write path updates
+  the column directly and never reads it back mid-request).
+  resolveAppliedTheme now runs the user-pick read and the admin
+  default read in Promise.all instead of serially — precedence is
+  unchanged (valid own pick still wins; the admin read is
+  unstable_cache'd 30s, so the overlap costs nothing steady-state).
+- `app/layout.tsx` — the Diwali check is started first and awaited
+  LAST, in one Promise.all with the theme resolution, instead of
+  gating the whole chain; the session → account → theme sequence
+  (which genuinely depends on itself) is unchanged.
+
+Query-count effect (signed-in renders, steady state):
+- `/` before: session/account lookups ~3× + dial data ~2× ≈
+  profile 2, DM-unread 2, server-unread 2, inbox 2, theme_id 2–3,
+  accounts up to 3 — roughly 13–15 round trips for the shared shell
+  data alone. After: each of those runs exactly ONCE (~6), and the
+  Diwali/theme reads overlap the rest instead of preceding them.
+- Other sections: shell dial data was already single there, but the
+  account lookup dedupes from ~2× to 1× and the theme_id read from
+  2× (layout + dial) to 1×.
+
+## C) Warm route — NEW app/api/warm/route.ts
+GET → { ok: true }. Performs the layout's cheap shared reads so a
+keep-warm ping keeps the function instance and the Supabase pool
+hot: getDiwaliMode() (the seasonal setting read, unstable_cache'd)
++ one service-role head-count on accounts. Runtime nodejs,
+force-dynamic, no auth — it exposes nothing (no data returned
+beyond ok) and costs two cheap reads per hit; both reads are
+best-effort (a failure still answers ok). PARENT: point the
+keep-warm cron at /api/warm.
+
+## D) Interface name truncation (FIX 4)
+components/InterfacePicker.tsx: the row name was `block truncate` —
+it now wraps (`leading-snug`, no truncate) so full interface names
+always render. The admin appearance cards
+(app/admin/appearance/page.tsx) were checked: their name spans
+carry no truncate class (plain block, wraps naturally) — no change
+needed there.
+
+## E) Page brief lines — NEW lib/page-intros.ts + components/PageIntro.tsx
+Owner ask: a brief info line about each page, at the top of the
+page, on EVERY open — permanent furniture, not a dismissible tip:
+no localStorage, no cookie, no dismiss button anywhere in the
+implementation.
+- `lib/page-intros.ts` — PAGE_INTROS, the single text map keyed by
+  section (servers / swipe / friends / chirp / profile / inbox /
+  search). Texts are the owner's lines verbatim; each was checked
+  against the page's actual behaviour (yellow ✓✓ = seen, deck
+  right-swipe = follow with details unlocking on acceptance, profile
+  gallery/links/intention hidden until friendship, Jwalam anonymity)
+  and none contradicted reality, so none were changed.
+- `components/PageIntro.tsx` — renders one line: small muted text
+  (text-xs, text-neutral-500 — which applied interfaces remap to
+  their muted tone) with an accent dot coloured by the theme's
+  --accent var (neutral-grey fallback in the seasonal look), so it
+  reads correctly in dark themes, light themes and the classic look.
+- Placements (immediately under each page's header row, top of the
+  main column): /servers, /swipe, /friends, /chirp (under the
+  header, ABOVE the Live News section, per brief), /profile (above
+  the editor), /inbox, /search (above the search form). Pages shown
+  only in their "account isn't finished" state don't carry it (that
+  state has its own explanation text).
+- The home dial (components/DialNav.tsx): a brief line now sits
+  ABOVE the dial, from the same map, keyed to the selected stop —
+  it reads selIdx, which is the resting stop at rest and is set to
+  the target the instant a tap/keyboard step lands (goTo), so
+  during a tap-spin the line already shows the TARGET stop's brief;
+  a drag-release updates it to the landed stop via the same selIdx.
+  No new state and no physics/sound/navigation code touched. It
+  renders only on the home dial (size "home") — the desktop shell
+  dial sits beside the section page, which carries the identical
+  line at its own top, so showing it there too would duplicate it.
+  In interface mode the line hides: the mode's own hint under the
+  dial ("Swipe to browse interfaces — tap the centre to apply")
+  owns the space.
+
+## Verification done here
+Same constraint as previous builds (no node_modules; Vercel is the
+typecheck): all 18 touched/new files — lib/news.ts,
+components/NewsSection.tsx, lib/supabase/server.ts,
+lib/dial-badges.ts, lib/server/theme-settings.ts, app/layout.tsx,
+app/api/warm/route.ts, components/InterfacePicker.tsx,
+lib/page-intros.ts, components/PageIntro.tsx, app/servers/page.tsx,
+app/swipe/page.tsx, app/friends/page.tsx, app/chirp/page.tsx,
+app/profile/page.tsx, app/inbox/page.tsx, app/search/page.tsx,
+components/DialNav.tsx — passed a TypeScript syntax parse (Bun
+transpiler, zero failures). The Hindu/Openverse/Commons numbers
+above are live curl measurements from this session, not estimates.
+NOT verified here: the in-browser thgim behaviour after the
+referrer change and the felt tab-switch timing (parent's post-deploy
+live check, as usual).

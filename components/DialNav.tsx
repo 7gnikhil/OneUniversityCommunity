@@ -16,6 +16,7 @@ import {
   type RootThemeSnapshot,
 } from "@/lib/themes";
 import { setMyThemeAction } from "@/app/profile/theme-actions";
+import { PAGE_INTROS, type PageIntroSection } from "@/lib/page-intros";
 
 // The round rotating dial — OneUco's home navigation.
 //
@@ -115,6 +116,17 @@ const STOPS: DialStopDef[] = [
 
 const SPACING = 360 / STOPS.length; // 72° between the five stops
 const HALF = SPACING / 2;
+
+// The brief info line shown above the home dial (lib/page-intros —
+// the same text each section page carries at its top). Keyed by stop
+// position, aligned with STOPS above.
+const STOP_INTRO_KEYS: PageIntroSection[] = [
+  "servers",
+  "swipe",
+  "friends",
+  "chirp",
+  "profile",
+];
 
 // The demo's dark dial palette (production is black/minimal throughout).
 const FACE = "#131316";
@@ -811,6 +823,22 @@ export default function DialNav({
 
   return (
     <div className="flex flex-col items-center select-none">
+      {/* Brief info line (home dial only; the shell dial sits beside
+          the section itself, which carries the same line at its top).
+          It follows selIdx: at rest that is the selected stop, and
+          goTo() sets selIdx to the target the moment a tap lands, so
+          while the wheel spins toward a stop the line already shows
+          that stop's brief. Hidden in interface mode — the hint under
+          the dial ("Swipe to browse interfaces…") owns the space
+          then. Pure readout: no state, no physics touched. */}
+      {!ifaceMode && sizeProp === "home" ? (
+        <p
+          className="mb-3 max-w-[320px] text-center text-xs leading-relaxed"
+          style={{ color: dim }}
+        >
+          {PAGE_INTROS[STOP_INTRO_KEYS[selIdx] ?? "servers"]}
+        </p>
+      ) : null}
       <div
         ref={wrapRef}
         role="slider"

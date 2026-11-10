@@ -6,6 +6,7 @@ import { listDeckCandidates } from "@/lib/social";
 import { getDeveloperAccountId } from "@/lib/server/owner";
 import { accentHex } from "@/lib/validation";
 import SwipeDeck from "./SwipeDeck";
+import PageIntro from "@/components/PageIntro";
 
 // Swipe Deck — the app's #1 priority surface (Tinder-style, verified
 // students only; middleware holds everyone else at /verify).
@@ -72,6 +73,7 @@ export default async function SwipePage() {
           Swipe Deck
         </p>
       </div>
+      <PageIntro section="swipe" />
       <SwipeDeck
         // Remount when the dealt deck changes (e.g. after Start Again
         // resets passes and the server re-deals) — the deck keeps its

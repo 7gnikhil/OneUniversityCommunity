@@ -9,6 +9,7 @@ import {
 import { getProfileByAccountId } from "@/lib/profile";
 import type { FollowUiState } from "@/app/follow/actions";
 import FollowButton from "@/components/FollowButton";
+import PageIntro from "@/components/PageIntro";
 import { accentHex } from "@/lib/validation";
 import type { PublicProfile } from "@/lib/types";
 
@@ -150,6 +151,8 @@ export default async function SearchPage({
           Search
         </p>
       </div>
+
+      <PageIntro section="search" />
 
       <form action="/search" method="get" className="flex items-center gap-2">
         <input

@@ -21,6 +21,7 @@ import {
   RevealedProfileLink,
   RevokeRevealButton,
 } from "./InboxActions";
+import PageIntro from "@/components/PageIntro";
 
 // Inbox — everything addressed to me that isn't a chat:
 //   - follow requests (accept/decline — accepting makes us friends)
@@ -145,6 +146,8 @@ export default async function InboxPage() {
           Inbox
         </p>
       </div>
+
+      <PageIntro section="inbox" />
 
       {!adminReady ? (
         <p className="rounded-2xl border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200">

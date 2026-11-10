@@ -10,6 +10,7 @@ import {
 } from "@/lib/servers";
 import { accentHex } from "@/lib/validation";
 import CreateServerForm from "./CreateServerForm";
+import PageIntro from "@/components/PageIntro";
 
 // Servers — Maya Jwalam pinned first (the main channel, flagged in data
 // via servers.is_main_channel, never by name), then my servers and the
@@ -74,6 +75,8 @@ export default async function ServersPage() {
           Servers
         </p>
       </div>
+
+      <PageIntro section="servers" />
 
       {!adminReady ? (
         <p className="rounded-2xl border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200">
