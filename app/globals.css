@@ -320,3 +320,15 @@ main[data-section] .section-header-chip::before {
     inset 0 0 0 1px color-mix(in srgb, var(--metal-ring) 30%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
+
+/* Chirp hub composer-only mount (app/chirp/page.tsx): ChirpFeed is
+   ONE component — composer form + timeline in a single root div —
+   and its file is off-limits while the photo-upload fix is in
+   flight, so the /chirp hub mounts it inside this scope to show
+   ONLY the composer: every direct child of the feed root except
+   the form itself and its error line (role="alert") is suppressed.
+   The timeline's single home is /chirp/campus, which mounts the
+   same component unscoped. */
+.composer-only > div > :not(form):not([role="alert"]) {
+  display: none;
+}

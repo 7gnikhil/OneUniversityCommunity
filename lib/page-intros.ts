@@ -11,6 +11,7 @@ export type PageIntroSection =
   | "swipe"
   | "friends"
   | "chirp"
+  | "chirp-campus"
   | "profile"
   | "inbox"
   | "search";
@@ -24,6 +25,8 @@ export const PAGE_INTROS: Record<PageIntroSection, string> = {
     "Your homies — chats, online status and typing live here. Yellow double-ticks mean they've seen your message.",
   chirp:
     "Campus in short posts — plus live news and weather for your place, refreshed through the day.",
+  "chirp-campus":
+    "The campus wall — every student's chirps in one feed, newest first.",
   profile:
     "This is you on OneUco — your gallery, links and intention stay hidden until someone becomes your friend.",
   inbox:

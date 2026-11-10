@@ -2,35 +2,52 @@
 
 import { useId, useState, type ReactNode } from "react";
 
-// Shared animated dropdown shell for the Profile settings pickers
-// (Interface, Dial style). Both pickers used to render their full
-// option lists flat; now each is a disclosure: a header row — title,
-// the current selection's name in a pill, and a chevron — that
-// expands on tap to reveal the list, and collapses on a second tap,
-// on Escape, or the moment an option inside is chosen (the option's
-// own form still submits exactly as before; this wrapper only
-// animates the reveal).
+// Shared animated dropdown shell. Two scales of use:
+//  • The Profile settings pickers (Interface, Dial style) — a header
+//    row (title, the current selection's name in a pill, a chevron)
+//    that expands on tap to reveal the option list, and collapses on
+//    a second tap, on Escape, or the moment an option inside is
+//    chosen (the option's own form still submits exactly as before;
+//    this wrapper only animates the reveal).
+//  • The five Settings SECTIONS on the profile page (Profile / Fling
+//    data / Display / Queries / About & FAQs) — same shell, with the
+//    pill carrying a one-line summary of the section instead of a
+//    selection. Sections pass defaultOpen / collapseOnSubmit={false}:
+//    a section must not fold away when one of its own forms saves.
 //
 // Motion: the CSS grid-template-rows 0fr → 1fr technique — the body
 // wrapper transitions grid rows + opacity over 300ms ease-out, the
 // inner overflow-hidden div clips it, and the chevron rotates over
 // the same 300ms. The body stays mounted while closed (aria-hidden +
 // pointer-events-none), which is what makes the CLOSE animation
-// possible; it costs nothing interactive. Closed by default.
+// possible; it costs nothing interactive. Closed by default unless
+// defaultOpen is set.
 
 export default function AnimatedDropdown({
   title,
   currentLabel,
+  defaultOpen = false,
+  collapseOnSubmit = true,
   children,
 }: {
-  /** Picker title shown in the header ("Interface", "Dial style"). */
+  /** Title shown in the header ("Interface", "Profile", …). */
   title: string;
-  /** Current selection's name, shown in the header pill. */
+  /**
+   * Text shown in the header pill — a picker's current selection, or
+   * a section's one-line summary.
+   */
   currentLabel: string;
-  /** The picker's intro line + option list (server-rendered). */
+  /** Start expanded (Settings' Profile section). Pickers omit it. */
+  defaultOpen?: boolean;
+  /**
+   * Collapse when a submit button inside is clicked (picker option
+   * chosen). Sections pass false so their forms save in place.
+   */
+  collapseOnSubmit?: boolean;
+  /** The intro line + option list / section body (server-rendered). */
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState<boolean>(false);
+  const [open, setOpen] = useState<boolean>(defaultOpen);
   const regionId = useId();
 
   return (
@@ -75,8 +92,11 @@ export default function AnimatedDropdown({
         aria-hidden={!open}
         onClickCapture={(event) => {
           // Choosing an option collapses the dropdown; the option's
-          // form submission proceeds untouched.
+          // form submission proceeds untouched. Section-scale users
+          // opt out (collapseOnSubmit={false}) — their forms are the
+          // section's content, not a selection to fold away after.
           if (
+            collapseOnSubmit &&
             (event.target as HTMLElement).closest(
               'button[type="submit"]',
             )

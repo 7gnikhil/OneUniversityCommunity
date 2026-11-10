@@ -2245,3 +2245,130 @@ One reproduced failure with that log open settles (1) vs (2) outright.
 - Bun smoke test of `describeUploadError` over six synthetic
   StorageError shapes — all mapped as designed.
 - Code only: no push, no deploy, no live-site usage.
+
+## Addendum 2026-11-10 (late evening) — Chirp becomes a hub (Live News + Campus Tweets pages) and Settings sections become dropdowns
+
+Owner's asks: (1) "add a component down live news as a campus tweets
+component, and don't keep in there — if we click those components
+the pages will open in any other page: the live news and campus
+tweets" — /chirp turns into a hub of doorway components that OPEN
+dedicated pages; (2) "in settings I said to add components like
+dropdowns" — the five Settings sections become animated dropdown
+components. Built while the Chirp photo-upload fix was in flight in
+the same tree: `app/chirp/ChirpFeed.tsx`, its upload path and
+`lib/images.ts` were NOT touched; this build composes around them.
+
+### Part A — Chirp hub + two pages
+
+Route map (after this build):
+
+| Route | What lives there |
+|---|---|
+| `/chirp` | Header + PageIntro ("chirp") + the COMPOSER (composer-only mount, see below) + LIVE NEWS doorway card + CAMPUS TWEETS doorway card. No stories list, no timeline. |
+| `/chirp/news` | Header (← Chirp) + `NewsSection` — the full news experience: header bar (LIVE dot, weather chip, Updated stamp, native category select), weather header card, animated stories block, all 12 stories per category. |
+| `/chirp/campus` | Header (← Chirp) + PageIntro ("chirp-campus", new line in lib/page-intros.ts) + `ChirpFeed` mounted WHOLE — the full feed, composer included, exactly as /chirp used to render it. |
+
+- LIVE NEWS card (in app/chirp/page.tsx): the old collapsible bar
+  restyled as a teaser — LIVE dot, "Live News", region/weather chip
+  and the top headline as a one-line preview, taken from the SAME
+  cached fetches the news page renders (resolveRegionForAccount +
+  getNewsCached("top") + getWeatherCached — no extra upstream cost),
+  plus the bar's circled chevron rotated into a doorway arrow. The
+  whole card is one Link to /chirp/news.
+- CAMPUS TWEETS card: title + the latest 3 chirps as compact preview
+  rows (Avatar + author name + first non-empty body line, truncated;
+  photo-only chirps show "📷 Photo"; developer authors arrive
+  pre-masked from listChirps), whole card a Link to /chirp/campus.
+- The composer problem, stated plainly: the owner wanted the
+  composer to STAY on /chirp while the feed moved out, but composer
+  and timeline are ONE component (ChirpFeed) whose file is
+  off-limits during the upload fix. The hub therefore mounts
+  ChirpFeed with an empty timeline inside a `.composer-only` scope
+  (new rule in app/globals.css): every direct child of the feed root
+  except the form and its role="alert" error line is display:none.
+  Posting from the hub works exactly as before (the scoped mount
+  still runs the untouched upload code); the posted chirp appears
+  on /chirp/campus and in the hub's preview card on next load. When
+  the upload fix lands and ChirpFeed can be edited again, splitting
+  it into Composer + Feed components is the clean-up that removes
+  the need for this scope.
+- View counting MOVED with the feed: /chirp/campus records views
+  for its 50 rendered chirps with the same batched
+  increment_chirp_views RPC + per-row fallback the old /chirp page
+  used. The hub records NO views — its 3 preview chirps are teasers,
+  and counting them would inflate counts for chirps nobody opened.
+- NewsSection (components/NewsSection.tsx) was rewritten as the
+  always-open page component: the collapse state, the bar toggle
+  buttons, everOpened/hasOpened gating are gone. The DATA layer is
+  unchanged — same chirp actions (getNewsAction/getWeatherAction),
+  same per-mount fetched-once set, same lazy-load on first view of a
+  category, same idle-scheduled background prefetch (now starting on
+  page mount: landing on the page IS the open intent), same 5-minute
+  auto-refresh of the active category + weather and 1-minute
+  time-ago tick, same fail-soft empty states and photo fallback
+  tiles. The stories block animates in with the grid-rows 0fr→1fr +
+  opacity technique (AnimatedStories), keyed by category so every
+  switch replays the reveal; the category control stays the native
+  styled <select>.
+- Both new pages: same members-only gate as /chirp (getMyAccount,
+  with the same "finish sign-up" fallback), data-section="chirp" on
+  <main> so the chirp section accent applies, and the established
+  sub-page header (← Chirp + CHIRP section chip). The dial shell
+  treats /chirp/* like other section sub-pages (unchanged).
+
+SINGLE-HOME audit (nothing duplicated):
+- Stories list: rendered ONLY by components/NewsSection, mounted
+  ONLY by app/chirp/news/page.tsx (grep: no other importer).
+- Chirp timeline: rendered ONLY by app/chirp/ChirpFeed.tsx, mounted
+  whole ONLY by app/chirp/campus/page.tsx (the hub mount is the
+  composer-only scope above — the component file exists once).
+- News data: lib/news cached fetches + app/chirp/actions, unchanged,
+  shared by hub teaser and news page (cache-shared, not forked).
+
+### Part B — Settings sections as animated dropdowns
+
+- components/AnimatedDropdown.tsx extended with two OPTIONAL props;
+  the pickers pass neither and behave byte-identically:
+  `defaultOpen` (start expanded) and `collapseOnSubmit={false}`
+  (a section's own save buttons must not fold the section away —
+  the pickers' collapse-on-option-choice remains the default).
+- app/profile/page.tsx: the five <section> blocks became five
+  AnimatedDropdowns inside one wrapper (the wrapper's -mt-6 cancels
+  the main gap so each dropdown's built-in mt-6 gives one uniform
+  rhythm). Closed bars show title + one-line summary pill:
+  1. Profile — "Personal data & privacy" — starts OPEN.
+  2. Fling data — "Bio, likes & dislikes".
+  3. Display — the effective interface's name (my pick → admin
+     default → "Seasonal look", via getTheme).
+  4. Queries — "Ask the developer".
+  5. About & FAQs — "About, FAQs & rules".
+  Section bodies keep their previous internal spacing (mt-4 wrapper,
+  gap-4); Display's body is the two picker dropdowns themselves,
+  untouched (dropdowns nested in the Display dropdown, as the
+  pickers already were dropdowns in the section).
+
+Settings audit — fields unchanged, one home each (same homes as the
+five-section build; presentation only):
+
+| Field / control | Section (dropdown) |
+|---|---|
+| DP, gallery, name/bio/branch, portfolio, intention, preferences, app colour, privacy toggles, log out | 1 · Profile |
+| Fling bio / likes / dislikes | 2 · Fling data |
+| Interface picker, Dial style picker | 3 · Display |
+| Req to Developer form + own-request tracking | 4 · Queries |
+| About OneUco, FAQs, community rules | 5 · About & FAQs |
+
+No form, action or field moved; ProfileEditor, FlingProfileEditor,
+DeveloperRequestForm and both pickers are unmodified.
+
+### Verification (local only — no push, no live-site checks)
+- Bun transpiler parse PASS on all 7 touched TS/TSX files:
+  components/AnimatedDropdown.tsx, components/NewsSection.tsx,
+  app/chirp/page.tsx, app/chirp/news/page.tsx,
+  app/chirp/campus/page.tsx, app/profile/page.tsx,
+  lib/page-intros.ts. (app/globals.css gained one plain CSS rule.)
+- Grep audits: NewsSection imported only by app/chirp/news/page.tsx;
+  ChirpFeed referenced only by the hub (composer-only mount) and
+  app/chirp/campus/page.tsx (full mount).
+- NOT touched (in-flight upload fix): app/chirp/ChirpFeed.tsx,
+  lib/images.ts, the storage upload path.

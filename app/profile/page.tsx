@@ -21,7 +21,9 @@ import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
 import FlingProfileEditor from "./FlingProfileEditor";
 import InterfacePicker from "@/components/InterfacePicker";
 import DialSkinPicker from "@/components/DialSkinPicker";
+import AnimatedDropdown from "@/components/AnimatedDropdown";
 import PageIntro from "@/components/PageIntro";
+import { getTheme } from "@/lib/themes";
 import {
   getAdminTheme,
   getProfileDialSkin,
@@ -37,6 +39,12 @@ import {
 //                     developer_requests flow as /help — not a copy).
 //   5. About & FAQs — about OneUco + the shared FAQ/rules content
 //                     (lib/help-content.ts, also rendered by /help).
+// Each section is presented as an AnimatedDropdown (owner's follow-up
+// ask): the closed bar carries the section title + a one-line summary,
+// the body expands/collapses with the shared 300ms animation. Profile
+// starts OPEN, the other four closed; sections opt out of the pickers'
+// collapse-on-submit so their own forms save in place. Presentation
+// only — every field stays in the section it already lived in.
 // The college and graduation year declared at joining are never read
 // here — they live on the private accounts row, in no section at all.
 export default async function ProfilePage() {
@@ -110,6 +118,14 @@ export default async function ProfilePage() {
   const myThemeId = await getProfileThemeId(supabase, account.id);
   const adminTheme = await getAdminTheme();
 
+  // The Display section's closed-bar summary: the interface actually
+  // in force (my pick, else the admin default, else the seasonal
+  // look) — the pickers inside carry the detail.
+  const displaySummary =
+    getTheme(myThemeId)?.name ??
+    getTheme(adminTheme?.id ?? null)?.name ??
+    "Seasonal look";
+
   return (
     <main data-section="profile" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
@@ -125,79 +141,98 @@ export default async function ProfilePage() {
       </div>
       <PageIntro section="profile" />
 
-      {/* ── 1 · Profile — personal data ─────────────────────────────── */}
-      <section aria-label="Profile" className="flex flex-col gap-4">
-        <h2 className="border-b border-neutral-900 pb-2 text-base font-semibold">
-          Profile
-        </h2>
-        <ProfileEditor initial={initial} />
-      </section>
+      {/* The five sections as animated dropdowns. The wrapper's -mt-6
+          cancels the main gap so each dropdown's own built-in mt-6
+          yields one uniform rhythm (header → intro → bars). */}
+      <div className="-mt-6 flex flex-col">
+        {/* ── 1 · Profile — personal data (starts OPEN) ───────────── */}
+        <AnimatedDropdown
+          title="Profile"
+          currentLabel="Personal data & privacy"
+          defaultOpen
+          collapseOnSubmit={false}
+        >
+          <div className="mt-4 flex flex-col gap-4">
+            <ProfileEditor initial={initial} />
+          </div>
+        </AnimatedDropdown>
 
-      {/* ── 2 · Fling data — the deck-only profile ──────────────────── */}
-      <section aria-label="Fling data" className="flex flex-col gap-4">
-        <h2 className="border-b border-neutral-900 pb-2 text-base font-semibold">
-          Fling data
-        </h2>
-        <FlingProfileEditor initial={flingProfile} accentHex={accent} />
-      </section>
+        {/* ── 2 · Fling data — the deck-only profile ──────────────── */}
+        <AnimatedDropdown
+          title="Fling data"
+          currentLabel="Bio, likes & dislikes"
+          collapseOnSubmit={false}
+        >
+          <div className="mt-4 flex flex-col gap-4">
+            <FlingProfileEditor initial={flingProfile} accentHex={accent} />
+          </div>
+        </AnimatedDropdown>
 
-      {/* ── 3 · Display — interface + dial style ────────────────────── */}
-      <section aria-label="Display" className="flex flex-col">
-        <h2 className="border-b border-neutral-900 pb-2 text-base font-semibold">
-          Display
-        </h2>
-        {/* Interface picker — the full-app look, picked from this list
-            (profiles.theme_id). */}
-        <InterfacePicker
-          currentId={myThemeId}
-          defaultId={adminTheme?.id ?? null}
-        />
-        {/* Dial style picker — the list twin of the dial's long-press
-            wheel-style mode; both save profiles.dial_skin via the same
-            action family. */}
-        <DialSkinPicker
-          currentId={await getProfileDialSkin(supabase, account.id)}
-          appliedThemeId={myThemeId ?? adminTheme?.id ?? null}
-        />
-      </section>
+        {/* ── 3 · Display — interface + dial style ────────────────── */}
+        <AnimatedDropdown
+          title="Display"
+          currentLabel={displaySummary}
+          collapseOnSubmit={false}
+        >
+          {/* Interface picker — the full-app look, picked from this list
+              (profiles.theme_id). */}
+          <InterfacePicker
+            currentId={myThemeId}
+            defaultId={adminTheme?.id ?? null}
+          />
+          {/* Dial style picker — the list twin of the dial's long-press
+              wheel-style mode; both save profiles.dial_skin via the same
+              action family. */}
+          <DialSkinPicker
+            currentId={await getProfileDialSkin(supabase, account.id)}
+            appliedThemeId={myThemeId ?? adminTheme?.id ?? null}
+          />
+        </AnimatedDropdown>
 
-      {/* ── 4 · Queries — ask the developer ─────────────────────────── */}
-      <section aria-label="Queries" className="flex flex-col gap-4">
-        <h2 className="border-b border-neutral-900 pb-2 text-base font-semibold">
-          Queries
-        </h2>
-        <p className="text-xs leading-relaxed text-neutral-500">
-          A question, a bug, an idea — this is the one place to send it.
-        </p>
-        <DeveloperRequestForm initialRequests={myRequests} accentHex={accent} />
-      </section>
+        {/* ── 4 · Queries — ask the developer ─────────────────────── */}
+        <AnimatedDropdown
+          title="Queries"
+          currentLabel="Ask the developer"
+          collapseOnSubmit={false}
+        >
+          <div className="mt-4 flex flex-col gap-4">
+            <p className="text-xs leading-relaxed text-neutral-500">
+              A question, a bug, an idea — this is the one place to send it.
+            </p>
+            <DeveloperRequestForm initialRequests={myRequests} accentHex={accent} />
+          </div>
+        </AnimatedDropdown>
 
-      {/* ── 5 · About & FAQs ────────────────────────────────────────── */}
-      <section aria-label="About and FAQs" className="flex flex-col gap-4">
-        <h2 className="border-b border-neutral-900 pb-2 text-base font-semibold">
-          About &amp; FAQs
-        </h2>
-        <p className="text-sm leading-relaxed text-neutral-300">
-          {ABOUT_ONEUCO}
-        </p>
-        <div className="flex flex-col gap-2">
-          {FAQS.map((faq) => (
-            <details
-              key={faq.q}
-              className="rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3"
-            >
-              <summary className="cursor-pointer text-sm font-medium">{faq.q}</summary>
-              <p className="mt-2 text-sm leading-relaxed text-neutral-400">{faq.a}</p>
-            </details>
-          ))}
-        </div>
-        <h3 className="text-sm font-medium">Community rules</h3>
-        <ul className="flex list-disc flex-col gap-1.5 rounded-3xl border border-neutral-800 bg-neutral-950 px-6 py-4 text-sm leading-relaxed text-neutral-300">
-          {RULES.map((rule) => (
-            <li key={rule}>{rule}</li>
-          ))}
-        </ul>
-      </section>
+        {/* ── 5 · About & FAQs ────────────────────────────────────── */}
+        <AnimatedDropdown
+          title="About & FAQs"
+          currentLabel="About, FAQs & rules"
+          collapseOnSubmit={false}
+        >
+          <div className="mt-4 flex flex-col gap-4">
+            <p className="text-sm leading-relaxed text-neutral-300">
+              {ABOUT_ONEUCO}
+            </p>
+            <div className="flex flex-col gap-2">
+              {FAQS.map((faq) => (
+                <details
+                  key={faq.q}
+                  className="rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3"
+                >
+                  <summary className="cursor-pointer text-sm font-medium">{faq.q}</summary>
+                  <p className="mt-2 text-sm leading-relaxed text-neutral-400">{faq.a}</p>
+                </details>
+              ))}
+            </div>
+            <h3 className="text-sm font-medium">Community rules</h3>
+            <ul className="flex list-disc flex-col gap-1.5 rounded-3xl border border-neutral-800 bg-neutral-950 px-6 py-4 text-sm leading-relaxed text-neutral-300">
+              {RULES.map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </div>
+        </AnimatedDropdown>
+      </div>
     </main>
   );
 }

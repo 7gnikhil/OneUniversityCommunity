@@ -1,26 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { NewsCategory, NewsItem, WeatherView } from "@/lib/news";
 import { getNewsAction, getWeatherAction } from "@/app/chirp/actions";
 
-// The "Live" block at the top of Chirp: the student's local weather +
-// live news with photos (Top / National / Regional / Tech / Sports /
-// Celebs). Initial Top news + weather arrive server-rendered from the
-// page; category switches and the 5-minute auto-refresh go through the
+// The Live News page body (/chirp/news): the student's local weather
+// + live news with photos (Top / National / Regional / Tech / Sports /
+// Celebs). This used to be a collapsible block on /chirp; the owner
+// moved it to its own page — the /chirp hub keeps only a slim teaser
+// card, and this component is the full experience, always open.
+// Initial Top news + weather arrive server-rendered from the page;
+// category switches and the 5-minute auto-refresh go through the
 // chirp server actions. Everything fails soft — a dead feed shows a
 // gentle empty state, a dead photo shows a category tile.
 //
-// The block is COLLAPSIBLE and starts closed on every fresh page load
-// (no persistence — the owner: "when needed only we can open and
-// close", so Chirp posts keep the space). The slim bar carries the
-// LIVE dot, a weather chip and the category dropdown; the category is
-// chosen from a native <select> (reliable on phones, accessible), and
-// picking one also opens the panel. Prefetch and the auto-refresh run
-// only once the panel has been opened / while it is open. The panel
-// body ANIMATES open/closed (grid-template-rows 0fr→1fr + opacity,
-// 300ms, chevron rotating in step); `open` remains the data switch —
-// every load fires on the open intent, in parallel with the motion.
+// Data behaviour is unchanged from the block era: categories lazy-
+// load on first view and are never fetched twice per mount, the
+// remaining categories prefetch in the background once the page is
+// open (landing here IS the open intent), and the open category +
+// weather auto-refresh every 5 minutes. The stories block ANIMATES
+// in — the same grid-template-rows 0fr→1fr + opacity technique as
+// the settings dropdowns, re-keyed per category so a switch replays
+// the reveal. The category is chosen from a native <select>
+// (reliable on phones, accessible).
 
 const CATEGORY_OPTIONS: { key: NewsCategory; label: string }[] = [
   { key: "top", label: "Top Stories" },
@@ -53,7 +60,7 @@ function timeAgo(iso: string | null, now: Date): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function Chevron({ open }: { open: boolean }) {
+function Chevron() {
   return (
     <svg
       width="16"
@@ -65,10 +72,31 @@ function Chevron({ open }: { open: boolean }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      className={`shrink-0 text-neutral-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+      className="shrink-0 text-neutral-400"
     >
       <path d="m6 9 6 6 6-6" />
     </svg>
+  );
+}
+
+// The stories block's reveal: mounts closed, flips open on the next
+// frame so the grid-rows + opacity transition actually runs. The
+// parent keys this by category, so every switch remounts and
+// replays the animation.
+function AnimatedStories({ children }: { children: ReactNode }) {
+  const [shown, setShown] = useState<boolean>(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return (
+    <div
+      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+        shown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+      }`}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
   );
 }
 
@@ -148,7 +176,6 @@ export default function NewsSection({
   regionLabel: string;
 }) {
   const [active, setActive] = useState<NewsCategory>("top");
-  const [open, setOpen] = useState<boolean>(false);
   const [byCategory, setByCategory] = useState<
     Partial<Record<NewsCategory, NewsItem[]>>
   >({ top: initialNews });
@@ -161,16 +188,6 @@ export default function NewsSection({
   // share this set so a category is never fetched twice; only the
   // 5-minute refresh forces a re-fetch.
   const fetchedRef = useRef<Set<NewsCategory>>(new Set(["top"]));
-  // Prefetch is pointless for a panel that may never be opened, so
-  // the warm-up waits for the first open.
-  const hasOpenedRef = useRef<boolean>(false);
-  // The panel body mounts on the first open and then STAYS mounted
-  // (collapsed by the grid-rows animation while closed) so closing
-  // animates instead of snapping away.
-  const [everOpened, setEverOpened] = useState<boolean>(false);
-  useEffect(() => {
-    if (open) setEverOpened(true);
-  }, [open ]);
 
   async function loadCategory(
     cat: NewsCategory,
@@ -205,32 +222,22 @@ export default function NewsSection({
     setUpdatedAt(new Date());
   }, []);
 
-  // Choosing a category from the dropdown also opens the panel: the
-  // pick IS the intent to read.
-  function chooseCategory(cat: NewsCategory): void {
-    setActive(cat);
-    setOpen(true);
-  }
-
-  // Lazy-load the selected category the first time it is shown. The
-  // panel's data only loads while open, and choosing a category opens
-  // it, so this never fires for a panel nobody is looking at.
+  // Lazy-load the selected category the first time it is shown.
   useEffect(() => {
-    if (!open) return;
     if (byCategory[active] === undefined && loading !== active) {
       void loadCategory(active);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, open]);
+  }, [active]);
 
-  // Warmth: on the FIRST open, prefetch the remaining categories one
-  // by one in the background (idle-scheduled, sequential). A cold
-  // category costs real seconds server-side, but the result rides
-  // the shared 10-minute server cache — warming it here makes later
-  // switches feel instant instead of paying the cold cost on tap.
+  // Warmth: on mount, prefetch the remaining categories one by one
+  // in the background (idle-scheduled, sequential). A cold category
+  // costs real seconds server-side, but the result rides the shared
+  // 10-minute server cache — warming it here makes later switches
+  // feel instant instead of paying the cold cost on tap. (In the
+  // block era this waited for the first panel open; the page being
+  // open at all is that intent now.)
   useEffect(() => {
-    if (!open || hasOpenedRef.current) return;
-    hasOpenedRef.current = true;
     let cancelled = false;
     const warm = async (): Promise<void> => {
       for (const option of CATEGORY_OPTIONS) {
@@ -255,13 +262,11 @@ export default function NewsSection({
       if (timer !== undefined) window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open ]);
+  }, []);
 
   // Auto-refresh the open category + weather every 5 minutes, and
-  // keep the time-ago labels honest every minute — only while the
-  // panel is open; a closed panel costs nothing.
+  // keep the time-ago labels honest every minute.
   useEffect(() => {
-    if (!open) return;
     const refresh = setInterval(() => {
       void refreshLive(active);
     }, 5 * 60_000);
@@ -271,7 +276,7 @@ export default function NewsSection({
       clearInterval(tick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, open]);
+  }, [active]);
 
   const items = byCategory[active];
   const activeLabel =
@@ -279,16 +284,11 @@ export default function NewsSection({
 
   return (
     <section className="flex flex-col gap-3" aria-label="Live news">
-      {/* The bar — all that shows while the panel is closed. The
-          title cluster and the chevron toggle it; the category
-          dropdown works from here too (and opens the panel). */}
+      {/* The header bar — the slim bar from the block era, now a
+          static page header: LIVE dot, the weather chip, the
+          updated stamp and the native category dropdown. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          className="flex min-w-0 items-center gap-2 text-left"
-        >
+        <span className="flex min-w-0 items-center gap-2">
           <span className="relative flex h-2 w-2 shrink-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
@@ -302,7 +302,7 @@ export default function NewsSection({
               {weather.conditionLabel}
             </span>
           ) : null}
-        </button>
+        </span>
         <span className="ml-auto flex items-center gap-2">
           <span className="hidden text-[11px] text-neutral-500 sm:inline">
             {updatedAt
@@ -318,7 +318,7 @@ export default function NewsSection({
               aria-label="News category"
               value={active}
               onChange={(event) =>
-                chooseCategory(event.target.value as NewsCategory)
+                setActive(event.target.value as NewsCategory)
               }
               className="appearance-none rounded-full border border-neutral-700 bg-neutral-900 py-1.5 pl-3.5 pr-8 text-xs font-medium text-neutral-100 transition hover:border-neutral-500 focus:border-neutral-400 focus:outline-none"
             >
@@ -329,95 +329,65 @@ export default function NewsSection({
               ))}
             </select>
             <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
-              <Chevron open={false} />
+              <Chevron />
             </span>
           </span>
-          <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            aria-expanded={open}
-            aria-label={open ? "Hide live news" : "Show live news"}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-neutral-700 transition hover:border-neutral-500"
-          >
-            <Chevron open={open} />
-          </button>
         </span>
       </div>
 
-      {/* The panel body, animated: grid-template-rows 0fr→1fr +
-          opacity over 300ms ease-out (the same technique as the
-          settings dropdowns), chevron rotating in step. `open` still
-          drives ALL data behaviour — the lazy-load / prefetch /
-          refresh effects above fire the moment the open intent
-          lands, in parallel with the motion; nothing waits for the
-          animation. The body mounts on first open (everOpened) and
-          stays mounted afterwards so closing animates too; while
-          closed it is aria-hidden + pointer-events-none, and its
-          -mt-3 cancels this section's flex gap so a closed panel
-          still costs zero space. The regional line lost its -mt-1:
-          inside the clipping wrapper a negative top margin would
-          shave the text. */}
-      <div
-        aria-hidden={!open}
-        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
-          open
-            ? "grid-rows-[1fr] opacity-100"
-            : "pointer-events-none -mt-3 grid-rows-[0fr] opacity-0"
-        }`}
-      >
-        <div className="min-h-0 overflow-hidden">
-          {everOpened ? (
-            <div className="flex flex-col gap-3">
-              {weather ? (
-                <div className="flex items-center justify-between gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-neutral-100">
-                      {weather.placeLabel}
-                    </p>
-                    <p className="mt-0.5 text-xs text-neutral-400">
-                      {weather.conditionLabel} · Humidity{" "}
-                      {weather.humidityPercent}% · Wind {weather.windKmh}{" "}
-                      km/h
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-3xl font-semibold text-neutral-50">
-                    {weather.temperatureC}°
-                    <span className="text-base text-neutral-400">C</span>
-                  </p>
-                </div>
-              ) : null}
-
-              {active === "regional" ? (
-                <p className="text-[11px] text-neutral-500">
-                  News for {regionLabel}
-                </p>
-              ) : null}
-
-              {items === undefined || loading === active ? (
-                <p className="py-6 text-center text-sm text-neutral-500">
-                  Loading news…
-                </p>
-              ) : items.length === 0 ? (
-                <p className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm text-neutral-500">
-                  News unavailable right now — check back in a bit.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {items.map((item) => (
-                    <NewsCard
-                      key={item.link}
-                      item={item}
-                      category={active}
-                      categoryLabel={activeLabel}
-                      now={now}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : null}
+      {/* The weather header card. */}
+      {weather ? (
+        <div className="flex items-center justify-between gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-neutral-100">
+              {weather.placeLabel}
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-400">
+              {weather.conditionLabel} · Humidity{" "}
+              {weather.humidityPercent}% · Wind {weather.windKmh}{" "}
+              km/h
+            </p>
+          </div>
+          <p className="shrink-0 text-3xl font-semibold text-neutral-50">
+            {weather.temperatureC}°
+            <span className="text-base text-neutral-400">C</span>
+          </p>
         </div>
-      </div>
+      ) : null}
+
+      {/* The stories, animated in per category (the reveal replays
+          on every switch via the key). */}
+      <AnimatedStories key={active}>
+        <div className="flex flex-col gap-3">
+          {active === "regional" ? (
+            <p className="text-[11px] text-neutral-500">
+              News for {regionLabel}
+            </p>
+          ) : null}
+
+          {items === undefined || loading === active ? (
+            <p className="py-6 text-center text-sm text-neutral-500">
+              Loading news…
+            </p>
+          ) : items.length === 0 ? (
+            <p className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm text-neutral-500">
+              News unavailable right now — check back in a bit.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {items.map((item) => (
+                <NewsCard
+                  key={item.link}
+                  item={item}
+                  category={active}
+                  categoryLabel={activeLabel}
+                  now={now}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </AnimatedStories>
     </section>
   );
 }
