@@ -1,11 +1,11 @@
 import { THEMES, getTheme } from "@/lib/themes";
 import { setMyThemeFormAction } from "@/app/profile/theme-actions";
 
-// Profile settings → Interface: the safety-net picker for the dial's
-// star gesture (long-press the dial → interface mode). Same action,
-// same profiles.theme_id — this list is for anyone who'd rather tap
-// than hold-and-swipe, and for discovering what exists. Server
-// component with plain forms, like the admin Diwali toggle.
+// Profile settings → Interface: the picker for the full-app look
+// (profiles.theme_id). Interfaces are chosen HERE, from this list —
+// the dial's long-press gesture now cycles the dial's own wheel
+// styles instead (see components/DialSkinPicker). Server component
+// with plain forms, like the admin Diwali toggle.
 
 export default function InterfacePicker({
   currentId,
@@ -61,7 +61,7 @@ export default function InterfacePicker({
   ];
 
   return (
-    <section className="mt-6 w-full rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-left">
+    <section className="metal-frame mt-6 w-full rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-left">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-white">Interface</h2>
         <span className="rounded-full bg-neutral-800 px-2.5 py-0.5 text-[11px] font-medium text-neutral-300">
@@ -71,10 +71,11 @@ export default function InterfacePicker({
         </span>
       </div>
       <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-        Your whole app&apos;s look — dial skin, background, cards, not just
-        colour. Tip: you can also <span className="text-neutral-300">hold the
-        dial</span> anywhere and swipe through these live. Your pick beats
-        the app default and follows you on every device.
+        Your whole app&apos;s look — background, cards and the
+        dial&apos;s home skin, not just colour. Pick from this list;
+        your pick beats the app default and follows you on every
+        device. (Holding the dial changes the dial&apos;s own style
+        instead — see Dial style below.)
       </p>
       <div className="mt-3 flex flex-col gap-2">
         {rows.map((row) => (

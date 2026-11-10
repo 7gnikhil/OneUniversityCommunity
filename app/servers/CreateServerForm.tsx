@@ -110,7 +110,7 @@ export default function CreateServerForm({ myAccountId }: { myAccountId: string 
       {open ? (
         <form
           onSubmit={(event) => void onCreate(event)}
-          className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4"
+          className="metal-frame flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4"
         >
           <p className="text-sm font-medium">Create a server</p>
           <input

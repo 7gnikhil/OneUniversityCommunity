@@ -3,11 +3,13 @@ import DialNav, {
   type DialBadges,
   type DialThemePicker,
 } from "@/components/DialNav";
+import DialTipCard from "@/components/DialTipCard";
 import LiveClock from "@/components/LiveClock";
 import { createClient } from "@/lib/supabase/server";
 import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
 import { isOwnerEmail } from "@/lib/server/owner";
 import { getDialData } from "@/lib/dial-badges";
+import { getProfileDialTipSeen } from "@/lib/server/theme-settings";
 
 // Dial Home — the app's home screen (signed-in, verified users land here;
 // the middleware sends everyone else to /login or the /verify shell).
@@ -28,6 +30,7 @@ export default async function DialHomePage() {
   let badges: DialBadges | undefined;
   let themePicker: DialThemePicker | undefined;
   let inboxUnread = 0;
+  let showDialTip = false;
   if (account) {
     // Shared with the desktop shell dial — one computation, both
     // placements (lib/dial-badges).
@@ -35,6 +38,12 @@ export default async function DialHomePage() {
     badges = dialData.badges;
     themePicker = dialData.themePicker;
     inboxUnread = dialData.inboxUnread;
+    // One-time dial tip (migration 0010): shown only when the flag
+    // reads back a clean FALSE — a failed read (pre-migration, or a
+    // transient error) hides it entirely rather than risk a card
+    // that could never be dismissed for good.
+    showDialTip =
+      (await getProfileDialTipSeen(supabase, account.id)) === false;
   }
   const accent = badges?.accentHex ?? "#171717";
 
@@ -63,6 +72,8 @@ export default async function DialHomePage() {
           Search
         </button>
       </form>
+
+      {showDialTip ? <DialTipCard /> : null}
 
       <div className="flex flex-1 items-center justify-center py-8">
         <DialNav badges={badges} themePicker={themePicker} />

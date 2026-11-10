@@ -14,9 +14,11 @@ import {
 } from "@/lib/preferences";
 import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
 import InterfacePicker from "@/components/InterfacePicker";
+import DialSkinPicker from "@/components/DialSkinPicker";
 import PageIntro from "@/components/PageIntro";
 import {
   getAdminTheme,
+  getProfileDialSkin,
   getProfileThemeId,
 } from "@/lib/server/theme-settings";
 
@@ -97,13 +99,24 @@ export default async function ProfilePage() {
       </div>
       <PageIntro section="profile" />
       <ProfileEditor initial={initial} />
-      {/* Interface picker — the list twin of the dial's long-press
-          interface mode; both save profiles.theme_id via the same
-          action. Reads fail soft (no pick / no default) until
-          migration 0008 lands. */}
+      {/* Interface picker — the full-app look, picked from this list
+          (profiles.theme_id). Reads fail soft (no pick / no default)
+          until migration 0008 lands. */}
       <InterfacePicker
         currentId={await getProfileThemeId(supabase, account.id)}
         defaultId={(await getAdminTheme())?.id ?? null}
+      />
+      {/* Dial style picker — the list twin of the dial's long-press
+          wheel-style mode; both save profiles.dial_skin via the same
+          action family. Reads fail soft to 'auto' until migration
+          0010 lands. */}
+      <DialSkinPicker
+        currentId={await getProfileDialSkin(supabase, account.id)}
+        appliedThemeId={
+          (await getProfileThemeId(supabase, account.id)) ??
+          (await getAdminTheme())?.id ??
+          null
+        }
       />
     </main>
   );

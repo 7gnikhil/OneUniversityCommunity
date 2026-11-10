@@ -10,6 +10,7 @@ import {
   type AppTheme,
   type ThemeSetting,
 } from "@/lib/themes";
+import { parseDialSkin, type DialSkinId } from "@/lib/dial-skins";
 
 // Server-only: the app-wide default interface lives in
 // public.app_settings key 'theme' (migration 0008), read/written via
@@ -107,6 +108,65 @@ async function readProfileThemeId(
     if (error || !data) return null;
     const value = (data as { theme_id?: unknown }).theme_id;
     return isThemeId(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The signed-in user's own dial wheel skin (profiles.dial_skin,
+ * migration 0010), read exactly like getProfileThemeId: one narrow
+ * fail-soft query, React cache()-shared across the request's callers
+ * (dial data, profile page). 'auto' — the wheel wears the applied
+ * interface's own skin — is both the stored default and the degrade
+ * target for a missing column / bad value, so the dial is safe to
+ * deploy before the migration lands.
+ */
+export const getProfileDialSkin = cache(readProfileDialSkin);
+
+async function readProfileDialSkin(
+  supabase: SupabaseClient,
+  accountId: string,
+): Promise<DialSkinId> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("dial_skin")
+      .eq("account_id", accountId)
+      .maybeSingle();
+    if (error || !data) return "auto";
+    return parseDialSkin((data as { dial_skin?: unknown }).dial_skin);
+  } catch {
+    return "auto";
+  }
+}
+
+/**
+ * Whether the one-time dial-style tip card has been shown
+ * (profiles.dial_tip_seen, migration 0010). Tri-state ON PURPOSE:
+ *   true  — seen; never show the card again.
+ *   false — column read cleanly and it has never been shown: show it.
+ *   null  — the read FAILED (column absent pre-migration, transient
+ *           error): the home page must NOT show the card, because a
+ *           card it cannot persist-dismiss would risk showing on
+ *           every visit — the exact failure the owner ruled out.
+ * Same narrow fail-soft shape as the reads above.
+ */
+export const getProfileDialTipSeen = cache(readProfileDialTipSeen);
+
+async function readProfileDialTipSeen(
+  supabase: SupabaseClient,
+  accountId: string,
+): Promise<boolean | null> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("dial_tip_seen")
+      .eq("account_id", accountId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const value = (data as { dial_tip_seen?: unknown }).dial_tip_seen;
+    return typeof value === "boolean" ? value : null;
   } catch {
     return null;
   }

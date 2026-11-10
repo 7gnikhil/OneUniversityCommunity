@@ -177,9 +177,19 @@ export default function ProfileEditor({
               src={photoUrl}
               alt="Your profile photo"
               className="h-24 w-24 rounded-full object-cover"
+              style={{
+                boxShadow:
+                  "0 0 0 2px var(--metal-ring, #8a6414), 0 0 18px color-mix(in srgb, var(--metal-accent, #d4af37) 35%, transparent)",
+              }}
             />
           ) : (
-            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-neutral-900 text-2xl font-semibold text-neutral-500">
+            <div
+              className="flex h-24 w-24 items-center justify-center rounded-full bg-neutral-900 text-2xl font-semibold text-neutral-500"
+              style={{
+                boxShadow:
+                  "0 0 0 2px var(--metal-ring, #8a6414), 0 0 18px color-mix(in srgb, var(--metal-accent, #d4af37) 35%, transparent)",
+              }}
+            >
               {(initial.name || initial.username || "?").slice(0, 1).toUpperCase()}
             </div>
           )}

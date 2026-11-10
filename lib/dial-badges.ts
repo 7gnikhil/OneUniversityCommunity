@@ -7,11 +7,17 @@ import { getTotalServerUnread } from "@/lib/servers";
 import { getInboxUnreadCount } from "@/lib/inbox";
 import { accentHex } from "@/lib/validation";
 import { getTheme, type AppTheme } from "@/lib/themes";
+import { getDialSkin } from "@/lib/dial-skins";
 import {
   getAdminTheme,
+  getProfileDialSkin,
   getProfileThemeId,
 } from "@/lib/server/theme-settings";
-import type { DialBadges, DialThemePicker } from "@/components/DialNav";
+import type {
+  DialBadges,
+  DialSkinPalette,
+  DialThemePicker,
+} from "@/components/DialNav";
 
 // Server-side dial data — the ONE computation behind both dial
 // placements: the big home dial (app/page.tsx) and the compact shell
@@ -73,13 +79,16 @@ async function computeDialData(
     savedId: null,
     appliedId: null,
     defaultId: null,
+    skinId: "auto",
   };
   let dialAccent = accent;
   let dialTheme: DialBadges["theme"];
+  let dialSkinPalette: DialSkinPalette | undefined;
   try {
-    const [savedId, adminTheme] = await Promise.all([
+    const [savedId, adminTheme, savedSkinId] = await Promise.all([
       getProfileThemeId(supabase, accountId),
       getAdminTheme(),
+      getProfileDialSkin(supabase, accountId),
     ]);
     const appliedTheme: AppTheme | null =
       getTheme(savedId) ?? adminTheme;
@@ -87,6 +96,7 @@ async function computeDialData(
       savedId,
       appliedId: appliedTheme?.id ?? null,
       defaultId: adminTheme?.id ?? null,
+      skinId: savedSkinId,
     };
     if (appliedTheme) {
       dialAccent = appliedTheme.tokens.accent;
@@ -107,6 +117,25 @@ async function computeDialData(
         border: appliedTheme.tokens.border,
       };
     }
+    // The user's own wheel skin (lib/dial-skins), independent of the
+    // interface: shipped as an override palette + furniture kind;
+    // DialNav layers it over the interface palette (or its classic
+    // constants). 'auto' → no override — today's behaviour exactly.
+    const skin = getDialSkin(savedSkinId);
+    if (skin) {
+      dialSkinPalette = {
+        kind: skin.id,
+        face: skin.tokens.face,
+        ring: skin.tokens.ring,
+        tick: skin.tokens.tick,
+        glow: skin.tokens.glow,
+        blur: skin.tokens.blur,
+        cap: skin.tokens.cap,
+        capRing: skin.tokens.capRing,
+        activeGlow: skin.tokens.activeGlow,
+        label: skin.tokens.label,
+      };
+    }
   } catch {
     // Interface data is decoration for the dial — never break it.
   }
@@ -116,6 +145,7 @@ async function computeDialData(
       counts: { "/friends": dmUnread, "/servers": serverUnread },
       accentHex: dialAccent,
       theme: dialTheme,
+      dialSkin: dialSkinPalette,
     },
     inboxUnread,
     themePicker,

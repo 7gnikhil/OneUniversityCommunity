@@ -58,6 +58,26 @@ export interface DialSkinTokens {
   label?: string;
 }
 
+/**
+ * Component metalwork — the trim the app's furniture (header chips,
+ * primary buttons, card rule lines, the intro dot) is cut from, so
+ * the pages feel made of the same metal as the dial face. Optional:
+ * interfaces that don't set it derive theirs from their accent (see
+ * themeCssVars), so every interface gets a coherent metal for free.
+ */
+export interface MetalTokens {
+  /** The metal itself (buttons' sheen core, the intro dot, rules). */
+  accent: string;
+  /** The darker rim/edge tone of the same metal. */
+  ring: string;
+  /** CSS background of the light sweep laid over metal surfaces. */
+  sheen: string;
+}
+
+/** The shared sheen sweep for interfaces that don't cut their own. */
+const DEFAULT_METAL_SHEEN =
+  "linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.20) 48%, transparent 62%)";
+
 export interface ThemeTokens {
   bgFrom: string;
   bgTo: string;
@@ -73,6 +93,8 @@ export interface ThemeTokens {
   text2: string;
   muted: string;
   dial: DialSkinTokens;
+  /** Optional component metalwork (see MetalTokens). */
+  metal?: MetalTokens;
 }
 
 export interface AppTheme {
@@ -114,6 +136,13 @@ export const THEMES: ReadonlyArray<AppTheme> = [
         activeGlow: "0 0 20px rgba(212, 175, 55, 0.55)",
         label: "#3d2c05",
       },
+      // The whole app is trimmed in the dial's polished gold.
+      metal: {
+        accent: "#d4af37",
+        ring: "#8a6414",
+        sheen:
+          "linear-gradient(115deg, transparent 26%, rgba(255, 240, 166, 0.28) 47%, rgba(255, 255, 255, 0.10) 54%, transparent 66%)",
+      },
     },
   },
   {
@@ -141,6 +170,13 @@ export const THEMES: ReadonlyArray<AppTheme> = [
         capRing: "#f59e0b",
         activeGlow: "0 0 20px rgba(245, 158, 11, 0.55)",
         label: "#fde68a",
+      },
+      // Festive brass trim, warmer than the Default's polished gold.
+      metal: {
+        accent: "#e8a91c",
+        ring: "#92580a",
+        sheen:
+          "linear-gradient(115deg, transparent 26%, rgba(255, 214, 120, 0.30) 47%, rgba(255, 255, 255, 0.10) 54%, transparent 66%)",
       },
     },
   },
@@ -535,6 +571,9 @@ export const THEME_VAR_NAMES: ReadonlyArray<string> = [
   "--text",
   "--text-2",
   "--muted",
+  "--metal-accent",
+  "--metal-ring",
+  "--metal-sheen",
 ];
 
 export function themeCssVars(theme: AppTheme): Record<string, string> {
@@ -552,6 +591,12 @@ export function themeCssVars(theme: AppTheme): Record<string, string> {
     "--text": t.text,
     "--text-2": t.text2,
     "--muted": t.muted,
+    // Component metalwork: the interface's own cut metal when it
+    // defines one (the gold interfaces), else a metal derived from
+    // its accent so the furniture still matches its dial's family.
+    "--metal-accent": t.metal?.accent ?? t.accent,
+    "--metal-ring": t.metal?.ring ?? t.border,
+    "--metal-sheen": t.metal?.sheen ?? DEFAULT_METAL_SHEEN,
   };
 }
 

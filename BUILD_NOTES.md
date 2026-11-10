@@ -1320,3 +1320,180 @@ constants) — but the per-stop hues and section colours DO show in
 every mode, since they come from globals.css :root defaults. If the
 owner expects gold for everyone immediately, the admin default
 (Admin → Appearance) needs to be set to Default Midnight.
+
+# Addendum 2026-11-10 (night) — Metal-matched components, five wheel skins, first-login dial tip
+
+Owner direction: the gold dial is good; (1) restyle the other
+components — Profile, Servers, and the rest — to match the dial's
+look; (2) make 5 different DIAL THEMES switchable by HOLDING the
+dial (pirate ship wheel, BMW-style wheel, Mercedes-style wheel,
+other car wheels); (3) after a user's first-ever login, tell them
+once that they can change the dial's interface this way.
+
+## Part A — Components cut from the dial's metal
+
+New component-metal tokens, resolved exactly like the dial tokens:
+optional `metal {accent, ring, sheen}` on ThemeTokens (lib/themes.ts),
+emitted by themeCssVars as --metal-accent / --metal-ring /
+--metal-sheen (also added to THEME_VAR_NAMES). Explicit cuts:
+midnight = polished gold (#d4af37 / #8a6414 / warm sheen), diwali =
+festive brass (#e8a91c / #92580a). The other 16 interfaces define no
+metal and DERIVE one (accent → --metal-accent, border → --metal-ring,
+shared default sheen), so every interface's furniture matches its own
+family with zero per-theme authoring. globals.css :root carries the
+same gold as the no-stamp (seasonal/classic) default.
+
+Applications (all in app/globals.css unless noted; only
+background-images, inset shadows and border colours — never a
+background-color, never body text, semantic colours untouched):
+- Section header chips (all sections): inset metal rim + the sheen
+  sweep over the existing section tint — an enamelled metal badge.
+- Primary buttons (.bg-white.text-black, app-wide): sheen sweep +
+  inset metal rim + top highlight over their existing colour.
+- Cards in sections (.bg-neutral-950/.bg-neutral-900): the existing
+  section top-tint GAINS a top layer — a 1px metal rule line fading
+  in/out across the card's top edge (background-size/position set
+  per layer; surface colour still never overridden).
+- PageIntro marker (components/PageIntro.tsx): the dot is now a
+  metal stud — radial highlight over --metal-accent, 1px --metal-ring
+  rim, soft metal halo; the stem below keeps the section hue.
+- .metal-frame utility (globals.css): sheen + inset metal rim for
+  feature panels. Applied to: components/InterfacePicker section,
+  components/DialSkinPicker section, components/DialTipCard, and the
+  Servers create-server form (app/servers/CreateServerForm.tsx).
+- Profile photo (app/profile/ProfileEditor.tsx): the DP (and its
+  initial-tile fallback) wears a 2px metal ring + soft metal glow —
+  the hub-cap echo. Profile + Servers were the owner-named pages;
+  Friends/Chirp/Swipe/Inbox get the same classes (chips, cards,
+  buttons, intro dot) by construction.
+
+## Part B — Five wheel skins (lib/dial-skins.ts, NEW)
+
+A dial SKIN is now independent of the interface. Catalogue (single
+source of truth, pure data, client+server safe): DIAL_SKINS with a
+full DialSkinTokens each + a furniture `kind`; helpers getDialSkin /
+isDialSkinId / parseDialSkin / dialSkinItems ('auto' first = the
+applied interface's own skin, incl. the polished gold).
+
+Persistence: profiles.dial_skin via supabase/migration-0010.sql
+(idempotent add-column; NOT applied here). Reads mirror theme_id:
+getProfileDialSkin (lib/server/theme-settings.ts, cache()-shared,
+fail-soft → 'auto'). Writes: setMyDialSkinAction +
+setMyDialSkinFormAction (app/profile/theme-actions.ts). lib/dial-badges
+resolves the saved skin into badges.dialSkin (DialSkinPalette: tokens
++ kind) and themePicker.skinId; DialNav layers it over the interface
+palette — surface/text tones always stay the interface's.
+
+The five skins (all artwork CSS in DialSkinDecor inside the rotating
+face layer; pointer-events-none + aria-hidden; NO logos/badges —
+generic geometry only):
+1. Pirate Helm — timber conic/radial face, brass ring + hub; decor:
+   8 timber spokes, brass rim band, 8 protruding spoke handles
+   OUTSIDE the rim (rotated layer, top:-30*s).
+2. Munich Sport (BMW-style evocation) — black leather radial face,
+   silver-ringed dark hub; decor: thick-grip shadow ring, 3 chunky
+   leather spokes (bottom + two upper). Centre is a plain dark hub
+   with a silver ring — NO quartered roundel (trademark).
+3. Stuttgart Luxe (Mercedes-style evocation) — piano-black/dark-wood
+   conic face, chrome ring; decor: wood inlay band + chrome hairline,
+   3 slim chrome spokes.
+4. Racing GT — carbon-dark face, yellow ticks; decor: dashed yellow
+   stitching ring, flat-bottom carbon chord, two chunky lower grips,
+   red centre stripe at the rim top (turns with the wheel).
+5. Vintage Classic — cream/ivory face, chrome ring, sepia ticks and
+   dark-sepia labels; decor: thin chrome inner ring, one slim
+   two-spoke chrome bar.
+
+GESTURE CHANGE (owner-specified): the ~500ms hold now cycles the
+WHEEL SKINS (6 entries: Auto + 5) instead of full interfaces. Same
+interaction skeleton as the retired interface mode — drag rotates
+with live preview (palette state only; the app is never re-stamped),
+landing ticks, tap centre confirms → optimistic local state +
+setMyDialSkinAction + router.refresh; ✕ / route change cancels;
+keyboard arrows/Enter/Escape mirror it; the 900ms nav cap, sounds,
+physics, badges and the route-follow snap are untouched. Full
+interfaces remain fully available in Profile settings
+(components/InterfacePicker, copy updated to say so) and the dial's
+hint line now reads "…Hold the dial to restyle it — pirate helm,
+car wheels and more." NEW list picker beside it:
+components/DialSkinPicker.tsx (Auto + 5 rows with mini-wheel
+previews, setMyDialSkinFormAction), wired in app/profile/page.tsx.
+
+### Skin × size rendering matrix (by construction; sizes are the
+### existing home 264/360, md 200, shell 190 — furniture scales by
+### s = size/264, hub stays 74*s, stops 76*s at radius size/2 − 44*s)
+
+| skin      | home 264/360 | docked 190 (shell) |
+|-----------|--------------|--------------------|
+| pirate    | 8 spokes + brass band inside rim; 8 handles protrude ~30*s px beyond the rim (page space, pointer-events-none); stops sit between handles at 72° spacing vs handles at 22.5° offsets — no overlap with stop circles | same, scaled (handles ~21px out); shell column is roomy on lg+, no clipping ancestor (wrap has no overflow rule) |
+| munich    | 3 thick spokes (26–30*s wide) pass UNDER stops/hub (face layer z-order); grip ring inset 3*s | spokes ~19–22px wide — proportion holds |
+| stuttgart | chrome spokes 8*s, wood band at inset 16*s, hairline 11*s — all inside the stop ring | same, scaled; hairline may read faint at 190 — decorative only |
+| racing    | stripe 11*s×30*s at rim top (under the notch marker z-10); stitch ring inset 8*s; flat chord at bottom 13*s, grips at ±140° | same, scaled |
+| vintage   | chrome bar across centre under hub; cream face + skin label token (#4a3520) keeps stop labels readable | same, scaled |
+| auto      | interface skin exactly as before (gold on midnight/diwali) | identical |
+
+Stop legibility: every skin defines `label` (cream on pirate,
+#e4e4e7 munich, #f5f0e6 stuttgart, #fef9c3 racing, sepia on
+vintage); active stops keep their per-stop hue chips from the gold
+build. Unread badges ride the accent exactly as before.
+
+## Part C — First-login-ever tip (migration 0010, dial_tip_seen)
+
+app/page.tsx reads getProfileDialTipSeen (fail-CLOSED tri-state:
+true = seen, false = show, null = read failed → do NOT show, so a
+pre-migration deploy can never produce an undismissable card). On a
+clean false it mounts components/DialTipCard — a metal-frame card
+above the dial: gold hub-stud + "New here? Hold the dial to change
+its style — pirate helm, car wheels, gold and more live there." +
+"Got it" (bg-white primary, which now carries the metal sheen).
+Got it hides instantly (local state) and fires
+markDialTipSeenAction (theme-actions.ts) — first-ever landing only,
+never per-login.
+
+## Files
+
+NEW: lib/dial-skins.ts, components/DialSkinPicker.tsx,
+components/DialTipCard.tsx, supabase/migration-0010.sql.
+EDITED: lib/themes.ts (metal tokens + vars), app/globals.css
+(metal defaults, chip/card/button treatments, .metal-frame),
+components/DialNav.tsx (wheel-style mode replaces interface mode;
+DialSkinDecor; hint copy), lib/dial-badges.ts (skin resolution),
+lib/server/theme-settings.ts (getProfileDialSkin,
+getProfileDialTipSeen), app/profile/theme-actions.ts (skin save +
+tip dismiss), app/profile/page.tsx (DialSkinPicker wiring),
+components/InterfacePicker.tsx (copy + metal-frame),
+components/PageIntro.tsx (metal dot), app/page.tsx (tip wiring),
+app/profile/ProfileEditor.tsx (DP metal ring),
+app/servers/CreateServerForm.tsx (metal-frame).
+
+PARENT NOTES: apply migration-0010 before/with this deploy (code is
+fail-soft without it: skins read 'auto', writes return false, tip
+never shows). lib/themes' applyThemeToRoot/interfaceItems helpers
+are now unused by the dial (kept as library API). Users who learned
+"hold = interfaces" get the new hint line + the tip card explains
+the gesture once; interfaces moved to Profile settings only.
+
+## Verification (local only)
+
+- Bun transpiler parse: PASS for all 14 touched TS/TSX files
+  (lib/dial-skins, lib/themes, lib/server/theme-settings,
+  lib/dial-badges, app/profile/theme-actions, components/DialNav,
+  components/DialSkinPicker, components/DialTipCard,
+  components/InterfacePicker, components/PageIntro, app/page,
+  app/profile/page, app/profile/ProfileEditor,
+  app/servers/CreateServerForm).
+- CSS var audit: --metal-accent/--metal-ring/--metal-sheen are
+  defined in globals.css :root AND emitted per-interface by
+  themeCssVars; every component reference (PageIntro, ProfileEditor,
+  DialTipCard) additionally carries an inline gold fallback. All
+  other var() references in new code are the pre-existing --stop-* /
+  --section-accent / --accent set, unchanged.
+- Type cross-checks: DialThemePicker is constructed only in
+  lib/dial-badges (now with skinId) and passed through page/shell;
+  setMyDialSkinAction/isDialSkinId names match across actions,
+  picker and DialNav.
+- NOT verified (needs parent's single post-deploy live pass): the
+  five wheels' drawn furniture at real sizes, pirate handles against
+  the home page's neighbouring elements, skin-mode preview/confirm
+  on a device, and the tip card's once-ever behaviour across two
+  logins. All fail-soft by construction.

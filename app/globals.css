@@ -217,14 +217,30 @@ main[data-section="profile"] {
 /* Cards / panels: a very subtle wash of the section hue along the
    top edge, layered over whatever surface colour the interface (or
    the classic look) already gives the element — background-color is
-   never overridden here, only a background-image is added. */
+   never overridden here, only background-images are added. The top
+   layer is the metal rule line (see COMPONENT METALWORK below): a
+   hairline of the app's metal fading in and out across the card. */
 main[data-section] .bg-neutral-950,
 main[data-section] .bg-neutral-900 {
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--section-accent) 8%, transparent) 0,
-    transparent 56px
-  );
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 6%,
+      color-mix(in srgb, var(--metal-accent) 52%, transparent) 50%,
+      transparent 94%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--section-accent) 8%, transparent) 0,
+      transparent 56px
+    );
+  background-size:
+    100% 1px,
+    100% 100%;
+  background-repeat: no-repeat;
+  background-position:
+    top left,
+    top left;
 }
 
 /* The section label in each page header becomes a tinted chip in the
@@ -241,6 +257,14 @@ main[data-section] .section-header-chip {
     color-mix(in srgb, var(--section-accent) 38%, transparent);
   background: color-mix(in srgb, var(--section-accent) 14%, transparent);
   color: var(--section-accent);
+  /* Metalwork (see COMPONENT METALWORK below): a rim of the app's
+     metal inside the chip plus the sheen sweep across it, so the
+     chip reads as a small enamelled metal badge. The sheen is a
+     background-IMAGE layered over the section tint above. */
+  background-image: var(--metal-sheen);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--metal-ring) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 main[data-section] .section-header-chip::before {
   content: "";
@@ -248,4 +272,51 @@ main[data-section] .section-header-chip::before {
   height: 6px;
   border-radius: 9999px;
   background: var(--section-accent);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   COMPONENT METALWORK — the app's furniture cut from the same metal
+   as the dial face. Three tokens: --metal-accent (the metal),
+   --metal-ring (its darker rim) and --metal-sheen (the light sweep
+   laid over it). An applied interface stamps its own cut via
+   themeCssVars (lib/themes.ts: the gold interfaces carry real gold;
+   the rest derive a metal from their accent). With NO interface
+   stamped (seasonal / classic look) the defaults below apply — the
+   house metal, polished gold, matching the Default Midnight dial.
+   Only background-images, inset shadows and border colours are
+   touched here — never a background-color, never body text, never
+   the semantic colours.
+   ════════════════════════════════════════════════════════════════════ */
+:root {
+  --metal-accent: #d4af37;
+  --metal-ring: #8a6414;
+  --metal-sheen: linear-gradient(
+    115deg,
+    transparent 26%,
+    rgba(255, 240, 166, 0.28) 47%,
+    rgba(255, 255, 255, 0.1) 54%,
+    transparent 66%
+  );
+}
+
+/* Primary buttons — the bg-white + text-black pair the whole app
+   uses (remapped to the interface accent under html[data-theme]
+   above; this rule only adds the metal finish over that colour):
+   the sheen sweep + an inset metal rim and top highlight. */
+.bg-white.text-black {
+  background-image: var(--metal-sheen);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--metal-ring) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+/* Feature panels (Profile's pickers, the first-login dial tip):
+   a metal-rimmed frame with the sheen across the surface. Applied
+   via the .metal-frame class; the element keeps its own surface
+   colour underneath. */
+.metal-frame {
+  background-image: var(--metal-sheen);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--metal-ring) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
