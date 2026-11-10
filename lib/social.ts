@@ -133,8 +133,19 @@ interface ProfileDeckMetaRow {
 }
 
 // Deck assembly: every verified other student (the view only contains
-// verified accounts), minus people I already swiped and anyone in a block
-// relation with me (either direction — blocks must hide both ways).
+// verified accounts), minus people I already swiped, anyone I am
+// already MATCHED with, and anyone in a block relation with me (either
+// direction — blocks must hide both ways).
+//
+// MATCH EXCLUSION (owner's rule, 2026-11-10 — "don't duplicate again
+// the persona already matched"): a swipe-match always leaves my swipe
+// row behind, so the swipes filter used to cover matched pairs too —
+// but an ACCEPTED FOLLOW creates the matches row with NO swipe row
+// (see lib/follows.ts), so a followed-and-accepted friend could be
+// re-dealt here as a fresh stranger card. The matches table (plus any
+// accepted follow row, for data-drift safety) is now excluded
+// explicitly, in both directions by construction (the pair row names
+// both parties).
 //
 // PREFERENCE FILTERING — honest scope note: my dating/friendship/study/
 // networking preferences mostly reference fields the public view
@@ -173,17 +184,33 @@ export async function listDeckCandidates(
 
   const candidateIds = viewRows.map((row) => row.account_id);
 
-  const [metaResult, swipesResult, blocksResult] = await Promise.all([
-    session
-      .from("profiles")
-      .select("account_id, photo_urls, intention, updated_at")
-      .in("account_id", candidateIds),
-    session.from("swipes").select("swipee_id").eq("swiper_id", myAccountId),
-    admin
-      .from("blocks")
-      .select("blocker_id, blocked_id")
-      .or(`blocker_id.eq.${myAccountId},blocked_id.eq.${myAccountId}`),
-  ]);
+  const [metaResult, swipesResult, blocksResult, matchesResult, acceptedFollowsResult] =
+    await Promise.all([
+      session
+        .from("profiles")
+        .select("account_id, photo_urls, intention, updated_at")
+        .in("account_id", candidateIds),
+      session.from("swipes").select("swipee_id").eq("swiper_id", myAccountId),
+      admin
+        .from("blocks")
+        .select("blocker_id, blocked_id")
+        .or(`blocker_id.eq.${myAccountId},blocked_id.eq.${myAccountId}`),
+      // Everyone I already have a matches row with (mutual swipe OR
+      // accepted follow) — never dealt again (see header note).
+      session
+        .from("matches")
+        .select("account_a, account_b")
+        .or(`account_a.eq.${myAccountId},account_b.eq.${myAccountId}`),
+      // Accepted follow rows in either direction whose match row is
+      // missing (shouldn't happen — accept creates the match — but an
+      // accepted pair must never be re-dealt even if data drifts).
+      // follow_requests has no client policies, hence the admin client.
+      admin
+        .from("follow_requests")
+        .select("requester_id, target_id")
+        .eq("status", "accepted")
+        .or(`requester_id.eq.${myAccountId},target_id.eq.${myAccountId}`),
+    ]);
 
   const metaById = new Map<string, ProfileDeckMetaRow>();
   ((metaResult.data ?? []) as ProfileDeckMetaRow[]).forEach((row) => {
@@ -203,9 +230,31 @@ export async function listDeckCandidates(
     },
   );
 
+  const matchedIds = new Set<string>();
+  ((matchesResult.data ?? []) as Array<{ account_a: string; account_b: string }>).forEach(
+    (row) => {
+      matchedIds.add(row.account_a === myAccountId ? row.account_b : row.account_a);
+    },
+  );
+  (
+    (acceptedFollowsResult.data ?? []) as Array<{
+      requester_id: string;
+      target_id: string;
+    }>
+  ).forEach((row) => {
+    matchedIds.add(
+      row.requester_id === myAccountId ? row.target_id : row.requester_id,
+    );
+  });
+
   const candidates: Array<{ candidate: DeckCandidate; updatedAt: string }> = [];
   viewRows.forEach((row) => {
-    if (swipedIds.has(row.account_id) || blockedIds.has(row.account_id)) return;
+    if (
+      swipedIds.has(row.account_id) ||
+      blockedIds.has(row.account_id) ||
+      matchedIds.has(row.account_id)
+    )
+      return;
     const meta = metaById.get(row.account_id);
     const theirIntention: Intention | null = meta?.intention ?? null;
     // Intention compatibility (the one public narrowing — see header note).

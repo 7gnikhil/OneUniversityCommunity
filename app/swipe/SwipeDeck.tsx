@@ -270,6 +270,17 @@ export default function SwipeDeck({
               }}
             >
               <CardFace candidate={current} />
+              {/* View Fling profile — the one tap target on the card.
+                  Its pointerdown is stopped so the tap never starts a
+                  drag (the parent only swipes past 90px); the page it
+                  opens carries the same Fling/Pass actions. */}
+              <Link
+                href={`/swipe/${current.profile.username}`}
+                onPointerDown={(event) => event.stopPropagation()}
+                className="absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full border border-white/25 bg-black/55 px-4 py-1.5 text-xs font-medium text-white backdrop-blur transition hover:bg-black/75"
+              >
+                View Fling profile
+              </Link>
               {dragX > 24 || flyDir === 1 ? (
                 <span className="absolute left-4 top-4 rounded-lg border-2 border-emerald-400 px-2 py-0.5 text-sm font-bold uppercase tracking-widest text-emerald-400">
                   Like

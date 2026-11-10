@@ -441,6 +441,21 @@ create table public.developer_requests (
 -- "Req to Developer": the request form IS the developer contact method.
 -- No email address is displayed anywhere in the app UI.
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- FLING PROFILES — the deck-only profile (migration 0012). SEPARATE from
+-- the personal profile above: a bio/likes/dislikes card that exists to
+-- be seen by signed-in students in Fling (opened from a deck card). It
+-- holds NO private data — college/grad year are never copied here.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+create table public.fling_profiles (
+  account_id uuid primary key references public.accounts (id) on delete cascade,
+  bio        text,   -- the Fling-only one-liner (separate from profiles.bio)
+  likes      text,   -- free text, the student's own words
+  dislikes   text,   -- free text, the student's own words
+  updated_at timestamptz not null default now()
+);
+
 -- ── updated_at triggers ────────────────────────────────────────────────────
 
 create trigger accounts_set_updated_at      before update on public.accounts
@@ -460,6 +475,8 @@ create trigger inbox_set_updated_at         before update on public.inbox_items
 create trigger reveal_set_updated_at        before update on public.reveal_requests
   for each row execute function public.set_updated_at();
 create trigger devreq_set_updated_at        before update on public.developer_requests
+  for each row execute function public.set_updated_at();
+create trigger fling_profiles_set_updated_at before update on public.fling_profiles
   for each row execute function public.set_updated_at();
 
 -- ── Public profile view ────────────────────────────────────────────────────
@@ -512,6 +529,7 @@ alter table public.reveal_requests   enable row level security;
 alter table public.blocks            enable row level security;
 alter table public.reports           enable row level security;
 alter table public.developer_requests enable row level security;
+alter table public.fling_profiles    enable row level security;
 
 -- accounts: read/update self; admins read all. INSERT happens via the
 -- sign-up server action (service role) so uniqueness + verification
@@ -737,6 +755,16 @@ create policy devreq_select_own_or_admin on public.developer_requests for select
   using (account_id = public.current_account_id() or public.is_admin());
 create policy devreq_admin_update on public.developer_requests for update
   using (public.is_admin()) with check (public.is_admin());
+
+-- fling_profiles: members read any row (the data exists to be seen in
+-- Fling); writes are strictly your own row. No anon access at all.
+create policy fling_profiles_select_members on public.fling_profiles for select
+  to authenticated using (true);
+create policy fling_profiles_insert_own on public.fling_profiles for insert
+  with check (account_id = public.current_account_id());
+create policy fling_profiles_update_own on public.fling_profiles for update
+  using (account_id = public.current_account_id())
+  with check (account_id = public.current_account_id());
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- STORAGE BUCKETS — create in Dashboard -> Storage (or uncomment):

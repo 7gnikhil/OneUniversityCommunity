@@ -152,3 +152,51 @@ export async function updatePrivacyAction(input: {
   }
   return { error: null };
 }
+
+// ── Fling profile save (Settings → Fling data) ─────────────────────────────
+// The deck-only profile (migration 0012, lib/fling.ts): a Fling bio and
+// free-text likes/dislikes, SEPARATE from the personal profile above.
+// Session client + upsert on the account PK: RLS lets a member insert /
+// update only their own row. Empty fields save as NULL so the stranger
+// view renders its empty states. Until migration 0012 lands the write
+// fails with a plain "not available yet" message — the reads already
+// fail soft, so nothing breaks either way.
+export interface FlingProfileFormState {
+  error: string | null;
+  saved: boolean;
+}
+
+export async function saveFlingProfileAction(
+  _prevState: FlingProfileFormState,
+  formData: FormData,
+): Promise<FlingProfileFormState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Your session has expired — please log in again.", saved: false };
+  }
+  const account = await getAccountByAuthUserId(supabase, user.id);
+  if (!account) {
+    return { error: "Finish creating your account first.", saved: false };
+  }
+
+  const bio = cleanText(String(formData.get("flingBio") ?? ""), 300);
+  const likes = cleanText(String(formData.get("flingLikes") ?? ""), 500);
+  const dislikes = cleanText(String(formData.get("flingDislikes") ?? ""), 500);
+
+  const { error } = await supabase.from("fling_profiles").upsert(
+    {
+      account_id: account.id,
+      bio: bio || null,
+      likes: likes || null,
+      dislikes: dislikes || null,
+    },
+    { onConflict: "account_id" },
+  );
+  if (error) {
+    return { error: "Fling data isn't available yet — please try again later.", saved: false };
+  }
+  return { error: null, saved: true };
+}

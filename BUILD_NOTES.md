@@ -1977,3 +1977,140 @@ size and the set is otherwise byte-identical to 45da0f1.
 ### Verification (local only — no push, no live-site checks)
 - Bun transpiler parse PASS on components/DialNav.tsx (the only
   file touched besides this note).
+
+---
+
+## Addendum 2026-11-10 (late evening): Fling profiles + clickable stranger view + settings in five sections
+
+Owner, in his words: "in fling make the stranger profile clickable to
+view his profile like his things — likes dislikes — and add a separate
+profile for fling data that is visible during fling, separate in
+settings; and in settings vary: profile personal data / fling data /
+display contains the interface options / and queries in one section /
+about and faqs in one section — and don't duplicate again the persona
+already matched."
+
+### Part A — Fling profile data (NEW table, not yet applied)
+- `supabase/migration-0012.sql` (written, NOT applied — the parent
+  applies it): `public.fling_profiles (account_id uuid PK → accounts,
+  bio text, likes text, dislikes text, updated_at timestamptz default
+  now())`, idempotent throughout (create-if-not-exists, drop-policy-
+  if-exists, drop-trigger-if-exists). RLS in the codebase idiom:
+  `fling_profiles_select_members` — SELECT `to authenticated using
+  (true)` (any signed-in member; NO anon policy at all);
+  `fling_profiles_insert_own` / `fling_profiles_update_own` scoped to
+  `account_id = public.current_account_id()`; the shared
+  `set_updated_at()` trigger. The same table + trigger + RLS-enable +
+  policies were also added to `supabase/schema.sql` (ground truth).
+- Separate BY DESIGN: the personal profile (profiles) mixes
+  deck-visible basics with friends-only detail; fling data has one
+  audience (the deck) and holds NO private fields — college/grad year
+  are never copied in.
+- `lib/fling.ts`: `getFlingProfile()` FAILS SOFT — any error (table
+  missing pre-migration included) or missing row returns the empty
+  fling profile, so every surface renders empty states and nothing
+  breaks before 0012 lands. Likes/dislikes are the student's own free
+  text; no categories were invented.
+- Save path: `saveFlingProfileAction` in app/profile/actions.ts —
+  session-client upsert on the account PK (RLS enforces own-row),
+  empty fields stored as NULL, caps bio 300 / likes 500 / dislikes 500.
+  Pre-migration the save answers "Fling data isn't available yet".
+
+### Part B — Clickable stranger view in Fling
+- Deck card (`app/swipe/SwipeDeck.tsx`): the TOP card gains a centred
+  top pill, "View Fling profile" → `/swipe/<username>`. Its
+  `onPointerDown` stopPropagation means the tap never starts the
+  card's drag (the parent handler is the only drag starter), so the
+  swipe physics are untouched; the backing preview card gets no link.
+- New page `app/swipe/[username]/page.tsx` (own page redirects to
+  /profile; unknown handles 404): shows EXACTLY what the card shows —
+  hero photo in the deck's own order (gallery first photo, else DP;
+  the gallery GRID is not shown), display name, @handle, branch +
+  intention chips, public bio — PLUS the Fling data blocks (Fling
+  bio / Likes / Dislikes, whitespace-preserving, with plain empty
+  states). NOT read: portfolio, gallery grid, college, grad year.
+- Actions: `app/swipe/[username]/FlingActions.tsx` calls the deck's
+  own `recordSwipeAction` — Fling (♥) / Pass (✕); a match renders the
+  match moment with a Message link; otherwise it returns to /swipe,
+  which re-deals without that person.
+- Developer anonymity: resolved via getDeveloperAccountId as the deck
+  does; the developer's page renders the masked identity, no Fling
+  data, no actions.
+- Already-matched pairs (follow state friends/accepted) get "You're
+  already matched" + a Message link to the existing match instead of
+  Fling/Pass — consistent with Part C: they are not deck strangers.
+  (Viewing a public Fling profile is not block-gated, matching the
+  personal profile page's posture; recordSwipeAction still refuses
+  blocked pairs server-side.)
+
+### Part C — Deck exclusion: matched people never reappear
+AUDIT of `listDeckCandidates` (lib/social.ts) as it stood: excluded
+self, the developer (caller-passed), blocked pairs, and ANYONE with a
+swipe row from me. GAP: an accepted FOLLOW creates a `matches` row
+with NO swipe row (lib/follows.ts), so a followed-and-accepted friend
+— a persona already matched — could be re-dealt as a fresh stranger
+card. FIX: the deck's parallel fetch now also reads my `matches`
+rows (session client) and my ACCEPTED follow rows in either direction
+(service role — follow_requests has no client policies), and both sets
+are excluded in the deal loop. Swipe-decided people (liked/passed)
+were and remain excluded by the swipes filter; "Start again" still
+only resurrects passes, never matches.
+
+### Part D — Settings reorganised into FIVE sections (app/profile/page.tsx)
+1. **Profile** — ProfileEditor + PrivacySettings, unchanged inside.
+2. **Fling data** — NEW `app/profile/FlingProfileEditor.tsx` (bio /
+   likes / dislikes + the line "This is your Fling profile — it's
+   what people see when they open your card in Fling").
+3. **Display** — InterfacePicker + DialSkinPicker, moved under the
+   heading; the AnimatedDropdown pickers themselves are untouched
+   (one tidy-up: the page now reads the saved theme id ONCE and
+   passes it to both pickers instead of reading it twice).
+4. **Queries** — the EXISTING `DeveloperRequestForm` component and
+   `listMyDeveloperRequestsAction` imported from app/help — the same
+   developer_requests table, status flow and admin queue; no parallel
+   system was created. (The component also still serves /help; it is
+   one shared form, not two copies.)
+5. **About & FAQs** — ABOUT line + FAQs + community rules from the
+   NEW `lib/help-content.ts`: FAQS/RULES were MOVED verbatim out of
+   app/help/page.tsx (which now imports them) so both surfaces render
+   one source and cannot drift. The strings were not rewritten — one
+   consequence kept deliberately: the FAQ answer "Use the Req to
+   Developer form below…" still says "below"; on this page the form
+   sits in Queries, one section above About & FAQs.
+   Also removed: the Help and Req to Developer link rows inside
+   ProfileEditor's bottom list (renamed "Shortcuts & account") —
+   they duplicated sections 4/5 on the same page. Its Portfolio ↑ /
+   App colour rows remain as in-section jump links to fields above.
+
+#### Settings audit — every field, its ONE home
+| Field / control | Section |
+|---|---|
+| DP (photo upload/replace) | 1 · Profile |
+| Gallery photos (add/remove) | 1 · Profile |
+| Name, Bio, Branch | 1 · Profile |
+| Portfolio links (GitHub/LinkedIn/Website/Other) | 1 · Profile |
+| Intention ("I'm here for") | 1 · Profile |
+| Preferences (per-intention: interested in, year, languages, college, age, branch, focus) | 1 · Profile |
+| App colour (accent) | 1 · Profile |
+| Privacy toggles (show online, read receipts) | 1 · Profile |
+| Log out | 1 · Profile (Shortcuts & account) |
+| Fling bio | 2 · Fling data |
+| Likes | 2 · Fling data |
+| Dislikes | 2 · Fling data |
+| Interface picker | 3 · Display |
+| Dial style (wheel skin) picker | 3 · Display |
+| Req to Developer form + own-request tracking | 4 · Queries |
+| About OneUco, FAQs, community rules | 5 · About & FAQs |
+Nothing appears in two sections; the personal profile's fields are
+NOT repeated in Fling data (separate table, separate fields).
+
+### Verification (local only — no push, no live-site checks)
+- Bun transpiler parse PASS on all 11 touched TS/TSX files:
+  lib/fling.ts, lib/social.ts, lib/help-content.ts, app/help/page.tsx,
+  app/profile/{actions,page,ProfileEditor,FlingProfileEditor},
+  app/swipe/SwipeDeck.tsx, app/swipe/[username]/{page,FlingActions}.tsx.
+- Grep confirms FAQS/RULES are defined ONLY in lib/help-content.ts and
+  consumed by both pages; no other module imported them from the help
+  page.
+- Migration 0012 is written but NOT applied, and no deployment was
+  made — the parent applies the migration, then pushes.

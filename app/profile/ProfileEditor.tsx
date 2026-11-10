@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { updateProfileAction, type ProfileFormState } from "./actions";
 import {
@@ -685,9 +684,12 @@ export default function ProfileEditor({
         accentHex={accentColorHex}
       />
 
-      {/* Settings */}
+      {/* Shortcuts & account. The Help / Req to Developer links that
+          used to sit here are GONE: FAQs and the developer-request form
+          now live as their own sections (About & FAQs, Queries) on this
+          very page — one home per thing, nothing listed twice. */}
       <section className="flex w-full flex-col gap-1 border-t border-neutral-900 pt-5">
-        <h2 className="mb-1 text-sm font-medium">Settings</h2>
+        <h2 className="mb-1 text-sm font-medium">Shortcuts &amp; account</h2>
         <a
           href="#portfolio"
           className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-neutral-200 transition hover:bg-neutral-900"
@@ -707,19 +709,6 @@ export default function ProfileEditor({
             {ACCENT_COLORS.find((row) => row.id === accent)?.label ?? "Black"}
           </span>
         </a>
-        <Link
-          href="/help"
-          className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-neutral-200 transition hover:bg-neutral-900"
-        >
-          Help <span className="text-neutral-500">FAQ &amp; community rules</span>
-        </Link>
-        <Link
-          href="/help#req-to-developer"
-          className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-neutral-200 transition hover:bg-neutral-900"
-        >
-          Req to Developer{" "}
-          <span className="text-neutral-500">Change · add-on · bug</span>
-        </Link>
         <div className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-neutral-200">
           Account
           <form action="/auth/logout" method="post">
