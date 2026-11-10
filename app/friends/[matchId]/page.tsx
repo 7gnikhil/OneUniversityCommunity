@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import {
@@ -8,7 +8,13 @@ import {
   getPublicProfilesByIds,
   listMessages,
   otherPartyId,
+  type MessageRow,
 } from "@/lib/social";
+import {
+  getPresenceMap,
+  getPrivacySettings,
+  isOnline,
+} from "@/lib/presence";
 import { accentHex } from "@/lib/validation";
 import ChatMenu from "./ChatMenu";
 import ChatView from "./ChatView";
@@ -47,6 +53,35 @@ export default async function ChatPage({
   const other = profilesById.get(otherId);
   if (!other) redirect("/friends");
   const otherProfile = other;
+
+  // Presence + tick privacy for the first paint (the poll refreshes
+  // both every 5s after that). Service role, fail-soft: without it the
+  // header simply starts with no status line. The other party's privacy
+  // switches gate everything: online status hidden → no online, no
+  // last seen; read receipts off → my messages' read_at is stripped
+  // before it ever reaches the client.
+  let shapedMessages: MessageRow[] = initialMessages;
+  let initialPeerOnline: boolean | null = null;
+  let initialPeerLastSeen: string | null = null;
+  try {
+    const admin = createAdminClient();
+    const [peerPrivacy, presenceById] = await Promise.all([
+      getPrivacySettings(admin, otherId),
+      getPresenceMap(admin, [otherId]),
+    ]);
+    if (!peerPrivacy.readReceipts) {
+      shapedMessages = initialMessages.map((row) =>
+        row.sender_id === me.id ? { ...row, read_at: null } : row,
+      );
+    }
+    if (peerPrivacy.showOnline) {
+      const presence = presenceById.get(otherId) ?? null;
+      initialPeerOnline = isOnline(presence);
+      initialPeerLastSeen = presence?.last_seen_at ?? null;
+    }
+  } catch {
+    // Presence is decoration — the chat itself must never wait on it.
+  }
 
   return (
     <main className="mx-auto flex h-dvh w-full max-w-md flex-col px-4 pb-2 pt-4">
@@ -94,7 +129,9 @@ export default async function ChatPage({
         myAccountId={me.id}
         otherName={otherProfile.name}
         accentHex={accentHex(myProfile?.accent_color)}
-        initialMessages={initialMessages}
+        initialMessages={shapedMessages}
+        initialPeerOnline={initialPeerOnline}
+        initialPeerLastSeen={initialPeerLastSeen}
       />
     </main>
   );

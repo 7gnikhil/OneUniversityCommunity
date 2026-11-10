@@ -242,11 +242,17 @@ export interface MessageRow {
   sender_id: string;
   body: string | null;
   image_url: string | null;
+  // Tick states (migration 0007): created_at alone = sent;
+  // delivered_at set = delivered to the other side's client;
+  // read_at set = viewed. See app/friends/actions.ts for how the
+  // recipient's read-receipts privacy switch shapes what a sender sees.
+  delivered_at: string | null;
   read_at: string | null;
   created_at: string;
 }
 
-const MESSAGE_COLUMNS = "id, match_id, sender_id, body, image_url, read_at, created_at";
+const MESSAGE_COLUMNS =
+  "id, match_id, sender_id, body, image_url, delivered_at, read_at, created_at";
 
 export async function listMessages(
   supabase: SupabaseClient,
@@ -260,6 +266,48 @@ export async function listMessages(
     .order("created_at", { ascending: true })
     .limit(limit);
   return (data ?? []) as MessageRow[];
+}
+
+// Incremental poll fetch: only messages at/after the newest timestamp
+// the client already has (the boundary row comes back too — the client
+// merges by id, so the overlap is harmless and a same-millisecond pair
+// can never slip through a strict > gap).
+export async function listMessagesSince(
+  supabase: SupabaseClient,
+  matchId: string,
+  sinceIso: string,
+  limit: number,
+): Promise<MessageRow[]> {
+  const { data } = await supabase
+    .from("messages")
+    .select(MESSAGE_COLUMNS)
+    .eq("match_id", matchId)
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  return (data ?? []) as MessageRow[];
+}
+
+// Delivery marking (service role — messages has no client UPDATE path
+// for delivered_at): every incoming message of mine that a client has
+// now SEEN (chat poll or Friends-list load) becomes "delivered". One
+// batched update across all my matches; only undelivered rows match the
+// filter, so repeat calls are cheap no-ops.
+export async function markIncomingDelivered(
+  admin: SupabaseClient,
+  myAccountId: string,
+): Promise<void> {
+  const matches = await getMyMatches(admin, myAccountId);
+  if (matches.length === 0) return;
+  await admin
+    .from("messages")
+    .update({ delivered_at: new Date().toISOString() })
+    .in(
+      "match_id",
+      matches.map((match) => match.id),
+    )
+    .neq("sender_id", myAccountId)
+    .is("delivered_at", null);
 }
 
 // UNREAD MECHANISM: messages.read_at exists in the schema (null = unread)

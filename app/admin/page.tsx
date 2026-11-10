@@ -7,6 +7,7 @@ import {
   type AccountRow,
 } from "@/lib/auth/account";
 import { getDiwaliMode } from "@/lib/server/diwali-settings";
+import { getOnlineCounts } from "@/lib/presence";
 import DiwaliToggle from "@/components/DiwaliToggle";
 
 // Admin landing — owner/admin only. Middleware enforces the Admin Pass
@@ -21,6 +22,7 @@ import DiwaliToggle from "@/components/DiwaliToggle";
 
 interface AdminStats {
   totalAccounts: number | null;
+  onlineNow: number | null;
   pendingAccounts: number | null;
   pendingVerifications: number | null;
   openReports: number | null;
@@ -30,6 +32,7 @@ interface AdminStats {
 
 const EMPTY_STATS: AdminStats = {
   totalAccounts: null,
+  onlineNow: null,
   pendingAccounts: null,
   pendingVerifications: null,
   openReports: null,
@@ -69,6 +72,7 @@ async function loadStats(): Promise<AdminStats> {
       openReports,
       pendingColleges,
       pendingDevRequests,
+      presenceCounts,
     ] = await Promise.all([
       countRows(admin, "accounts"),
       countRows(admin, "accounts", "status", "pending_verification"),
@@ -76,9 +80,11 @@ async function loadStats(): Promise<AdminStats> {
       countRows(admin, "reports", "status", "open"),
       countRows(admin, "college_codes", "status", "pending"),
       countRows(admin, "developer_requests", "status", "received"),
+      getOnlineCounts(admin),
     ]);
     return {
       totalAccounts,
+      onlineNow: presenceCounts.online,
       pendingAccounts,
       pendingVerifications,
       openReports,
@@ -117,9 +123,30 @@ export default async function AdminPage() {
 
   const stats = await loadStats();
   const diwaliMode = await getDiwaliMode();
-  const statCards: Array<{ label: string; value: number | null; hint: string }> = [
-    { label: "Total accounts", value: stats.totalAccounts, hint: "Everyone who has completed sign-up" },
-    { label: "Pending verification", value: stats.pendingAccounts, hint: "Accounts waiting on ID review" },
+  const statCards: Array<{
+    label: string;
+    value: number | null;
+    hint: string;
+    href?: string;
+  }> = [
+    {
+      label: "Total accounts",
+      value: stats.totalAccounts,
+      hint: "Everyone who has completed sign-up — open the accounts list",
+      href: "/admin/accounts",
+    },
+    {
+      label: "Online now",
+      value: stats.onlineNow,
+      hint: "Active in the last 3 minutes — open the accounts list",
+      href: "/admin/accounts",
+    },
+    {
+      label: "Pending verification",
+      value: stats.pendingAccounts,
+      hint: "Accounts stuck in the old ID-review state — open to fix",
+      href: "/admin/accounts?filter=pending",
+    },
     { label: "Verification queue", value: stats.pendingVerifications, hint: "ID submissions awaiting a decision" },
     { label: "Open reports", value: stats.openReports, hint: "Reports not yet actioned or dismissed" },
   ];
@@ -163,7 +190,7 @@ export default async function AdminPage() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-6 p-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-6 p-4 sm:p-6">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
@@ -210,18 +237,33 @@ export default async function AdminPage() {
       )}
 
       <section className="grid grid-cols-2 gap-3">
-        {statCards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4"
-          >
-            <p className="text-3xl font-semibold tracking-tight">
-              {formatCount(card.value)}
-            </p>
-            <p className="mt-1 text-sm font-medium">{card.label}</p>
-            <p className="mt-0.5 text-xs text-neutral-500">{card.hint}</p>
-          </div>
-        ))}
+        {statCards.map((card) => {
+          const body = (
+            <>
+              <p className="text-3xl font-semibold tracking-tight">
+                {formatCount(card.value)}
+              </p>
+              <p className="mt-1 text-sm font-medium">{card.label}</p>
+              <p className="mt-0.5 text-xs text-neutral-500">{card.hint}</p>
+            </>
+          );
+          return card.href ? (
+            <Link
+              key={card.label}
+              href={card.href}
+              className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 transition hover:border-neutral-600"
+            >
+              {body}
+            </Link>
+          ) : (
+            <div
+              key={card.label}
+              className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4"
+            >
+              {body}
+            </div>
+          );
+        })}
       </section>
 
       <DiwaliToggle mode={diwaliMode} />

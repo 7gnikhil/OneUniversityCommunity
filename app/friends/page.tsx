@@ -1,8 +1,17 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
-import { listDmEntries, type DmListEntry } from "@/lib/social";
+import {
+  listDmEntries,
+  markIncomingDelivered,
+  type DmListEntry,
+} from "@/lib/social";
+import {
+  getPresenceMap,
+  getPrivacyMap,
+  isOnline,
+} from "@/lib/presence";
 import { accentHex } from "@/lib/validation";
 
 // Friends — the dial's chat stop: my matches and their DM threads.
@@ -42,6 +51,36 @@ export default async function FriendsPage() {
   ]);
   const accent = accentHex(myProfile?.accent_color);
 
+  // Delivery + presence, both service-role and fail-soft:
+  //  - loading this list means my client now HOLDS the incoming
+  //    messages, so they count as delivered (the senders' grey ticks
+  //    turn double on their next poll);
+  //  - a green dot shows on friends who are online AND whose "show my
+  //    online status" switch is on — a hidden status shows no dot,
+  //    exactly like WhatsApp's last-seen privacy.
+  const onlineIds = new Set<string>();
+  if (entries.length > 0) {
+    try {
+      const admin = createAdminClient();
+      const otherIds = entries.map((entry) => entry.other.accountId);
+      await markIncomingDelivered(admin, account.id);
+      const [presenceById, privacyById] = await Promise.all([
+        getPresenceMap(admin, otherIds),
+        getPrivacyMap(admin, otherIds),
+      ]);
+      otherIds.forEach((id) => {
+        if (
+          privacyById.get(id)?.showOnline !== false &&
+          isOnline(presenceById.get(id))
+        ) {
+          onlineIds.add(id);
+        }
+      });
+    } catch {
+      // Dots and ticks are best-effort; the list itself already loaded.
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
       <div className="flex items-center justify-between">
@@ -73,7 +112,12 @@ export default async function FriendsPage() {
       ) : (
         <ul className="flex flex-col divide-y divide-neutral-900">
           {entries.map((entry) => (
-            <DmRow key={entry.matchId} entry={entry} accent={accent} />
+            <DmRow
+              key={entry.matchId}
+              entry={entry}
+              accent={accent}
+              online={onlineIds.has(entry.other.accountId)}
+            />
           ))}
         </ul>
       )}
@@ -91,7 +135,15 @@ function formatTime(iso: string): string {
   return date.toLocaleDateString([], { day: "numeric", month: "short" });
 }
 
-function DmRow({ entry, accent }: { entry: DmListEntry; accent: string }) {
+function DmRow({
+  entry,
+  accent,
+  online,
+}: {
+  entry: DmListEntry;
+  accent: string;
+  online: boolean;
+}) {
   const { other, lastMessage } = entry;
   // Display name is optional at sign-up — fall back to the @handle so a
   // friend who skipped it never renders as a blank row.
@@ -109,18 +161,26 @@ function DmRow({ entry, accent }: { entry: DmListEntry; accent: string }) {
         href={`/friends/${entry.matchId}`}
         className="flex items-center gap-3 py-3 transition hover:bg-neutral-950"
       >
-        {other.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={other.photoUrl}
-            alt={displayName}
-            className="h-12 w-12 shrink-0 rounded-full object-cover"
-          />
-        ) : (
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-base font-semibold text-neutral-400">
-            {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
-          </span>
-        )}
+        <span className="relative shrink-0">
+          {other.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={other.photoUrl}
+              alt={displayName}
+              className="h-12 w-12 rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-800 text-base font-semibold text-neutral-400">
+              {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
+            </span>
+          )}
+          {online ? (
+            <span
+              className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-black"
+              aria-label="Online now"
+            />
+          ) : null}
+        </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
             <span className="truncate text-sm font-medium">{displayName}</span>

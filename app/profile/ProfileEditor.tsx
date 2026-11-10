@@ -12,6 +12,7 @@ import {
 } from "@/lib/preferences";
 import { ACCENT_COLORS, LANGUAGES, accentHex, imageExtension, validateImageFile } from "@/lib/validation";
 import type { Intention } from "@/lib/types";
+import PrivacySettings from "./PrivacySettings";
 
 const INITIAL_STATE: ProfileFormState = { error: null, saved: false };
 const MAX_GALLERY = 6;
@@ -29,6 +30,8 @@ export interface ProfileEditorInitial {
   intention: Intention | null;
   preferences: AllPreferences;
   accentColor: string;
+  showOnline: boolean;
+  readReceipts: boolean;
 }
 
 // Profile + settings editor. Photos upload from the browser straight into
@@ -663,6 +666,14 @@ export default function ProfileEditor({
           <p className="text-sm text-emerald-400">Saved ✓</p>
         ) : null}
       </form>
+
+      {/* Privacy — its own component: the toggles save immediately
+          through updatePrivacyAction, outside this form's Save. */}
+      <PrivacySettings
+        initialShowOnline={initial.showOnline}
+        initialReadReceipts={initial.readReceipts}
+        accentHex={accentColorHex}
+      />
 
       {/* Settings */}
       <section className="flex w-full flex-col gap-1 border-t border-neutral-900 pt-5">

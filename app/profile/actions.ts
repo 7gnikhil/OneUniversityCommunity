@@ -119,3 +119,36 @@ export async function updateProfileAction(
   }
   return { error: null, saved: true };
 }
+
+// Chat privacy switches (migration 0007): "Show my online status" and
+// "Read receipts", saved on their own so a toggle takes effect the
+// moment it's flipped — no full-profile save needed. Session client:
+// the profiles RLS policy (owner-only update) enforces that I can only
+// ever touch my own row, and the actor comes from the session.
+export async function updatePrivacyAction(input: {
+  showOnline: boolean;
+  readReceipts: boolean;
+}): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Your session has expired — please log in again." };
+  }
+  const account = await getAccountByAuthUserId(supabase, user.id);
+  if (!account) {
+    return { error: "Finish creating your account first." };
+  }
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      show_online: input.showOnline === true,
+      read_receipts: input.readReceipts === true,
+    })
+    .eq("account_id", account.id);
+  if (error) {
+    return { error: "Couldn't save that — please try again." };
+  }
+  return { error: null };
+}

@@ -20,13 +20,28 @@ import {
   setMessageFlairAction,
   togglePinMessageAction,
 } from "../actions";
+import { clearTypingAction, setTypingAction } from "@/app/presence/actions";
 
 // Standard (Discord-style) server chat: coloured sender names, flair
 // chips, staff flair assignment. Polls every 5 seconds like the DM chat
 // (no realtime publication in the schema). Images upload to the public
 // server-images bucket under my account folder.
+//
+// The poll also carries the channel's typing names ("X is typing…"
+// above the composer) — same request, no extra traffic. My own typing
+// is reported through the presence actions, throttled like the DM
+// composer's, and members who hid their online status never appear in
+// the typing line (server-shaped in the fetch action).
 
 const POLL_MS = 5_000;
+const TYPING_THROTTLE_MS = 3_000;
+
+function formatTyping(names: string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are typing…`;
+}
 
 function mergeMessages(
   prev: ServerMessageView[],
@@ -70,19 +85,56 @@ export default function ServerChat({
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<string>("");
+  const [typingNames, setTypingNames] = useState<string[]>([]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastCountRef = useRef<number>(initialMessages.length);
+  const lastTypingSentRef = useRef<number>(0);
+  const typingActiveRef = useRef<boolean>(false);
 
   const flairById = new Map<string, FlairRow>();
   flairs.forEach((flair) => flairById.set(flair.id, flair));
 
   const refresh = useCallback(async (): Promise<void> => {
-    const fresh = await fetchServerMessagesAction(serverId, channelId);
-    if (fresh.length > 0) setMessages((prev) => mergeMessages(prev, fresh));
+    const result = await fetchServerMessagesAction(serverId, channelId);
+    if (result.messages.length > 0) {
+      setMessages((prev) => mergeMessages(prev, result.messages));
+    }
+    setTypingNames(result.typingNames);
     void markServerReadAction(serverId);
   }, [serverId, channelId]);
+
+  // Typing emit — same contract as the DM composer: throttled sets
+  // while the draft is non-empty, an explicit clear when it empties,
+  // and a 4s server-side expiry as the safety net.
+  const emitTyping = useCallback(
+    (value: string): void => {
+      if (!channelId || !canPost) return;
+      if (!value.trim()) {
+        if (typingActiveRef.current) {
+          typingActiveRef.current = false;
+          void clearTypingAction().catch(() => undefined);
+        }
+        return;
+      }
+      const now = Date.now();
+      if (now - lastTypingSentRef.current < TYPING_THROTTLE_MS) return;
+      lastTypingSentRef.current = now;
+      typingActiveRef.current = true;
+      void setTypingAction("server", channelId).catch(() => undefined);
+    },
+    [channelId, canPost],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (typingActiveRef.current) {
+        typingActiveRef.current = false;
+        void clearTypingAction().catch(() => undefined);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     void markServerReadAction(serverId);
@@ -155,6 +207,8 @@ export default function ServerChat({
       return;
     }
     setDraft("");
+    typingActiveRef.current = false;
+    void clearTypingAction().catch(() => undefined);
     pickImage(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     void refresh();
@@ -276,6 +330,12 @@ export default function ServerChat({
         </p>
       ) : null}
 
+      {formatTyping(typingNames) ? (
+        <p className="pb-1.5 text-xs text-neutral-400" role="status">
+          {formatTyping(typingNames)}
+        </p>
+      ) : null}
+
       {canPost ? (
         <form onSubmit={(event) => void onSend(event)} className="flex items-end gap-2 pb-2">
           <input
@@ -295,7 +355,10 @@ export default function ServerChat({
           </button>
           <textarea
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              emitTyping(event.target.value);
+            }}
             rows={1}
             maxLength={2000}
             placeholder="Message this server…"

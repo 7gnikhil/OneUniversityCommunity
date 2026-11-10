@@ -23,6 +23,12 @@ import {
   type ServerRow,
 } from "@/lib/servers";
 import { deliverInboxItem } from "@/lib/inbox";
+import {
+  getPresenceMap,
+  getPrivacyMap,
+  isTypingAt,
+} from "@/lib/presence";
+import { getPublicProfilesByIds } from "@/lib/social";
 
 // Server actions. All data work runs on the service-role client AFTER
 // explicit membership/role checks here — several of these operations
@@ -441,21 +447,83 @@ export async function togglePinMessageAction(
 }
 
 // ── Polling fetches (DTOs only — the Jwalam one is identity-stripped) ─────
+export interface ServerPollResult {
+  messages: ServerMessageView[];
+  // Display names of members typing in this channel right now (self
+  // excluded). Typing follows the same privacy as online status: a
+  // member who hid theirs never appears here.
+  typingNames: string[];
+}
+
 export async function fetchServerMessagesAction(
   serverId: string,
   channelId: string | null,
-): Promise<ServerMessageView[]> {
+): Promise<ServerPollResult> {
+  const empty: ServerPollResult = { messages: [], typingNames: [] };
   const ctx = await requirePollCtx();
-  if (!ctx) return [];
+  if (!ctx) return empty;
   // This is the chat polling path: the server row and my membership are
   // independent reads keyed by the same server id — fetch them together.
   const [server, membership] = await Promise.all([
     getServerById(ctx.admin, serverId),
     getMembership(ctx.admin, serverId, ctx.account.id),
   ]);
-  if (!server || server.is_main_channel) return [];
-  if (!canViewServer(server, membership, ctx.account.id, ctx.isAppAdmin)) return [];
-  return listServerMessages(ctx.admin, serverId, channelId, ctx.account.id, 100);
+  if (!server || server.is_main_channel) return empty;
+  if (!canViewServer(server, membership, ctx.account.id, ctx.isAppAdmin)) return empty;
+
+  const messagesPromise = listServerMessages(
+    ctx.admin,
+    serverId,
+    channelId,
+    ctx.account.id,
+    100,
+  );
+
+  // Typing names ride on the same poll — no extra requests. The
+  // presence scan is scoped to this server's members so a typing row
+  // planted anywhere else can't leak in.
+  const typingNamesPromise = (async (): Promise<string[]> => {
+    if (!channelId) return [];
+    try {
+      const { data } = await ctx.admin
+        .from("server_members")
+        .select("account_id")
+        .eq("server_id", serverId);
+      const memberIds = (
+        (data ?? []) as Array<{ account_id: string }>
+      ).map((row) => row.account_id);
+      if (memberIds.length === 0) return [];
+      const [presenceById, privacyById] = await Promise.all([
+        getPresenceMap(ctx.admin, memberIds),
+        getPrivacyMap(ctx.admin, memberIds),
+      ]);
+      const typingIds = memberIds.filter(
+        (id) =>
+          id !== ctx.account.id &&
+          privacyById.get(id)?.showOnline !== false &&
+          isTypingAt(presenceById.get(id), "server", channelId),
+      );
+      if (typingIds.length === 0) return [];
+      const profiles = await getPublicProfilesByIds(ctx.admin, typingIds);
+      return typingIds
+        .map((id) => profiles.get(id))
+        .filter(
+          (profile): profile is NonNullable<typeof profile> =>
+            profile !== undefined,
+        )
+        .map((profile) =>
+          profile.name.trim() ? profile.name : `@${profile.username}`,
+        );
+    } catch {
+      return [];
+    }
+  })();
+
+  const [messages, typingNames] = await Promise.all([
+    messagesPromise,
+    typingNamesPromise,
+  ]);
+  return { messages, typingNames };
 }
 
 export async function fetchJwalamMessagesAction(

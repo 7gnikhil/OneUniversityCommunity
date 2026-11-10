@@ -1,7 +1,12 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
+import {
+  DEFAULT_PRIVACY,
+  getPrivacySettings,
+  type PrivacySettings,
+} from "@/lib/presence";
 import {
   EMPTY_PORTFOLIO,
   normalisePortfolio,
@@ -44,6 +49,16 @@ export default async function ProfilePage() {
     ? normalisePortfolio(profile.portfolio)
     : EMPTY_PORTFOLIO;
 
+  // Chat privacy switches (migration 0007) — read through the service
+  // role with the WhatsApp defaults as the fail-soft fallback, so the
+  // toggles render correctly even before the migration lands.
+  let privacy: PrivacySettings = DEFAULT_PRIVACY;
+  try {
+    privacy = await getPrivacySettings(createAdminClient(), account.id);
+  } catch {
+    // Defaults stand.
+  }
+
   const initial: ProfileEditorInitial = {
     accountId: account.id,
     username: account.username,
@@ -57,6 +72,8 @@ export default async function ProfilePage() {
     intention: profile?.intention ?? null,
     preferences: normalisePreferences(profile?.preferences ?? {}),
     accentColor: profile?.accent_color ?? "black",
+    showOnline: privacy.showOnline,
+    readReceipts: privacy.readReceipts,
   };
 
   return (

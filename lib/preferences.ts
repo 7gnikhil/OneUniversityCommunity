@@ -5,6 +5,7 @@
 // re-validates everything through normalisePreferences before writing.
 
 import type { Intention } from "@/lib/types";
+import { normaliseUrl } from "@/lib/urls";
 
 export interface DatingPreferences {
   interestedIn: "any" | "girls" | "boys" | "everyone";
@@ -134,10 +135,16 @@ export function normalisePreferences(raw: unknown): AllPreferences {
 
 export function normalisePortfolio(raw: unknown): Portfolio {
   const root = asRecord(raw);
+  // Portfolio entries are links first and text second: every value runs
+  // through normaliseUrl so a pasted "github.com/me" is stored (and
+  // rendered) as "https://github.com/me" instead of a dead relative
+  // href. This function is the single choke point — the editor's save
+  // payload, the profile server action and the public profile page all
+  // normalise through here.
   return {
-    github: pickText(root.github, 300),
-    linkedin: pickText(root.linkedin, 300),
-    website: pickText(root.website, 300),
-    other: pickText(root.other, 300),
+    github: normaliseUrl(pickText(root.github, 300)),
+    linkedin: normaliseUrl(pickText(root.linkedin, 300)),
+    website: normaliseUrl(pickText(root.website, 300)),
+    other: normaliseUrl(pickText(root.other, 300)),
   };
 }

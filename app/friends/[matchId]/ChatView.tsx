@@ -14,26 +14,39 @@ import {
   fetchMessagesAction,
   markMatchReadAction,
   sendMessageAction,
+  type MessageTickState,
 } from "../actions";
+import { clearTypingAction, setTypingAction } from "@/app/presence/actions";
 
 // One DM conversation. Messages arrive from the server page; after that
-// this view POLLS the fetch action every 5 seconds — the schema does not
-// add messages to a realtime publication, so there is no realtime wiring
-// in this slice (TODO: supabase_realtime publication + channel subscribe
-// would replace the poll without changing this component's data flow).
+// this view POLLS the fetch action every 5 seconds — the schema does
+// not add messages to a realtime publication, so there is no realtime
+// wiring here.
 //
-// Read state: opening the chat (and every poll that surfaces new incoming
-// messages) calls markMatchReadAction, which sets read_at on the other
-// party's unread messages under the messages_mark_read RLS policy.
+// The poll is INCREMENTAL and carries everything the view needs, so the
+// request count never grows: only messages at/after the newest one
+// already on screen come back, plus a compact tick-state array for my
+// own messages (sent → delivered → viewed, WhatsApp-style, in yellow
+// when viewed), plus the other party's presence (online / last seen /
+// typing) — all of it already privacy-shaped server-side: if they hid
+// their online status or read receipts, those fields simply read as
+// "nothing to show" here.
 //
-// DM images upload to the PUBLIC chirp-images bucket under my own account
-// folder (owner-folder storage policy already allows it; the schema lists
-// chirp-images as a DM image bucket). Trade-off, honestly noted: a public
-// bucket means DM photos are reachable by anyone who has the URL —
-// unguessable path, but not access-controlled. A private DM bucket is a
-// post-v1 hardening step.
+// Read state: opening the chat (and every poll that surfaces new
+// incoming messages) calls markMatchReadAction, which sets read_at on
+// the other party's unread messages under the messages_mark_read RLS
+// policy. That marking is unconditional — the peer's read-receipts
+// switch only shapes what *I* get shown about my own messages.
+//
+// DM images upload to the PUBLIC chirp-images bucket under my own
+// account folder (owner-folder storage policy already allows it; the
+// schema lists chirp-images as a DM image bucket). Trade-off, honestly
+// noted: a public bucket means DM photos are reachable by anyone who
+// has the URL — unguessable path, but not access-controlled. A private
+// DM bucket is a post-v1 hardening step.
 
 const POLL_MS = 5_000;
+const TYPING_THROTTLE_MS = 3_000;
 
 function mergeMessages(prev: MessageRow[], incoming: MessageRow[]): MessageRow[] {
   const byId = new Map<string, MessageRow>();
@@ -42,18 +55,56 @@ function mergeMessages(prev: MessageRow[], incoming: MessageRow[]): MessageRow[]
   return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
+function applyTicks(prev: MessageRow[], ticks: MessageTickState[]): MessageRow[] {
+  if (ticks.length === 0) return prev;
+  const byId = new Map<string, MessageTickState>();
+  ticks.forEach((tick) => byId.set(tick.id, tick));
+  let changed = false;
+  const next = prev.map((row) => {
+    const tick = byId.get(row.id);
+    if (!tick) return row;
+    if (tick.delivered_at === row.delivered_at && tick.read_at === row.read_at) {
+      return row;
+    }
+    changed = true;
+    return { ...row, delivered_at: tick.delivered_at, read_at: tick.read_at };
+  });
+  return changed ? next : prev;
+}
+
+function formatLastSeen(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const minutes = Math.floor((Date.now() - then) / 60_000);
+  if (minutes < 1) return "last seen just now";
+  if (minutes < 60) return `last seen ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `last seen ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "last seen yesterday";
+  if (days < 7) return `last seen ${days}d ago`;
+  return `last seen ${new Date(iso).toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+  })}`;
+}
+
 export default function ChatView({
   matchId,
   myAccountId,
   otherName,
   accentHex: accent,
   initialMessages,
+  initialPeerOnline,
+  initialPeerLastSeen,
 }: {
   matchId: string;
   myAccountId: string;
   otherName: string;
   accentHex: string;
   initialMessages: MessageRow[];
+  initialPeerOnline: boolean | null;
+  initialPeerLastSeen: string | null;
 }) {
   const [messages, setMessages] = useState<MessageRow[]>(initialMessages);
   const [draft, setDraft] = useState<string>("");
@@ -61,10 +112,22 @@ export default function ChatView({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sending, setSending] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [peerOnline, setPeerOnline] = useState<boolean | null>(initialPeerOnline);
+  const [peerLastSeen, setPeerLastSeen] = useState<string | null>(initialPeerLastSeen);
+  const [peerTyping, setPeerTyping] = useState<boolean>(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastCountRef = useRef<number>(initialMessages.length);
+  // Newest message timestamp on screen — the incremental poll's cursor.
+  const newestRef = useRef<string | null>(
+    initialMessages.length > 0
+      ? initialMessages[initialMessages.length - 1].created_at
+      : null,
+  );
+  const messagesRef = useRef<MessageRow[]>(initialMessages);
+  const lastTypingSentRef = useRef<number>(0);
+  const typingActiveRef = useRef<boolean>(false);
 
   const scrollToBottom = useCallback((): void => {
     const el = scrollRef.current;
@@ -90,33 +153,81 @@ export default function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll for new messages.
+  // Keep the refs the poll loop reads in step with the rendered state.
+  useEffect(() => {
+    messagesRef.current = messages;
+    if (messages.length > 0) {
+      newestRef.current = messages[messages.length - 1].created_at;
+    }
+  }, [messages]);
+
+  // Poll: incremental messages + tick states + peer presence, one call.
   useEffect(() => {
     const timer = window.setInterval(() => {
       void (async (): Promise<void> => {
-        const fresh = await fetchMessagesAction(matchId);
-        if (fresh.length === 0) return;
-        const hasNewIncoming = fresh.some(
+        const result = await fetchMessagesAction(matchId, newestRef.current);
+        setPeerOnline(result.peerOnline);
+        setPeerLastSeen(result.peerLastSeen);
+        setPeerTyping(result.peerTyping);
+        if (result.ticks.length > 0) {
+          setMessages((prev) => applyTicks(prev, result.ticks));
+        }
+        if (result.messages.length === 0) return;
+        const known = new Set(messagesRef.current.map((row) => row.id));
+        const hasNewIncoming = result.messages.some(
           (row) =>
             row.sender_id !== myAccountId &&
             row.read_at === null &&
-            !messages.some((existing) => existing.id === row.id),
+            !known.has(row.id),
         );
-        setMessages((prev) => mergeMessages(prev, fresh));
+        setMessages((prev) => mergeMessages(prev, result.messages));
         if (hasNewIncoming) void markRead();
       })();
     }, POLL_MS);
     return () => window.clearInterval(timer);
-    // `messages` is read inside the poll only to detect new incoming rows;
-    // the interval identity stays stable across renders on purpose.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, myAccountId]);
+  }, [matchId, myAccountId, markRead]);
 
-  // Keep the view pinned to the newest message as the list grows.
+  // Keep the view pinned to the newest message as the list grows, and
+  // when the typing bubble appears.
   useEffect(() => {
     if (messages.length > lastCountRef.current) scrollToBottom();
     lastCountRef.current = messages.length;
   }, [messages, scrollToBottom]);
+
+  useEffect(() => {
+    if (peerTyping) scrollToBottom();
+  }, [peerTyping, scrollToBottom]);
+
+  // Typing emit: throttled to one server call per 3s while the draft is
+  // non-empty; cleared when the draft empties or the view unmounts. The
+  // server stamps a 4s expiry on each call, so a missed clear can never
+  // leave a stale "typing…" behind.
+  const emitTyping = useCallback(
+    (value: string): void => {
+      if (!value.trim()) {
+        if (typingActiveRef.current) {
+          typingActiveRef.current = false;
+          void clearTypingAction().catch(() => undefined);
+        }
+        return;
+      }
+      const now = Date.now();
+      if (now - lastTypingSentRef.current < TYPING_THROTTLE_MS) return;
+      lastTypingSentRef.current = now;
+      typingActiveRef.current = true;
+      void setTypingAction("dm", matchId).catch(() => undefined);
+    },
+    [matchId],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (typingActiveRef.current) {
+        typingActiveRef.current = false;
+        void clearTypingAction().catch(() => undefined);
+      }
+    };
+  }, []);
 
   function pickImage(file: File | null): void {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
@@ -170,21 +281,49 @@ export default function ChatView({
     const sent: MessageRow = result.message;
     setMessages((prev) => mergeMessages(prev, [sent]));
     setDraft("");
+    typingActiveRef.current = false;
+    void clearTypingAction().catch(() => undefined);
     pickImage(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  const statusLine =
+    peerOnline === true ? (
+      <span className="flex items-center gap-1.5 text-emerald-400">
+        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+        online
+      </span>
+    ) : peerOnline === false && peerLastSeen ? (
+      <span className="text-neutral-500">{formatLastSeen(peerLastSeen)}</span>
+    ) : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {statusLine ? (
+        <p className="flex items-center gap-1.5 pt-2 text-xs">{statusLine}</p>
+      ) : null}
+
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-2">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !peerTyping ? (
           <p className="py-10 text-center text-sm text-neutral-500">
             No messages yet — be the first to message {otherName}.
           </p>
         ) : (
-          messages.map((row) => (
-            <Bubble key={row.id} row={row} mine={row.sender_id === myAccountId} accent={accent} />
-          ))
+          <>
+            {messages.map((row) => (
+              <Bubble key={row.id} row={row} mine={row.sender_id === myAccountId} accent={accent} />
+            ))}
+            {peerTyping ? (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-1 rounded-3xl bg-neutral-900 px-4 py-3">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400 [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400 [animation-delay:300ms]" />
+                  <span className="sr-only">{otherName} is typing…</span>
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
 
@@ -227,7 +366,10 @@ export default function ChatView({
         </button>
         <textarea
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            emitTyping(event.target.value);
+          }}
           rows={1}
           maxLength={2000}
           placeholder={`Message ${otherName}…`}
@@ -276,11 +418,39 @@ function Bubble({
           />
         ) : null}
         {row.body ? <p className="whitespace-pre-wrap break-words">{row.body}</p> : null}
-        <p className={`mt-1 text-right text-[10px] ${mine ? "text-white/70" : "text-neutral-500"}`}>
-          {time}
-          {mine && row.read_at ? " · Read" : ""}
+        <p className="mt-1 flex items-center justify-end gap-1 text-right text-[10px] leading-none">
+          <span className={mine ? "text-white/70" : "text-neutral-500"}>{time}</span>
+          {mine ? <Ticks row={row} /> : null}
         </p>
       </div>
     </div>
+  );
+}
+
+// WhatsApp-style ticks for my own messages, OneUco colours:
+//   one grey tick  — sent (only created_at so far)
+//   two grey ticks — delivered (their client has the message)
+//   two YELLOW ticks — viewed (they opened the chat)
+// If the other party turned read receipts off, the server strips
+// read_at from what I receive, so the ticks simply never turn yellow.
+function Ticks({ row }: { row: MessageRow }) {
+  if (row.read_at) {
+    return (
+      <span className="font-semibold tracking-[-0.2em] text-amber-400" aria-label="Viewed">
+        ✓✓
+      </span>
+    );
+  }
+  if (row.delivered_at) {
+    return (
+      <span className="font-semibold tracking-[-0.2em] text-white/70" aria-label="Delivered">
+        ✓✓
+      </span>
+    );
+  }
+  return (
+    <span className="font-semibold text-white/70" aria-label="Sent">
+      ✓
+    </span>
   );
 }
