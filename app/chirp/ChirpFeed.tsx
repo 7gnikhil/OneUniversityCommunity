@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { ChirpCommentView, ChirpView } from "@/lib/chirp";
+import Avatar from "@/components/Avatar";
 import { imageExtension, validateImageFile } from "@/lib/validation";
 import {
   addChirpCommentAction,
@@ -266,16 +267,13 @@ function ChirpCard({
   return (
     <li className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
       <div className="flex gap-3">
-        {chirp.author?.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={chirp.author.photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-sm font-semibold text-neutral-400">
-            {chirp.author?.developer
-              ? "D"
-              : (chirp.author?.name ?? "?").charAt(0).toUpperCase()}
-          </span>
-        )}
+        <Avatar
+          name={chirp.author?.name ?? "?"}
+          photoUrl={chirp.author?.photoUrl ?? null}
+          developer={chirp.author?.developer}
+          sizeClass="h-10 w-10"
+          textClass="text-sm"
+        />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             {chirp.author?.developer ? (

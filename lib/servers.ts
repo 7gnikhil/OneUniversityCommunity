@@ -650,17 +650,33 @@ export async function getServerUnreadCounts(
     .eq("account_id", myAccountId);
   const memberships = (data ?? []) as ServerMemberRow[];
   const counts: Record<string, number> = {};
-  await Promise.all(
-    memberships.map(async (membership) => {
-      const since: string = membership.last_read_at ?? membership.joined_at;
-      const { count } = await admin
-        .from("server_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("server_id", membership.server_id)
-        .neq("author_id", myAccountId)
-        .gt("created_at", since);
-      if (count && count > 0) counts[membership.server_id] = count;
-    }),
+  if (memberships.length === 0) return counts;
+  // ONE scan instead of one count query per membership (this runs on
+  // every page via the dial badges — speed batch, 2026-11-10): fetch
+  // the candidate rows newer than the OLDEST membership marker, then
+  // apply each server's own marker in memory. The per-server
+  // comparison preserves the old semantics exactly (created_at
+  // strictly after that server's last_read_at ?? joined_at, not mine).
+  const sinceByServer = new Map<string, string>(
+    memberships.map((membership) => [
+      membership.server_id,
+      membership.last_read_at ?? membership.joined_at,
+    ]),
+  );
+  const minSince = [...sinceByServer.values()].sort()[0];
+  const { data: rows } = await admin
+    .from("server_messages")
+    .select("server_id, created_at")
+    .in("server_id", [...sinceByServer.keys()])
+    .neq("author_id", myAccountId)
+    .gt("created_at", minSince);
+  ((rows ?? []) as Array<{ server_id: string; created_at: string }>).forEach(
+    (row) => {
+      const since = sinceByServer.get(row.server_id);
+      if (since && row.created_at > since) {
+        counts[row.server_id] = (counts[row.server_id] ?? 0) + 1;
+      }
+    },
   );
   return counts;
 }

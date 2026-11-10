@@ -787,3 +787,284 @@ above are live curl measurements from this session, not estimates.
 NOT verified here: the in-browser thgim behaviour after the
 referrer change and the felt tab-switch timing (parent's post-deploy
 live check, as usual).
+
+
+---
+
+# Addendum — 2026-11-10 (later): two production defect fixes, collapsible news, free speed batch, PageSpeed fixes
+
+Code-only build (working tree; the parent applies migration-0009,
+pushes and deploys). Four workstreams in one tree: (1) the two
+live-verified production defects, (2) the owner-requested collapsible
+news dropdown, (3) the owner-approved free speed batch, (4) four
+PageSpeed fixes from the owner's Lighthouse report on /login.
+
+## Defect 1 — Top Stories rendered ZERO photos in production
+
+Symptom: Top Stories cards contained no <img> at all (image URL
+absent server-side); Sports rendered 4/6 (all ESPNcricinfo natives);
+Hindu items landed on gradient tiles in every tab. Locally the same
+code filled Hindu items via the Wikimedia fallback.
+
+Investigation (empirical, in order):
+
+a) **User-Agent test (Wikimedia Commons API, curl):** a MISSING
+   User-Agent gets **403** ("Please set a user-agent…"). `undici`, a
+   descriptive UA and curl's default UA all get 200. So Wikimedia
+   blocks only an absent UA — a plain default-UA theory does not
+   explain production, but a descriptive UA is now sent on **every**
+   upstream fetch regardless (RSS feeds, Commons, Openverse — it had
+   none, Open-Meteo weather): `UPSTREAM_UA = "OneUcoBot/1.0
+   (+https://one-university-community.vercel.app)"` in lib/news.ts.
+
+b) **Hindu feed markup census** (fresh curls of the front, sport and
+   IE India feeds): Hindu front items carry images ONLY as
+   self-closing `<media:content url="https://th-i.thgim.com/…">` —
+   51/60 items; no media:group, no content:encoded, no <img> in
+   descriptions. Hindu sport: 44/60 media:content. IE India: 200/200
+   media:content + media:thumbnail + content:encoded. The parser
+   already read media:content, but its hunt order could miss forms;
+   `extractImage` gained a final `content:encoded` <img> scan (via
+   `firstImgSrc()`) for ALL feeds, so no feed's encoded imagery is
+   left on the table.
+
+c) **Merge/dedupe check:** a title-collision scan over the saved
+   front + IE feeds found **zero** collisions — dedupe was NOT
+   dropping image-bearing duplicates. As insurance the merge now uses
+   byLink/byTitle maps and ADOPTS a dropped duplicate's image when
+   the kept item has none.
+
+**Local harness** (lib/news.ts run under both Bun and Node against
+live feeds): BEFORE the fix — Top 11/12 with images, Sports 12/12.
+AFTER — **Top 11/12** (9 Hindu thgim native + 1 IE native + 1
+Wikimedia fallback, 1 miss), **Sports 12/12** (ESPNcricinfo 6/6
+native; Hindu 6/6 = 4 native + 2 Wikimedia fallback). Identical on
+both runtimes, so parse/merge logic is correct everywhere it can be
+run locally.
+
+**Production-only root cause:** the one layer that differs in
+production is Next.js's patched fetch. The photo-fallback lookups
+(Commons/Openverse) were the only upstream calls carrying an
+externally created `AbortSignal` (per-call timeout controllers) —
+a signal takes the request off the normal Data Cache path, and in
+production those lookups yielded ZERO while un-signalled native feed
+images (ESPNcricinfo) survived, matching the live symptom exactly
+(natives partially present, fallback entirely absent). Fix: fallback
+timeouts are now enforced with `raceTimeout()` — Promise.race
+against the fetch with **no AbortSignal in the fetch init** (the
+underlying fetch still completes and populates the cache), so
+fallback requests travel the same path as the feed fetches.
+FALLBACK_ITEM_LIMIT also raised 8 → 12 so every rendered story gets
+a fallback attempt. (Caveat recorded honestly: "no <img> in the DOM"
+cannot by itself distinguish an absent imageUrl from an errored
+<img> the client swapped for the tile; the fix covers both paths —
+server yield via the race/UA/parser changes, and the client swap
+remains a graceful degradation, not a silent zero.)
+
+## Defect 2 — dial tap → 4–5s of spin before navigation
+
+Root cause (components/DialNav.tsx): `goTo` navigated ONLY from the
+spring's `onDone`. The spring (k=170, damping=16) reports done only
+when |angle error| ≤ 0.05° AND |velocity| ≤ 2°/s; its asymptotic
+tail stretches far taps (~180° of travel) to 4–5s. It was not a
+timeout chain — interface mode is unrelated.
+
+Fix: navigation now races the spring against a **NAV_DELAY_MS =
+900** cap — a `doNav` guard fires `router.push` on whichever comes
+first (spring settle or 900ms after the tap), so navigation starts
+≤900ms from tap while the visual spin continues underneath.
+`clearNavTimer()` (new navTimerRef) cancels a pending navigation on
+a newer goTo, on pointer-down (a grab supersedes the tap), on
+entering interface mode, and on unmount. Drag/flick physics, sounds,
+interface mode and the PageIntro brief behaviour are untouched.
+
+## News UI — collapsible block with a category dropdown (owner request)
+
+components/NewsSection.tsx rewritten: the LIVE NEWS section is now a
+slim header BAR, **closed by default on every fresh load (no
+persistence)** — pulsing LIVE dot, "Live News" title button, weather
+chip (`place · temp°C · condition`), "Updated HH:MM" (hidden on xs),
+a native styled `<select>` (appearance-none + CSS chevron,
+aria-label "News category", sr-only "Category" label; all six
+categories; dark-surface classes that theme-remap like the rest of
+the app) and a chevron toggle (aria-expanded, rotates when open).
+Selecting a category sets it AND opens the panel. The panel (full
+weather card, "News for {region}" note, loading/empty states, card
+grid) renders only when open — Chirp posts get the space back.
+Behaviour preserved: the same server actions and cache machinery
+drive loads; category PREFETCH now runs only after the first open
+(requestIdleCallback with a 1.5s fallback timer, sequential, shared
+fetched-set); the 5-minute auto-refresh and 60s "time ago" tick run
+only while open. The server-rendered Top Stories first paint remains
+the initial panel content. The old tab/tablist code is gone
+(CATEGORY_OPTIONS). News card <img> also gained width={800}
+height={450} (its aspect container already existed) and keeps
+referrerPolicy="no-referrer".
+
+
+## Free speed batch (Phase 2)
+
+### A. Indexes — supabase/migration-0009.sql (parent applies)
+
+Audited the hot query code against schema.sql + migrations
+0002–0008. Everything below is `create index if not exists`; each
+serves a named query. Also in 0009: `increment_chirp_views(ids
+uuid[])` (SECURITY DEFINER; EXECUTE revoked from public/anon/
+authenticated, granted to service_role only) backing §B.
+
+- `matches (account_b, updated_at desc)` — getMyMatches OR query
+  (account_a = me OR account_b = me, ordered by updated_at desc);
+  the unique (account_a, account_b) index serves only the A side.
+- `messages (match_id, sender_id, created_at desc)` — DM tick-state
+  poll (every poll of an open chat: match + sender, newest 50); the
+  existing (match_id, created_at desc) forces a sender-filter scan.
+- `server_members (account_id)` — every "my memberships" lookup
+  (servers list, unread counts, inbox invite context); the PK
+  (server_id, account_id) leads with server_id.
+- `server_messages (server_id, created_at desc)` — the three
+  server-wide message lists incl. the Jwalam poll path filter
+  server_id and order created_at desc WITHOUT a channel equality;
+  the existing (server_id, channel_id, created_at desc) cannot
+  provide that ordering across channels.
+- `channels (server_id, position)` — listChannels; the FK column
+  had no index at all.
+- `chirp_likes (account_id, chirp_id)` — listChirps' liked-by-me
+  set on every feed load; the PK (chirp_id, account_id) leads with
+  chirp_id.
+- `reveal_requests (poster_id, status, created_at desc)` — inbox
+  pending/accepted reveal lists + unread-outcome count filter
+  poster_id + status; existing indexes lead with requester_id.
+
+Deliberately NOT added: group_invites by server (low-frequency
+admin path), accounts by role (tiny table), blocks reverse lookups,
+profiles/view scans (product-level concern). Already covered and
+not repeated: messages (match_id, created_at desc), inbox_items
+(recipient_id, is_read, created_at desc), presence (last_seen_at
+desc), follow_requests both directions (0006), chirps created/
+author, group_invites invitee (0004), swipes/matches unique pairs.
+
+### B. Batched page loads
+
+- **Chirp page view counts:** up to 50 per-chirp UPDATEs (parallel,
+  but 50 round trips per feed load) → **1 RPC**
+  (`increment_chirp_views`, app/chirp/page.tsx). The old loop is
+  kept as a fallback if the RPC errors (pre-migration safety).
+- **Friends (lib/social.ts listDmEntries):** getMyMatches was
+  fetched TWICE (directly + inside getDmUnreadCounts) and profiles /
+  unread / recent-messages ran as three serial waits. Now: matches
+  once, then ONE Promise.all round — 5 queries / 3 serial stages →
+  **4 queries / 2 stages**, output identical (getDmUnreadCounts
+  delegates to a matches-taking internal; its other callers are
+  unaffected).
+- **Servers + every page's dial badges (lib/servers.ts
+  getServerUnreadCounts):** one count query PER membership
+  (1 + N queries) → **2 queries flat** (memberships + one messages
+  scan newer than the oldest marker, per-server markers applied in
+  memory with the exact same strict-> semantics).
+- **Inbox page:** audited — already batched (five list calls in one
+  Promise.all, batched id lookups, mark-read overlapped). No change.
+- **Chirp feed (listChirps):** audited — already batched (chirps +
+  profiles + likes in parallel). No change.
+- Honest remainder: the Friends PAGE also calls
+  markIncomingDelivered, which re-fetches matches on the admin
+  client (different client, so the two can't share); left as is.
+
+### C. Shared news cache
+
+`getNews`/`getWeather` in lib/news.ts are now wrapped in
+`unstable_cache` as `getNewsCached(category, region)` /
+`getWeatherCached(region)` — key parts ["oneuco-news-v1"] /
+["oneuco-weather-v1"], revalidate 600, tags ["news"] /
+["news-weather"], region keyed by an exported `regionByKey()` so
+all users in a region share ONE parse/merge/photo-fallback
+computation per 10 minutes (previously the fetch-level cache
+covered RSS bytes but the processed result was recomputed per cold
+action call). Fail-soft behaviour unchanged. Call sites updated:
+app/chirp/actions.ts and app/chirp/page.tsx. (Local-harness note:
+outside Next, the copy needs unstable_cache stubbed to identity.)
+
+### D. Image weight
+
+Photo URLs in this codebase are Supabase Storage public URLs
+(getPublicUrl at every upload site; buckets avatars / server-images
+/ chirp-images), shape `…/storage/v1/object/public/<bucket>/<path>`.
+New lib/images.ts `sizedPhotoUrl(url, width, quality=70)` rewrites
+ONLY that pattern to the render path
+(`…/storage/v1/render/image/public/…?width=W&quality=70`) and
+returns anything else untouched.
+
+New shared client component components/Avatar.tsx now renders every
+avatar surface that previously hand-rolled the same img/tile pair:
+friends rows (48px), chirp authors (40px), server-chat authors
+(36px), server-settings members/friends (36px, local Avatar deleted),
+search rows (48px), inbox requesters (40px), DM header (40px), admin
+accounts (44px). It requests the 96px rendition, sets
+loading="lazy", decoding="async" and explicit width/height, and
+climbs a failure ladder — sized URL → original stored URL → initial
+tile — so if the project's plan lacks image transformation the app
+degrades to today's full-size photos instead of broken images.
+Developer masking is preserved: the masked projection's photoUrl is
+null, so the developer still renders as the "D" tile. Swipe-deck
+card photos use sizedPhotoUrl(…, 256) with the same original-URL
+onError fallback. News cards: explicit width/height added (§above);
+the aspect container already existed. No incompatible URL patterns
+were found — every stored photo URL matches the public-object
+shape; non-matching URLs pass through sizedPhotoUrl unchanged by
+design.
+
+
+## PageSpeed fixes (Phase 3) — from the owner's /login Lighthouse report
+
+(Performance 100 / Accessibility 95 / SEO 91; only the four flagged
+items, nothing swept beyond them.)
+
+1. **robots.txt (SEO):** /robots.txt returned the app HTML because
+   NO robots file existed AND the middleware session gate redirected
+   signed-out /robots.txt to /login. Fixed the Next way: new
+   app/robots.ts (MetadataRoute) — allow /, /login, /signup;
+   disallow /admin/, /api/, /servers, /swipe, /friends, /chirp,
+   /profile, /inbox, /search, /forgot-password — plus a middleware
+   early return for /robots.txt next to the /api/warm exemption so
+   crawlers actually reach it. NO sitemap line: the app has no
+   sitemap (checked app/sitemap.ts, public/sitemap.xml — neither
+   exists), and the line is not invented.
+2. **Login contrast (Accessibility):** only the three flagged
+   elements, all in app/login/page.tsx, wording/sizes untouched:
+   the "One University Community" tagline (text-neutral-500 →
+   text-neutral-400), the "or" divider (text-neutral-600 →
+   text-neutral-400), and the footer paragraph (text-neutral-600 →
+   text-neutral-400). Contrast on black: neutral-400 (#a3a3a3) ≈
+   8.3:1 vs neutral-500 ≈ 4.43:1 (just under the 4.5:1 bar — matches
+   the flag). Input placeholders in LoginForm were NOT flagged and
+   are unchanged; no other page's neutrals were touched (their
+   contrast was never measured).
+3. **Legacy polyfills:** package.json gained a modern browserslist
+   — "last 2 Chrome versions, last 2 Safari versions, last 2
+   Firefox versions, last 2 Edge versions, not dead". Verified
+   here: the file still parses as JSON and the queries resolve with
+   the real browserslist engine to Chrome 156–157, Edge 155–156,
+   Firefox 158–159, Safari 27.1–27.2 (no legacy targets → SWC/Next
+   drop the legacy polyfill set). NOT verified here: a full
+   `next build` — the sandbox has no node_modules (noexec
+   workspace); the production build is the parent's deploy step.
+   If Vercel's build objects to the key, removing that one line is
+   the whole revert.
+4. **COOP header:** next.config.mjs now sends
+   `Cross-Origin-Opener-Policy: same-origin-allow-popups` on every
+   response (allow-popups specifically — plain same-origin would
+   sever the Google sign-in popup flow). CSP remains deliberately
+   deferred, untouched.
+
+## Verification done here
+
+Same constraint as previous builds (no node_modules; Vercel is the
+typecheck): every file touched across Phases 1–3 passed a
+TypeScript/JS syntax parse (Bun transpiler; next.config.mjs via
+node --check; package.json via JSON parse) — see the build report
+for the file list. NOT verified here (parent's post-deploy checks):
+production Top Stories photo yield after the race/UA/parser fixes,
+felt dial tap→navigation time, the news bar's collapsed default in
+the real app, transform renditions under the project's Supabase plan
+(the Avatar ladder makes a missing plan a no-op, but the parent
+should confirm renditions actually serve), /robots.txt returning
+text rules instead of HTML, and the Lighthouse re-run.

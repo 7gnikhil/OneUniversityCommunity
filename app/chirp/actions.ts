@@ -9,8 +9,8 @@ import {
   type ChirpView,
 } from "@/lib/chirp";
 import {
-  getNews,
-  getWeather,
+  getNewsCached,
+  getWeatherCached,
   NEWS_CATEGORIES,
   resolveRegionForAccount,
   type NewsCategory,
@@ -171,12 +171,12 @@ export async function getNewsAction(category: string): Promise<NewsItem[]> {
     ? (category as NewsCategory)
     : "top";
   const region = await resolveRegionForAccount(ctx.supabase, ctx.account);
-  return getNews(cat, region);
+  return getNewsCached(cat, region);
 }
 
 export async function getWeatherAction(): Promise<WeatherView | null> {
   const ctx = await requireCtx();
   if (!ctx) return null;
   const region = await resolveRegionForAccount(ctx.supabase, ctx.account);
-  return getWeather(region);
+  return getWeatherCached(region);
 }

@@ -369,6 +369,18 @@ export async function getDmUnreadCounts(
   myAccountId: string,
 ): Promise<Record<string, number>> {
   const matches = await getMyMatches(supabase, myAccountId);
+  return getDmUnreadCountsForMatches(supabase, myAccountId, matches);
+}
+
+// The same counts for a caller that already holds the match list —
+// listDmEntries used to pay for getMyMatches twice per Friends render
+// (once directly, once inside getDmUnreadCounts). Speed batch,
+// 2026-11-10.
+async function getDmUnreadCountsForMatches(
+  supabase: SupabaseClient,
+  myAccountId: string,
+  matches: MatchRow[],
+): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   if (matches.length === 0) return counts;
   const matchIds = matches.map((match) => match.id);
@@ -418,16 +430,21 @@ export async function listDmEntries(
   if (matches.length === 0) return [];
 
   const otherIds = matches.map((match) => otherPartyId(match, myAccountId));
-  const profilesById = await getPublicProfilesByIds(supabase, otherIds);
-  const unread = await getDmUnreadCounts(supabase, myAccountId);
-
   const matchIds = matches.map((match) => match.id);
-  const { data: recentData } = await supabase
-    .from("messages")
-    .select(MESSAGE_COLUMNS)
-    .in("match_id", matchIds)
-    .order("created_at", { ascending: false })
-    .limit(300);
+  // Profiles, unread counts and recent messages all depend only on the
+  // match list — run them in one parallel round instead of three
+  // serial waits (speed batch, 2026-11-10).
+  const [profilesById, unread, recentResult] = await Promise.all([
+    getPublicProfilesByIds(supabase, otherIds),
+    getDmUnreadCountsForMatches(supabase, myAccountId, matches),
+    supabase
+      .from("messages")
+      .select(MESSAGE_COLUMNS)
+      .in("match_id", matchIds)
+      .order("created_at", { ascending: false })
+      .limit(300),
+  ]);
+  const recentData = recentResult.data;
   const lastByMatch = new Map<string, MessageRow>();
   ((recentData ?? []) as MessageRow[]).forEach((row) => {
     if (!lastByMatch.has(row.match_id)) lastByMatch.set(row.match_id, row);

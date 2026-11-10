@@ -482,6 +482,16 @@ export default function DialNav({
   const [dragging, setDragging] = useState<boolean>(false);
   const [selIdx, setSelIdx] = useState<number>(() => routeIdx ?? 0);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Pending tap navigation (see goTo): the push races the spring and
+  // fires at this cap at the latest, so a tap never waits out the
+  // spring's full settle tail.
+  const navTimerRef = useRef<number | null>(null);
+  const clearNavTimer = (): void => {
+    if (navTimerRef.current !== null) {
+      window.clearTimeout(navTimerRef.current);
+      navTimerRef.current = null;
+    }
+  };
   const drag = useRef<{
     pointerAngle: number;
     startAngle: number;
@@ -544,7 +554,13 @@ export default function DialNav({
     animRef.current = requestAnimationFrame(step);
   };
 
-  useEffect(() => () => cancelAnimationFrame(animRef.current), []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(animRef.current);
+      clearNavTimer();
+    },
+    [],
+  );
 
   // Follow the route (shell dial): when navigation lands on a section,
   // rest that section's stop at the notch. A plain snap, no spring —
@@ -567,7 +583,17 @@ export default function DialNav({
   }, [routeIdx]);
 
   // Tap a stop (or arrow-key to it): spin it to the notch by the shortest
-  // rotation, then navigate once the wheel has clunked into place.
+  // rotation, then navigate once the wheel has clunked into place —
+  // OR after NAV_DELAY_MS, whichever comes first. The push used to
+  // wait for the spring's FULL settle (|angle error| ≤ 0.05° and
+  // |velocity| ≤ 2°/s under k=170 / damping=16), whose asymptotic tail
+  // stretched a far tap (up to ~180° of travel) into 4–5 seconds of
+  // spin before the page changed. Decoupled now: the spring keeps its
+  // exact feel for near stops (they settle, clunk, and navigate as
+  // before), while the timer guarantees navigation starts within
+  // 900ms of the tap for far ones. A newer tap, a grab of the dial,
+  // entering interface mode or unmounting cancels a pending push.
+  const NAV_DELAY_MS = 900;
   const goTo = (i: number): void => {
     const stop = STOPS[i];
     if (!stop) return;
@@ -575,9 +601,16 @@ export default function DialNav({
     const base = targetFor(i);
     const turns = Math.round((cur - base) / 360);
     setSelIdx(i);
-    springTo(cur, base + turns * 360, 0, () => {
+    clearNavTimer();
+    let navigated = false;
+    const doNav = (): void => {
+      if (navigated) return;
+      navigated = true;
+      clearNavTimer();
       router.push(stop.href);
-    });
+    };
+    navTimerRef.current = window.setTimeout(doNav, NAV_DELAY_MS);
+    springTo(cur, base + turns * 360, 0, doNav);
   };
 
   // ── Interface mode ────────────────────────────────────────────────
@@ -610,6 +643,7 @@ export default function DialNav({
 
   const enterIfaceMode = (): void => {
     if (!themePicker || ifaceModeRef.current) return;
+    clearNavTimer();
     rootSnapshotRef.current = snapshotRootTheme();
     pickSavedRef.current = false;
     enteredPathRef.current = activePath;
@@ -707,6 +741,8 @@ export default function DialNav({
 
   const onPointerDown = (e: ReactPointerEvent): void => {
     cancelAnimationFrame(animRef.current);
+    // Grabbing the dial to explore supersedes a pending tap push.
+    clearNavTimer();
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     drag.current = {
       pointerAngle: pointerAngle(e),

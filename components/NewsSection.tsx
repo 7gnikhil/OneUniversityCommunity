@@ -7,11 +7,19 @@ import { getNewsAction, getWeatherAction } from "@/app/chirp/actions";
 // The "Live" block at the top of Chirp: the student's local weather +
 // live news with photos (Top / National / Regional / Tech / Sports /
 // Celebs). Initial Top news + weather arrive server-rendered from the
-// page; tab switches and the 5-minute auto-refresh go through the
+// page; category switches and the 5-minute auto-refresh go through the
 // chirp server actions. Everything fails soft — a dead feed shows a
 // gentle empty state, a dead photo shows a category tile.
+//
+// The block is COLLAPSIBLE and starts closed on every fresh page load
+// (no persistence — the owner: "when needed only we can open and
+// close", so Chirp posts keep the space). The slim bar carries the
+// LIVE dot, a weather chip and the category dropdown; the category is
+// chosen from a native <select> (reliable on phones, accessible), and
+// picking one also opens the panel. Prefetch and the auto-refresh run
+// only once the panel has been opened / while it is open.
 
-const TABS: { key: NewsCategory; label: string }[] = [
+const CATEGORY_OPTIONS: { key: NewsCategory; label: string }[] = [
   { key: "top", label: "Top Stories" },
   { key: "national", label: "National" },
   { key: "regional", label: "Regional" },
@@ -40,6 +48,25 @@ function timeAgo(iso: string | null, now: Date): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={`shrink-0 text-neutral-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
 }
 
 function NewsCard({
@@ -72,6 +99,8 @@ function NewsCard({
         <img
           src={item.imageUrl ?? undefined}
           alt=""
+          width={800}
+          height={450}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
@@ -116,6 +145,7 @@ export default function NewsSection({
   regionLabel: string;
 }) {
   const [active, setActive] = useState<NewsCategory>("top");
+  const [open, setOpen] = useState<boolean>(false);
   const [byCategory, setByCategory] = useState<
     Partial<Record<NewsCategory, NewsItem[]>>
   >({ top: initialNews });
@@ -124,10 +154,13 @@ export default function NewsSection({
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
   // Categories already fetched in this mount (Top arrives with the
-  // page). The background prefetcher and the tab lazy-loader share
-  // this set so a category is never fetched twice; only the 5-minute
-  // refresh forces a re-fetch.
+  // page). The background prefetcher and the category lazy-loader
+  // share this set so a category is never fetched twice; only the
+  // 5-minute refresh forces a re-fetch.
   const fetchedRef = useRef<Set<NewsCategory>>(new Set(["top"]));
+  // Prefetch is pointless for a panel that may never be opened, so
+  // the warm-up waits for the first open.
+  const hasOpenedRef = useRef<boolean>(false);
 
   async function loadCategory(
     cat: NewsCategory,
@@ -162,28 +195,38 @@ export default function NewsSection({
     setUpdatedAt(new Date());
   }, []);
 
-  // Lazy-load a tab the first time it is opened.
+  // Choosing a category from the dropdown also opens the panel: the
+  // pick IS the intent to read.
+  function chooseCategory(cat: NewsCategory): void {
+    setActive(cat);
+    setOpen(true);
+  }
+
+  // Lazy-load the selected category the first time it is shown. The
+  // panel only renders while open, and choosing a category opens it,
+  // so this never fires for a panel nobody is looking at.
   useEffect(() => {
+    if (!open) return;
     if (byCategory[active] === undefined && loading !== active) {
       void loadCategory(active);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, open]);
 
-  // Warmth: shortly after first paint, prefetch the remaining
-  // categories one by one in the background. A cold category costs
-  // real seconds server-side (feed fetch + photo fallback), but the
-  // result rides the 10-minute server cache — so warming it here
-  // makes later tab switches feel instant instead of paying the cold
-  // cost on tap. Sequential + idle-scheduled to stay out of the way
-  // of the first paint and the chirp feed below.
+  // Warmth: on the FIRST open, prefetch the remaining categories one
+  // by one in the background (idle-scheduled, sequential). A cold
+  // category costs real seconds server-side, but the result rides
+  // the shared 10-minute server cache — warming it here makes later
+  // switches feel instant instead of paying the cold cost on tap.
   useEffect(() => {
+    if (!open || hasOpenedRef.current) return;
+    hasOpenedRef.current = true;
     let cancelled = false;
     const warm = async (): Promise<void> => {
-      for (const tab of TABS) {
+      for (const option of CATEGORY_OPTIONS) {
         if (cancelled) return;
-        if (tab.key === "top") continue;
-        await loadCategory(tab.key);
+        if (option.key === "top") continue;
+        await loadCategory(option.key);
       }
     };
     const start = (): void => {
@@ -202,11 +245,13 @@ export default function NewsSection({
       if (timer !== undefined) window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [open ]);
 
-  // Auto-refresh the open tab + weather every 5 minutes; keep the
-  // time-ago labels honest every minute.
+  // Auto-refresh the open category + weather every 5 minutes, and
+  // keep the time-ago labels honest every minute — only while the
+  // panel is open; a closed panel costs nothing.
   useEffect(() => {
+    if (!open) return;
     const refresh = setInterval(() => {
       void refreshLive(active);
     }, 5 * 60_000);
@@ -216,92 +261,128 @@ export default function NewsSection({
       clearInterval(tick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, open]);
 
   const items = byCategory[active];
-  const activeLabel = TABS.find((tab) => tab.key === active)?.label ?? "";
+  const activeLabel =
+    CATEGORY_OPTIONS.find((option) => option.key === active)?.label ?? "";
 
   return (
     <section className="flex flex-col gap-3" aria-label="Live news">
-      <div className="flex items-center gap-2">
-        <span className="relative flex h-2 w-2 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-        </span>
-        <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-neutral-100">
-          Live News
-        </h2>
-        <span className="ml-auto text-[11px] text-neutral-500">
-          {updatedAt
-            ? `Updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-            : "Live"}
-        </span>
-      </div>
-
-      {weather ? (
-        <div className="flex items-center justify-between gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-neutral-100">
-              {weather.placeLabel}
-            </p>
-            <p className="mt-0.5 text-xs text-neutral-400">
-              {weather.conditionLabel} · Humidity {weather.humidityPercent}% ·
-              Wind {weather.windKmh} km/h
-            </p>
-          </div>
-          <p className="shrink-0 text-3xl font-semibold text-neutral-50">
-            {weather.temperatureC}°
-            <span className="text-base text-neutral-400">C</span>
-          </p>
-        </div>
-      ) : null}
-
-      <div className="flex gap-2 overflow-x-auto pb-1" role="tablist">
-        {TABS.map((tab) => (
+      {/* The bar — all that shows while the panel is closed. The
+          title cluster and the chevron toggle it; the category
+          dropdown works from here too (and opens the panel). */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          className="flex min-w-0 items-center gap-2 text-left"
+        >
+          <span className="relative flex h-2 w-2 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+          </span>
+          <span className="text-sm font-semibold uppercase tracking-[0.2em] text-neutral-100">
+            Live News
+          </span>
+          {weather ? (
+            <span className="truncate text-xs text-neutral-400">
+              {weather.placeLabel} · {weather.temperatureC}°C ·{" "}
+              {weather.conditionLabel}
+            </span>
+          ) : null}
+        </button>
+        <span className="ml-auto flex items-center gap-2">
+          <span className="hidden text-[11px] text-neutral-500 sm:inline">
+            {updatedAt
+              ? `Updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+              : "Live"}
+          </span>
+          <label className="sr-only" htmlFor="news-category-select">
+            Category
+          </label>
+          <span className="relative inline-flex">
+            <select
+              id="news-category-select"
+              aria-label="News category"
+              value={active}
+              onChange={(event) =>
+                chooseCategory(event.target.value as NewsCategory)
+              }
+              className="appearance-none rounded-full border border-neutral-700 bg-neutral-900 py-1.5 pl-3.5 pr-8 text-xs font-medium text-neutral-100 transition hover:border-neutral-500 focus:border-neutral-400 focus:outline-none"
+            >
+              {CATEGORY_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
+              <Chevron open={false} />
+            </span>
+          </span>
           <button
-            key={tab.key}
             type="button"
-            role="tab"
-            aria-selected={active === tab.key}
-            onClick={() => setActive(tab.key)}
-            className={
-              active === tab.key
-                ? "shrink-0 rounded-full border border-white bg-white px-3.5 py-1.5 text-xs font-medium text-black"
-                : "shrink-0 rounded-full border border-neutral-700 px-3.5 py-1.5 text-xs text-neutral-300 transition hover:bg-neutral-900"
-            }
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            aria-label={open ? "Hide live news" : "Show live news"}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-neutral-700 transition hover:border-neutral-500"
           >
-            {tab.label}
+            <Chevron open={open} />
           </button>
-        ))}
+        </span>
       </div>
 
-      {active === "regional" ? (
-        <p className="-mt-1 text-[11px] text-neutral-500">
-          News for {regionLabel}
-        </p>
-      ) : null}
+      {open ? (
+        <>
+          {weather ? (
+            <div className="flex items-center justify-between gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-neutral-100">
+                  {weather.placeLabel}
+                </p>
+                <p className="mt-0.5 text-xs text-neutral-400">
+                  {weather.conditionLabel} · Humidity{" "}
+                  {weather.humidityPercent}% · Wind {weather.windKmh} km/h
+                </p>
+              </div>
+              <p className="shrink-0 text-3xl font-semibold text-neutral-50">
+                {weather.temperatureC}°
+                <span className="text-base text-neutral-400">C</span>
+              </p>
+            </div>
+          ) : null}
 
-      {items === undefined || loading === active ? (
-        <p className="py-6 text-center text-sm text-neutral-500">
-          Loading news…
-        </p>
-      ) : items.length === 0 ? (
-        <p className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm text-neutral-500">
-          News unavailable right now — check back in a bit.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {items.map((item) => (
-            <NewsCard
-              key={item.link}
-              item={item}
-              category={active}
-              categoryLabel={activeLabel}
-              now={now}
-            />
-          ))}
-        </div>
-      )}
+          {active === "regional" ? (
+            <p className="-mt-1 text-[11px] text-neutral-500">
+              News for {regionLabel}
+            </p>
+          ) : null}
+
+          {items === undefined || loading === active ? (
+            <p className="py-6 text-center text-sm text-neutral-500">
+              Loading news…
+            </p>
+          ) : items.length === 0 ? (
+            <p className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm text-neutral-500">
+              News unavailable right now — check back in a bit.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {items.map((item) => (
+                <NewsCard
+                  key={item.link}
+                  item={item}
+                  category={active}
+                  categoryLabel={activeLabel}
+                  now={now}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
     </section>
   );
 }

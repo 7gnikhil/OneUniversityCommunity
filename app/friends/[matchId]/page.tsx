@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
+import Avatar from "@/components/Avatar";
 import {
   getMatchById,
   getPublicProfilesByIds,
@@ -96,18 +97,13 @@ export default async function ChatPage({
           href={`/profile/${otherProfile.username}`}
           className="flex min-w-0 flex-1 items-center gap-3"
         >
-          {otherProfile.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={otherProfile.photoUrl}
-              alt={otherProfile.name}
-              className="h-10 w-10 shrink-0 rounded-full object-cover"
-            />
-          ) : (
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-sm font-semibold text-neutral-400">
-              {otherProfile.name.charAt(0).toUpperCase() || "?"}
-            </span>
-          )}
+          <Avatar
+            name={otherProfile.name}
+            photoUrl={otherProfile.photoUrl}
+            alt={otherProfile.name}
+            sizeClass="h-10 w-10"
+            textClass="text-sm"
+          />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">
               {otherProfile.name}

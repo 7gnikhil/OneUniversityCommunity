@@ -14,6 +14,7 @@ import {
 } from "@/lib/presence";
 import { accentHex } from "@/lib/validation";
 import PageIntro from "@/components/PageIntro";
+import Avatar from "@/components/Avatar";
 
 // Friends — the dial's chat stop: my matches and their DM threads.
 //
@@ -165,18 +166,14 @@ function DmRow({
         className="flex items-center gap-3 py-3 transition hover:bg-neutral-950"
       >
         <span className="relative shrink-0">
-          {other.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={other.photoUrl}
-              alt={displayName}
-              className="h-12 w-12 rounded-full object-cover"
-            />
-          ) : (
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-800 text-base font-semibold text-neutral-400">
-              {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
-            </span>
-          )}
+          <Avatar
+            name={displayName}
+            photoUrl={other.photoUrl}
+            alt={displayName}
+            letter={displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
+            sizeClass="h-12 w-12"
+            textClass="text-base"
+          />
           {online ? (
             <span
               className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-black"

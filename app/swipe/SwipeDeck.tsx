@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { DeckCandidate } from "@/lib/social";
+import { sizedPhotoUrl } from "@/lib/images";
 import { recordSwipeAction, resetPassesAction } from "./actions";
 
 // The swipe deck (client). Cards arrive pre-filtered from the server
@@ -355,10 +356,16 @@ function CardFace({ candidate }: { candidate: DeckCandidate }) {
       {photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={photo}
+          src={sizedPhotoUrl(photo, 256) ?? photo}
           alt={displayName}
           className="h-full w-full object-cover"
           draggable={false}
+          loading="lazy"
+          onError={(event) => {
+            // Rendition unavailable → fall back to the stored original.
+            const img = event.currentTarget;
+            if (img.src !== photo) img.src = photo;
+          }}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-neutral-800 text-6xl font-semibold text-neutral-500">

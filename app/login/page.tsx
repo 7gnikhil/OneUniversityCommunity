@@ -25,7 +25,7 @@ export default async function LoginPage({
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-6 p-6">
       <div className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight">OneUco</h1>
-        <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+        <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-neutral-400">
           One University Community
         </p>
       </div>
@@ -41,7 +41,7 @@ export default async function LoginPage({
 
       <LoginForm next={next} />
 
-      <div className="flex w-full items-center gap-3 text-[11px] uppercase tracking-widest text-neutral-600">
+      <div className="flex w-full items-center gap-3 text-[11px] uppercase tracking-widest text-neutral-400">
         <span className="h-px flex-1 bg-neutral-800" />
         or
         <span className="h-px flex-1 bg-neutral-800" />
@@ -65,7 +65,7 @@ export default async function LoginPage({
         </Link>
       </p>
 
-      <p className="text-center text-xs leading-relaxed text-neutral-600">
+      <p className="text-center text-xs leading-relaxed text-neutral-400">
         OneUco is for students everywhere. New here? Create an account
         with any personal email or continue with Google — no college email
         is needed, and you&apos;ll just add a few study details before you

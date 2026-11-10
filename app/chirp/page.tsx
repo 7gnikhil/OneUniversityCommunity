@@ -4,8 +4,8 @@ import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { listChirps } from "@/lib/chirp";
 import {
-  getNews,
-  getWeather,
+  getNewsCached,
+  getWeatherCached,
   resolveRegionForAccount,
 } from "@/lib/news";
 import { accentHex } from "@/lib/validation";
@@ -63,24 +63,34 @@ export default async function ChirpPage() {
   // stories and the local weather — all fail-soft inside lib/news.
   const region = await resolveRegionForAccount(supabase, me);
   const [initialNews, initialWeather] = await Promise.all([
-    getNews("top", region),
-    getWeather(region),
+    getNewsCached("top", region),
+    getWeatherCached(region),
   ]);
 
   // Record views for what was just rendered (denormalised counter; the
   // feed is the view, so no per-chirp view table exists in the schema).
+  // ONE batched RPC increments every rendered chirp (migration 0009);
+  // the per-row loop survives only as a fallback for the window
+  // before that migration is applied.
   if (chirps.length > 0 && admin) {
     try {
-      await Promise.all(
-        chirps.map((chirp) =>
-          admin
-            .from("chirps")
-            .update({ view_count: chirp.viewCount + 1 })
-            .eq("id", chirp.id),
-        ),
-      );
+      const { error } = await admin.rpc("increment_chirp_views", {
+        ids: chirps.map((chirp) => chirp.id),
+      });
+      if (error) throw error;
     } catch {
-      // View counting must never break the feed.
+      try {
+        await Promise.all(
+          chirps.map((chirp) =>
+            admin
+              .from("chirps")
+              .update({ view_count: chirp.viewCount + 1 })
+              .eq("id", chirp.id),
+          ),
+        );
+      } catch {
+        // View counting must never break the feed.
+      }
     }
   }
 

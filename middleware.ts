@@ -74,6 +74,11 @@ export async function middleware(request: NextRequest) {
   // cron pinger. It exposes nothing (returns only {ok:true}) — never gate.
   if (pathname === "/api/warm") return response;
 
+  // Crawler rules are public by definition (app/robots.ts) — gating
+  // them behind the session redirect is what made /robots.txt return
+  // the app's HTML in the first place.
+  if (pathname === "/robots.txt") return response;
+
   const PUBLIC_AUTH_PAGES: string[] = [
     "/login",
     "/signup",

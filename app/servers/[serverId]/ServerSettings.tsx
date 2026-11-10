@@ -8,6 +8,7 @@ import {
   ensureShareInviteAction,
   regenerateInviteAction,
 } from "../actions";
+import Avatar from "@/components/Avatar";
 
 // Server settings panel (normal servers): member list, invite code +
 // share link (owner/mods can regenerate), and direct-add of my matches.
@@ -188,7 +189,12 @@ export default function ServerSettings({
           <ul className="flex flex-col divide-y divide-neutral-900">
             {addableFriends.map((friend) => (
               <li key={friend.accountId} className="flex items-center gap-3 py-2">
-                <Avatar name={friend.name} photoUrl={friend.photoUrl} />
+                <Avatar
+                  name={friend.name}
+                  photoUrl={friend.photoUrl}
+                  sizeClass="h-9 w-9"
+                  textClass="text-xs"
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{friend.name}</span>
                   <span className="block truncate text-xs text-neutral-500">
@@ -220,6 +226,8 @@ export default function ServerSettings({
                 name={member.name}
                 photoUrl={member.photoUrl}
                 developer={member.developer}
+                sizeClass="h-9 w-9"
+                textClass="text-xs"
               />
               <span className="min-w-0 flex-1">
                 {member.developer ? (
@@ -251,24 +259,3 @@ export default function ServerSettings({
   );
 }
 
-function Avatar({
-  name,
-  photoUrl,
-  developer,
-}: {
-  name: string;
-  photoUrl: string | null;
-  developer?: boolean;
-}) {
-  if (photoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
-    );
-  }
-  return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-semibold text-neutral-400">
-      {developer ? "D" : name.charAt(0).toUpperCase() || "?"}
-    </span>
-  );
-}

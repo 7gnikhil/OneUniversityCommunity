@@ -22,6 +22,7 @@ import {
   RevokeRevealButton,
 } from "./InboxActions";
 import PageIntro from "@/components/PageIntro";
+import Avatar from "@/components/Avatar";
 
 // Inbox — everything addressed to me that isn't a chat:
 //   - follow requests (accept/decline — accepting makes us friends)
@@ -178,18 +179,12 @@ export default async function InboxPage() {
                 className="flex flex-col gap-2 rounded-3xl border border-neutral-800 bg-neutral-950 p-4"
               >
                 <div className="flex items-center gap-3">
-                  {requester.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={requester.photoUrl}
-                      alt=""
-                      className="h-10 w-10 shrink-0 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-sm font-semibold text-neutral-400">
-                      {requester.name.charAt(0).toUpperCase() || "?"}
-                    </span>
-                  )}
+                  <Avatar
+                    name={requester.name}
+                    photoUrl={requester.photoUrl}
+                    sizeClass="h-10 w-10"
+                    textClass="text-sm"
+                  />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{requester.name}</p>
                     <p className="truncate text-xs text-neutral-500">

@@ -19,6 +19,13 @@ const nextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+          {
+            // Google sign-in opens a popup — allow-popups keeps the
+            // opener relationship for it (plain same-origin would
+            // break the flow). PageSpeed best-practice fix, 2026-11-10.
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin-allow-popups",
+          },
         ],
       },
     ];

@@ -10,6 +10,7 @@ import { getProfileByAccountId } from "@/lib/profile";
 import type { FollowUiState } from "@/app/follow/actions";
 import FollowButton from "@/components/FollowButton";
 import PageIntro from "@/components/PageIntro";
+import Avatar from "@/components/Avatar";
 import { accentHex } from "@/lib/validation";
 import type { PublicProfile } from "@/lib/types";
 
@@ -184,20 +185,12 @@ export default async function SearchPage({
               href={`/profile/${profile.username}`}
               className="flex min-w-0 flex-1 items-center gap-3 py-3 transition hover:bg-neutral-950"
             >
-              {profile.photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={profile.photoUrl}
-                  alt=""
-                  className="h-12 w-12 shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-base font-semibold text-neutral-400">
-                  {(profile.name.trim() ? profile.name : profile.username)
-                    .charAt(0)
-                    .toUpperCase() || "?"}
-                </span>
-              )}
+              <Avatar
+                name={profile.name.trim() ? profile.name : profile.username}
+                photoUrl={profile.photoUrl}
+                sizeClass="h-12 w-12"
+                textClass="text-base"
+              />
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">
                   {profile.name.trim() ? profile.name : `@${profile.username}`}

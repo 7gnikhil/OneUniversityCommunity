@@ -21,6 +21,7 @@ import {
   togglePinMessageAction,
 } from "../actions";
 import { clearTypingAction, setTypingAction } from "@/app/presence/actions";
+import Avatar from "@/components/Avatar";
 
 // Standard (Discord-style) server chat: coloured sender names, flair
 // chips, staff flair assignment. Polls every 5 seconds like the DM chat
@@ -457,20 +458,13 @@ function MessageItem({
   const canDelete = row.mine || isAppAdmin;
   return (
     <div className="flex gap-3">
-      {row.author?.photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={row.author.photoUrl}
-          alt=""
-          className="h-9 w-9 shrink-0 rounded-full object-cover"
-        />
-      ) : (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-xs font-semibold text-neutral-400">
-          {row.author?.developer
-            ? "D"
-            : (row.author?.name ?? "?").charAt(0).toUpperCase()}
-        </span>
-      )}
+      <Avatar
+        name={row.author?.name ?? "?"}
+        photoUrl={row.author?.photoUrl ?? null}
+        developer={row.author?.developer}
+        sizeClass="h-9 w-9"
+        textClass="text-xs"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           {row.author?.developer ? (

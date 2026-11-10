@@ -6,6 +6,7 @@ import {
 } from "@/lib/presence";
 import type { AccountStatus } from "@/lib/types";
 import MarkVerifiedButton from "./MarkVerifiedButton";
+import Avatar from "@/components/Avatar";
 
 // Admin — every account on OneUco, with live presence.
 //
@@ -151,18 +152,13 @@ function AccountCard({ entry }: { entry: AccountPresenceEntry }) {
     <li className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
       <div className="flex items-start gap-3">
         <span className="relative shrink-0">
-          {entry.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={entry.photoUrl}
-              alt=""
-              className="h-11 w-11 rounded-full object-cover"
-            />
-          ) : (
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-800 text-sm font-semibold text-neutral-400">
-              {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
-            </span>
-          )}
+          <Avatar
+            name={displayName}
+            photoUrl={entry.photoUrl}
+            letter={displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
+            sizeClass="h-11 w-11"
+            textClass="text-sm"
+          />
           {entry.online ? (
             <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-neutral-950" />
           ) : null}
