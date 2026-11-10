@@ -70,6 +70,10 @@ export async function middleware(request: NextRequest) {
   // manage their own session state — never gate them here.
   if (pathname.startsWith("/auth/")) return response;
 
+  // Keep-warm probe: exercises the server + database read path for the
+  // cron pinger. It exposes nothing (returns only {ok:true}) — never gate.
+  if (pathname === "/api/warm") return response;
+
   const PUBLIC_AUTH_PAGES: string[] = [
     "/login",
     "/signup",
