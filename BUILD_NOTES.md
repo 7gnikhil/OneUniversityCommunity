@@ -1068,3 +1068,122 @@ the real app, transform renditions under the project's Supabase plan
 (the Avatar ladder makes a missing plan a no-op, but the parent
 should confirm renditions actually serve), /robots.txt returning
 text rules instead of HTML, and the Lighthouse re-run.
+
+# Addendum — 2026-11-10 (night): Top Stories prod yield follow-up — diagnosis, [news-yield] instrumentation, fallback hardening
+
+Code-only (working tree; parent pushes). Context: after commit
+9e5be2e went live, production rendered **Top Stories 3/12 photos**
+(Sports 9/12) while the local harness with the same lib/news.ts
+measured 11/12. This follow-up was scoped to lib/news.ts only
+(components/NewsSection.tsx untouched) and all verification is
+LOCAL — the production-check rule (2026-11-10) forbids repeated
+live passes; the new log line is the production probe instead.
+
+## Diagnosis (measured locally, this session; feeds rotate hourly,
+so absolute counts move between runs — the patterns are the signal)
+
+1. **Feed census (live, repeated runs):** The Hindu front feed
+   carries native media:content images on only **47–52 of 60**
+   items; Indian Express India is 200/200, ESPNcricinfo 100/100.
+   The merged Top page is currently ALL Hindu items (their
+   timestamps win the date sort), pre-fallback native yield
+   measured **9/12** and **7/12** on two runs an hour apart. So a
+   large slice of Top ALWAYS depends on the fallback chain, while
+   Sports (ESPN-heavy) barely does — matching the prod pattern
+   (Top worst, Sports near-full).
+2. **Cold latency is the production-only multiplier.** Uncapped
+   raw timings from this sandbox, fresh process per call:
+   Commons API cold **~590ms** (200); **Openverse cold 5.6–6.3s**
+   to a 200 whose body was 69 bytes — an EMPTY result for these
+   hyperlocal queries. At the old **3s race cap, a cold Openverse
+   call could essentially never answer**; warm it answers in
+   ~0.1–0.3s, which is why local harness runs (warm everything)
+   kept passing while production (a cold computation on a fresh
+   serverless instance, cold TLS to US-hosted APIs) lost the
+   fallback-dependent items. Warm/cold asymmetry, not parsing.
+3. **Commons is non-deterministic for the same query.** "Villagers
+   protest stalled road-widening work" MISSED in one full-pipeline
+   run and HIT in 374ms cold in the stress run; repeated rounds
+   hit at 126–621ms. A single attempt is a coin flip for marginal
+   queries — a retry is worth real yield.
+4. **thgim natives are healthy:** 5/5 sampled feed image URLs
+   returned 200 image/jpeg with AND without a Referer — the
+   native URLs are not being refused at fetch level. Feed
+   media:content already points at the LANDSCAPE_1200 variant.
+5. **og:image census (6 live Hindu articles):** articles WITH a
+   story photo carry og:image = that exact thgim LANDSCAPE_1200
+   photo (page fetch 259–868ms). Articles WITHOUT a photo carry
+   og:image = `https://www.thehindu.com/theme/images/og-image.png`
+   — the site's generic placeholder. An og fallback that doesn't
+   reject placeholders would paper cards with the Hindu logo.
+
+What this does NOT settle (honest limit): the exact split of the
+prod 3/12 between (a) fallback-dependent items lost to cold
+timeouts and (b) any browser-side <img> failures. The [news-yield]
+log below settles (a) on the next cold prod computations: if the
+log shows final≈11/12 while the page still renders 3/12, the
+remaining loss is client-side loading, not server yield.
+
+## Changes (lib/news.ts only)
+
+1. **INSTRUMENTATION (permanent):** every cold getNews now emits
+   ONE console.info line —
+   `[news-yield] category=top region=ap-telangana sources=[The Hindu:60 items/49 native · Indian Express:200 items/200 native] merged=260 pageNative=7/12 fallback attempted=5 filled=2 commons[tries=8 hits=2 timeouts=0] ogimage[tries=6 hits=0 timeouts=0] openverse[tries=6 hits=0 timeouts=6] final=9/12 computeMs=12144`
+   (that is a REAL line from the local verification run below).
+   Because getNews only executes inside unstable_cache on a cold
+   compute, this fires at most once per category+region per
+   10 minutes. Assembly is try/catch-guarded; logging can never
+   fail the read.
+2. **Per-attempt race cap 3s → 5s** (FALLBACK_TIMEOUT_MS), set from
+   the cold measurements above.
+3. **One retry per source per item** (attemptSource): initial +
+   one retry on timeout/failure, per source. Justified by finding
+   3 — in the verification run Commons used 8 tries for 5 items
+   and filled 2.
+4. **NEW og:image step** (articleOgImage), ordered Commons →
+   og:image → Openverse (evidence order: og answers in ~0.3–1.2s
+   with the story's REAL photo; Openverse cold is 5.6–6.3s for a
+   usually-empty result, so it stays last). Fetches the article
+   page with UPSTREAM_UA inside the same race; rejects candidates
+   hosted on the article's own host and any path matching
+   /(og-image|logo|placeholder|default-image)/i. Positive control
+   (feed image stripped from a photo-bearing article): returned
+   the exact thgim LANDSCAPE_1200 URL in 1,175ms. Negative control
+   (photo-less article): null in 760ms — placeholder rejected.
+5. **Overall deadline:** fillMissingImages runs under a 12s
+   budget (FALLBACK_BUDGET_MS); attempts shrink to the remaining
+   budget and stop when it is spent, so a fully cold getNews stays
+   inside ~15s (measured worst case below: 12.1s, and that was the
+   budget being consumed by Openverse retries on items no source
+   could fill). Fail-soft is unchanged: unfilled items render the
+   gradient tile; getNews still never throws.
+6. **thgim largest-variant safeguard:** normaliseImageUrl now
+   steps any thgim `alternates/(LANDSCAPE|PORTRAIT|SQUARE)_<n>/`
+   URL with n<1200 up to _1200. A no-op on today's feeds (they
+   already serve 1200 — finding 4); insurance for smaller variants
+   arriving via og tags or feed changes.
+
+## Local re-verification (stubbed-cache copy of the new lib/news.ts
+run under Bun against the live feeds; real file also passes a Bun
+transpiler parse)
+
+- BEFORE (old code, same session): Top **10/12** final (9 native +
+  1 Commons; 6.2s). Sports **12/12** (1.9s).
+- AFTER (new code): Top **9/12** final from a HARDER rotated page
+  (7/12 native pre-fallback vs 9/12 before; 5 fallback-dependent
+  items, Commons filled 2, og correctly empty on photo-less
+  stories, Openverse timed out on all 6 tries within budget;
+  computeMs=12144 — the 12s deadline doing its bounding job).
+  Sports **12/12** final (10/12 native, Commons filled both
+  missing on first tries; og/Openverse never touched; 1.3s).
+- Fallback timing distribution (uncapped raw, cold): Commons
+  ~590ms; Openverse 5.6–6.3s (empty results). Capped attempts:
+  Commons hits at 126–621ms warm / ~590ms cold; article pages
+  259–868ms (HTML), og controls at 760–1,175ms end to end.
+
+NOT verified here (parent's post-deploy step): the [news-yield]
+lines in the Vercel logs for bom1 cold computes — read those
+before judging this fix; they state server-side final yield per
+category directly. If prod server yield is high but rendering is
+still low, the next investigation is client-side <img> loading
+(NewsCard onError path), not this pipeline.

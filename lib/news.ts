@@ -1,10 +1,11 @@
 // Live news + weather for the Chirp "Live" block — SERVER SIDE ONLY.
 //
 // Sources are free and keyless: publisher RSS feeds for headlines,
-// Open-Meteo for weather, and Wikimedia Commons → Openverse for a
-// topical photo when a feed item carries no image of its own. Every
-// read fails soft: a dead feed yields an empty list or a placeholder
-// tile, never a crashed page.
+// Open-Meteo for weather, and a fallback chain (Wikimedia Commons →
+// the article's own og:image → Openverse) for a photo when a feed
+// item carries no image of its own. Every read fails soft: a dead
+// feed yields an empty list or a placeholder tile, never a crashed
+// page.
 //
 // Feeds were verified by hand on 2026-11-10 (items + image presence +
 // freshness) — see BUILD_NOTES.md. PIB was dropped (its RSS is
@@ -454,6 +455,21 @@ async function fetchFeed(def: FeedDef): Promise<NewsItem[]> {
   }
 }
 
+// The Hindu's thgim CDN serves named alternates in the URL path
+// (…/alternates/LANDSCAPE_1200/photo.jpg). Feeds and og:image tags
+// almost always hand out the 1200 variant already (verified on the
+// live front feed, 2026-11-10), but if a smaller one ever arrives,
+// step it up to 1200 — a pure string transform on a documented URL
+// pattern, thgim hosts only.
+function preferLargestThgimVariant(url: string): string {
+  if (!/thgim\.com/i.test(url)) return url;
+  return url.replace(
+    /\/(alternates\/(?:LANDSCAPE|PORTRAIT|SQUARE)_)(\d+)\//i,
+    (match, prefix: string, size: string) =>
+      Number(size) < 1200 ? `/${prefix}1200/` : match,
+  );
+}
+
 // Image URLs are normalised to https at the point they enter an item:
 // some sources (and older feed items) still hand out http:// URLs,
 // which an https page cannot load at all (mixed content). Protocol-
@@ -463,27 +479,38 @@ function normaliseImageUrl(url: string | null): string | null {
   if (!url) return null;
   const trimmed = url.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith("http://")) return "https://" + trimmed.slice(7);
-  if (trimmed.startsWith("//")) return "https:" + trimmed;
-  return trimmed;
+  let out = trimmed;
+  if (out.startsWith("http://")) out = "https://" + out.slice(7);
+  if (out.startsWith("//")) out = "https:" + out;
+  return preferLargestThgimVariant(out);
 }
 
-// ── Photo fallback (Wikimedia Commons → Openverse) ──────────────────
+// ── Photo fallback (Commons → og:image → Openverse) ─────────────────
 // For items whose feed gave no image. Runs inside getNews, so the
-// lookups ride the same 10-minute fetch cache as the feeds themselves
-// and happen at most once per category per cache window — never per
+// lookups ride the same 10-minute cache as the feeds themselves and
+// happen at most once per category per cache window — never per
 // page view.
 //
-// ORDER + TIMING (measured 2026-11-10, see BUILD_NOTES perf addendum):
-// Commons answers in ~1s; Openverse took 8.6s to a 504 from the build
-// sandbox and 13.4s for a single call in production, where it ran
-// FIRST and serially per item — that wait was the 20–25s cold tab
-// load. So: Commons first, Openverse second, every lookup capped by a
-// hard 3s race-timeout (see raceTimeout below for why it is a race and
-// not an AbortSignal), lookups for a category run in parallel with a
-// small concurrency cap, and the whole 12-item page is eligible. A
-// timeout/failure degrades that one card to its gradient tile — it
-// can never stall the category response.
+// ORDER + TIMING (measured 2026-11-10, see BUILD_NOTES addenda):
+// Commons cold answers in ~0.6s and is the reliable first step.
+// Openverse COLD is the trap: 5.6–6.3s to a 200 (usually an EMPTY
+// result for these hyperlocal stories) from the build sandbox, 8.6s
+// to a 504 in an earlier session and 13.4s for a single call in
+// production — at the old 3s race cap it could essentially never
+// answer a cold production computation, and when it ran FIRST and
+// serially per item it was the 20–25s cold tab load. The article's
+// own og:image answers in 0.26–0.87s and returns the story's REAL
+// photo when one exists, so it runs second; Openverse (generic
+// topical photo, slow cold) is the last resort. Every attempt is
+// capped by a 5s race-timeout (see raceTimeout below for why it is a
+// race and not an AbortSignal), each source gets ONE retry on
+// timeout/failure (Commons hits for the same query were observed to
+// vary between runs — a second attempt often lands), lookups run in
+// parallel with a small concurrency cap across the whole 12-item
+// page, and a 12s overall deadline bounds the chain so a cold
+// getNews stays inside ~15s end to end. A timeout/failure degrades
+// that one card to its gradient tile — it can never stall the
+// category response.
 
 const STOPWORDS = new Set([
   "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
@@ -504,7 +531,16 @@ function photoQuery(title: string): string {
   return words.slice(0, 5).join(" ");
 }
 
-const FALLBACK_TIMEOUT_MS = 3000;
+// Per-attempt cap. Raised 3s → 5s (2026-11-10 follow-up): cold
+// Commons/Openverse calls from a fresh serverless instance regularly
+// exceed 3s (Openverse cold measured 5.6–6.3s), so the 3s race was
+// forfeiting winnable lookups in production while local runs — warm
+// connections, warm caches — passed easily at ~0.15–0.6s.
+const FALLBACK_TIMEOUT_MS = 5000;
+// Overall budget for one fillMissingImages run (all items, all
+// sources, retries included). Feed fetches land before this starts;
+// 12s here keeps a fully cold getNews inside ~15s.
+const FALLBACK_BUDGET_MS = 12000;
 
 // Timeout by RACING, never by passing an AbortSignal into fetch.
 // Production evidence (2026-11-10): the fallback chain returned
@@ -533,7 +569,10 @@ async function raceTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
   }
 }
 
-async function openverseImage(query: string): Promise<string | null> {
+async function openverseImage(
+  query: string,
+  timeoutMs: number = FALLBACK_TIMEOUT_MS,
+): Promise<string | null> {
   const url =
     "https://api.openverse.org/v1/images/?q=" +
     encodeURIComponent(query) +
@@ -551,7 +590,7 @@ async function openverseImage(query: string): Promise<string | null> {
         results?: { url?: string; thumbnail?: string }[];
       };
     })(),
-    FALLBACK_TIMEOUT_MS,
+    timeoutMs,
   );
   const first = json?.results?.[0];
   if (!first) return null;
@@ -562,7 +601,10 @@ async function openverseImage(query: string): Promise<string | null> {
   return first.thumbnail ?? first.url ?? null;
 }
 
-async function commonsImage(query: string): Promise<string | null> {
+async function commonsImage(
+  query: string,
+  timeoutMs: number = FALLBACK_TIMEOUT_MS,
+): Promise<string | null> {
   const res = await raceTimeout(
     fetch(
       "https://commons.wikimedia.org/w/api.php?action=query&generator=search" +
@@ -573,7 +615,7 @@ async function commonsImage(query: string): Promise<string | null> {
         next: { revalidate: 600 },
       },
     ),
-    FALLBACK_TIMEOUT_MS,
+    timeoutMs,
   );
   try {
     if (!res || !res.ok) return null;
@@ -598,6 +640,97 @@ async function commonsImage(query: string): Promise<string | null> {
   }
 }
 
+// The article's own og:image: when a story HAS a photo but its feed
+// entry didn't carry it, the article page's social tag points at the
+// real thing (verified on Hindu articles: og:image = the same thgim
+// LANDSCAPE_1200 photo the feed uses elsewhere; article pages answer
+// in 0.26–0.87s). The catch, also verified: a story with NO photo
+// gets the publisher's generic placeholder (The Hindu serves
+// www.thehindu.com/theme/images/og-image.png) — so a candidate is
+// REJECTED when it sits on the article page's own host (placeholders
+// and logos live there; real story photos live on image CDNs) or
+// when its path smells like a placeholder. The whole fetch + parse
+// rides inside the race so a slow article page can't overrun the
+// attempt budget on body download.
+const OG_PLACEHOLDER_RE = /(og[-_]?image|logo|placeholder|default[-_]?image)/i;
+
+async function articleOgImage(
+  item: NewsItem,
+  timeoutMs: number = FALLBACK_TIMEOUT_MS,
+): Promise<string | null> {
+  let articleHost = "";
+  try {
+    articleHost = new URL(item.link).hostname;
+  } catch {
+    return null;
+  }
+  return raceTimeout(
+    (async (): Promise<string | null> => {
+      const res = await fetch(item.link, {
+        headers: { "User-Agent": UPSTREAM_UA, Accept: "text/html" },
+        next: { revalidate: 600 },
+      });
+      if (!res.ok) return null;
+      const html = await res.text();
+      const metaTags = html.match(/<meta\b[^>]*>/gi) ?? [];
+      for (const tag of metaTags) {
+        if (!/\bproperty\s*=\s*(?:"og:image"|'og:image')/i.test(tag)) {
+          continue;
+        }
+        const candidate = normaliseImageUrl(attrOf(tag, "content"));
+        if (!candidate || !candidate.startsWith("https://")) continue;
+        let host = "";
+        try {
+          host = new URL(candidate).hostname;
+        } catch {
+          continue;
+        }
+        if (host === articleHost) continue;
+        if (OG_PLACEHOLDER_RE.test(candidate)) continue;
+        return candidate;
+      }
+      return null;
+    })(),
+    timeoutMs,
+  );
+}
+
+// ── Yield instrumentation ────────────────────────────────────────────
+// Per cold getNews computation, getNews logs ONE [news-yield] line:
+// per-source item/native counts, how many page items depended on the
+// fallback, and per-source tries/hits/timeouts. This is the permanent
+// production probe for the server-side yield question — it runs at
+// most once per category+region per 10 minutes (inside the shared
+// cache), so it costs one log line per cold compute, never per view.
+
+interface SourceTally {
+  tries: number;
+  hits: number;
+  timeouts: number;
+}
+
+interface FallbackStats {
+  attempted: number;
+  filled: number;
+  commons: SourceTally;
+  ogimage: SourceTally;
+  openverse: SourceTally;
+}
+
+function emptyTally(): SourceTally {
+  return { tries: 0, hits: 0, timeouts: 0 };
+}
+
+function emptyFallbackStats(): FallbackStats {
+  return {
+    attempted: 0,
+    filled: 0,
+    commons: emptyTally(),
+    ogimage: emptyTally(),
+    openverse: emptyTally(),
+  };
+}
+
 const FALLBACK_CONCURRENCY = 4;
 // The whole rendered page is eligible (raised from 8): with the
 // processed result shared through unstable_cache (see getNewsCached
@@ -605,12 +738,42 @@ const FALLBACK_CONCURRENCY = 4;
 // users, not per cold action call.
 const FALLBACK_ITEM_LIMIT = 12;
 
-async function fillMissingImages(items: NewsItem[]): Promise<void> {
+// One source, up to two attempts (initial + one retry), bounded by
+// both the per-attempt cap and the chain's overall deadline. A null
+// result that consumed the whole attempt window counts as a timeout
+// in the tally — that distinction is what the [news-yield] log exists
+// to surface in production.
+async function attemptSource(
+  tally: SourceTally,
+  deadline: number,
+  lookup: (timeoutMs: number) => Promise<string | null>,
+): Promise<string | null> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 250) return null;
+    const cap = Math.min(FALLBACK_TIMEOUT_MS, remaining);
+    tally.tries += 1;
+    const started = Date.now();
+    const result = await lookup(cap);
+    if (result) {
+      tally.hits += 1;
+      return result;
+    }
+    if (Date.now() - started >= cap - 50) tally.timeouts += 1;
+  }
+  return null;
+}
+
+async function fillMissingImages(items: NewsItem[]): Promise<FallbackStats> {
+  const stats = emptyFallbackStats();
   // Only the first FALLBACK_ITEM_LIMIT items of the category are
   // eligible; of those, only the ones the feed left imageless.
   const missing = items
     .slice(0, FALLBACK_ITEM_LIMIT)
     .filter((item) => !item.imageUrl);
+  stats.attempted = missing.length;
+  if (missing.length === 0) return stats;
+  const deadline = Date.now() + FALLBACK_BUDGET_MS;
   let next = 0;
   async function worker(): Promise<void> {
     while (next < missing.length) {
@@ -618,11 +781,24 @@ async function fillMissingImages(items: NewsItem[]): Promise<void> {
       next += 1;
       const query = photoQuery(item.title);
       if (!query) continue;
-      // Commons first (fast, reliable), Openverse second — each with
-      // its own hard timeout inside the lookup helpers.
-      item.imageUrl = normaliseImageUrl(
-        (await commonsImage(query)) ?? (await openverseImage(query)),
-      );
+      // Commons (fast, reliable) → the article's own og:image (the
+      // story's real photo when it exists) → Openverse (generic,
+      // slow when cold) — each with its own raced attempt budget
+      // and one retry, all inside the overall deadline.
+      const found =
+        (await attemptSource(stats.commons, deadline, (ms) =>
+          commonsImage(query, ms),
+        )) ??
+        (await attemptSource(stats.ogimage, deadline, (ms) =>
+          articleOgImage(item, ms),
+        )) ??
+        (await attemptSource(stats.openverse, deadline, (ms) =>
+          openverseImage(query, ms),
+        ));
+      if (found) {
+        item.imageUrl = normaliseImageUrl(found);
+        stats.filled += 1;
+      }
     }
   }
   await Promise.all(
@@ -631,6 +807,7 @@ async function fillMissingImages(items: NewsItem[]): Promise<void> {
       () => worker(),
     ),
   );
+  return stats;
 }
 
 // ── Public reads ─────────────────────────────────────────────────────
@@ -639,6 +816,7 @@ export async function getNews(
   category: NewsCategory,
   region: RegionDef,
 ): Promise<NewsItem[]> {
+  const startedAt = Date.now();
   const defs =
     category === "regional" ? region.feeds : CATEGORY_FEEDS[category];
   const lists = await Promise.all(defs.map(fetchFeed));
@@ -671,7 +849,35 @@ export async function getNews(
     return tb - ta;
   });
   const page = merged.slice(0, 12);
-  await fillMissingImages(page);
+  const pageNative = page.filter((item) => item.imageUrl).length;
+  const fallback = await fillMissingImages(page);
+  // One [news-yield] line per cold computation (see the tally types
+  // above). Guarded: a logging failure must never fail the read.
+  try {
+    const sources = defs
+      .map((def, i) => {
+        const list = lists[i] ?? [];
+        const native = list.filter((item) => item.imageUrl).length;
+        return `${def.source}:${list.length} items/${native} native`;
+      })
+      .join(" · ");
+    const tally = (t: SourceTally): string =>
+      `tries=${t.tries} hits=${t.hits} timeouts=${t.timeouts}`;
+    const finalCount = page.filter((item) => item.imageUrl).length;
+    console.info(
+      `[news-yield] category=${category} region=${region.key} ` +
+        `sources=[${sources}] merged=${merged.length} ` +
+        `pageNative=${pageNative}/${page.length} ` +
+        `fallback attempted=${fallback.attempted} filled=${fallback.filled} ` +
+        `commons[${tally(fallback.commons)}] ` +
+        `ogimage[${tally(fallback.ogimage)}] ` +
+        `openverse[${tally(fallback.openverse)}] ` +
+        `final=${finalCount}/${page.length} ` +
+        `computeMs=${Date.now() - startedAt}`,
+    );
+  } catch {
+    // Instrumentation is best-effort only.
+  }
   return page;
 }
 
