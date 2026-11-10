@@ -1,11 +1,14 @@
 import { THEMES, getTheme } from "@/lib/themes";
 import { setMyThemeFormAction } from "@/app/profile/theme-actions";
+import AnimatedDropdown from "@/components/AnimatedDropdown";
 
 // Profile settings → Interface: the picker for the full-app look
 // (profiles.theme_id). Interfaces are chosen HERE, from this list —
 // the dial's long-press gesture now cycles the dial's own wheel
-// styles instead (see components/DialSkinPicker). Server component
-// with plain forms, like the admin Diwali toggle.
+// styles instead (see components/DialSkinPicker). The list lives
+// inside the shared AnimatedDropdown (closed by default; the header
+// shows the current interface's name); the rows are still plain
+// server-rendered forms posting to the same action.
 
 export default function InterfacePicker({
   currentId,
@@ -61,15 +64,14 @@ export default function InterfacePicker({
   ];
 
   return (
-    <section className="metal-frame mt-6 w-full rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-left">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-white">Interface</h2>
-        <span className="rounded-full bg-neutral-800 px-2.5 py-0.5 text-[11px] font-medium text-neutral-300">
-          {followingDefault
-            ? "App default"
-            : (getTheme(currentId)?.name ?? "App default")}
-        </span>
-      </div>
+    <AnimatedDropdown
+      title="Interface"
+      currentLabel={
+        followingDefault
+          ? "App default"
+          : (getTheme(currentId)?.name ?? "App default")
+      }
+    >
       <p className="mt-1 text-xs leading-relaxed text-neutral-500">
         Your whole app&apos;s look — background, cards and the
         dial&apos;s home skin, not just colour. Pick from this list;
@@ -129,6 +131,6 @@ export default function InterfacePicker({
           </form>
         ))}
       </div>
-    </section>
+    </AnimatedDropdown>
   );
 }

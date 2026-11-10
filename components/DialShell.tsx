@@ -22,14 +22,19 @@ import DialNav, {
 //   hidden — sections render full-screen exactly as on mobile.
 //
 // Auth / legal / setup routes never get the shell, even on desktop.
+// Admin routes never get it either: the admin area carries its own
+// header/nav (back-to-Admin links, "View site"), and the shell's data
+// (getDialData) is gated off under /admin in DialShellServer — this
+// prefix is the client-side half of that gate, so the dial chrome
+// also stays away when a soft navigation lands in Admin with the
+// shell already mounted.
 
 const HIDDEN_PREFIXES: ReadonlyArray<string> = [
   "/login",
   "/signup",
   "/forgot-password",
   "/reset-password",
-  "/admin/login",
-  "/admin/forgot-password",
+  "/admin",
   "/verify",
   "/privacy",
   "/terms",

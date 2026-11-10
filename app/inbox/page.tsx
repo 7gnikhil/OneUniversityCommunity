@@ -238,7 +238,7 @@ export default async function InboxPage() {
               className="flex flex-col gap-2 rounded-3xl border border-neutral-800 bg-neutral-950 p-4"
             >
               <p className="text-sm font-medium">
-                You&apos;ve been added to {server?.name ?? "a server"}
+                You&apos;ve been added to {server?.name ?? "a Tea"}
               </p>
               <p className="text-sm leading-relaxed text-neutral-400">
                 A server owner or mod added you directly. Accept to open the

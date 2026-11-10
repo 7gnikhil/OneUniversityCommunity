@@ -23,10 +23,10 @@ export default async function ServersPage() {
   if (!account) {
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-xl font-semibold">Servers</h1>
+        <h1 className="text-xl font-semibold">Tea</h1>
         <p className="text-sm leading-relaxed text-neutral-400">
           Your account isn&apos;t finished yet — complete sign-up first, then
-          your servers show up here.
+          your teas show up here.
         </p>
         <Link
           href="/verify"
@@ -72,7 +72,7 @@ export default async function ServersPage() {
           ← OneUco
         </Link>
         <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
-          Servers
+          Tea
         </p>
       </div>
 
@@ -80,7 +80,7 @@ export default async function ServersPage() {
 
       {!adminReady ? (
         <p className="rounded-2xl border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200">
-          Servers aren&apos;t fully configured yet — please try again shortly.
+          Tea isn&apos;t fully configured yet — please try again shortly.
         </p>
       ) : null}
 
@@ -96,7 +96,7 @@ export default async function ServersPage() {
       </ul>
       {entries.length === 0 && adminReady ? (
         <p className="py-6 text-center text-sm text-neutral-500">
-          No servers yet — create the first one below.
+          No teas yet — brew the first one below.
         </p>
       ) : null}
 

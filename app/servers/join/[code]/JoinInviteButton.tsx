@@ -31,7 +31,7 @@ export default function JoinInviteButton({ code }: { code: string }) {
         onClick={() => void onJoin()}
         className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50"
       >
-        {busy ? "Joining…" : "Join server"}
+        {busy ? "Joining…" : "Join Tea"}
       </button>
       {error ? (
         <p className="text-sm text-red-400" role="alert">

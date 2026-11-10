@@ -60,7 +60,7 @@ export default function CreateServerForm({ myAccountId }: { myAccountId: string 
     });
     setBusy(false);
     if (result.error || !result.serverId) {
-      setError(result.error ?? "Couldn't create the server.");
+      setError(result.error ?? "Couldn't create the Tea.");
       return;
     }
     router.push(`/servers/${result.serverId}`);
@@ -112,11 +112,11 @@ export default function CreateServerForm({ myAccountId }: { myAccountId: string 
           onSubmit={(event) => void onCreate(event)}
           className="metal-frame flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4"
         >
-          <p className="text-sm font-medium">Create a server</p>
+          <p className="text-sm font-medium">Create a Tea</p>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Server name"
+            placeholder="Tea name"
             maxLength={60}
             required
             className="w-full rounded-xl border border-neutral-800 bg-black px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
@@ -176,7 +176,7 @@ export default function CreateServerForm({ myAccountId }: { myAccountId: string 
               disabled={busy || !name.trim()}
               className="flex-1 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:opacity-40"
             >
-              {busy ? "Creating…" : "Create server"}
+              {busy ? "Creating…" : "Create Tea"}
             </button>
             <button
               type="button"
@@ -193,7 +193,7 @@ export default function CreateServerForm({ myAccountId }: { myAccountId: string 
           onClick={() => setOpen(true)}
           className="w-full rounded-full border border-dashed border-neutral-700 px-4 py-3 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
         >
-          + Create a server
+          + Create a Tea
         </button>
       )}
     </section>

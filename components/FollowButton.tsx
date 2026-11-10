@@ -65,7 +65,7 @@ export default function FollowButton({
           <span
             className={`rounded-full border border-neutral-700 font-medium text-neutral-300 ${sizeClass}`}
           >
-            Friends ✓
+            Homies ✓
           </span>
         ) : state === "requested" ? (
           <button

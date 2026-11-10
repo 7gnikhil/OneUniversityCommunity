@@ -362,7 +362,7 @@ export default function ServerChat({
             }}
             rows={1}
             maxLength={2000}
-            placeholder="Message this server…"
+            placeholder="Message this Tea…"
             className="max-h-32 min-h-11 flex-1 resize-none rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
           />
           <button
@@ -376,7 +376,7 @@ export default function ServerChat({
         </form>
       ) : (
         <p className="pb-2 text-center text-sm text-neutral-500">
-          Join this server to post.
+          Join this Tea to post.
         </p>
       )}
     </div>

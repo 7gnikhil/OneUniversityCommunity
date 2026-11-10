@@ -75,7 +75,7 @@ export function FollowRequestButtons({ requestId }: { requestId: string }) {
       setError(result.error);
       return;
     }
-    setDone(accept ? "Friends now ✓" : "Declined");
+    setDone(accept ? "Homies now ✓" : "Declined");
     router.refresh();
   }
 

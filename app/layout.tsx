@@ -13,7 +13,7 @@ import DialShellServer from "@/components/DialShellServer";
 export const metadata: Metadata = {
   title: "OneUco — One University Community",
   description:
-    "OneUco is a students-only community app for students everywhere: swipe & match, servers, Chirp, friends chat and an inbox — for students of any college or university.",
+    "OneUco is a students-only community app for students everywhere: Fling matches, Tea hangouts, Chirp, friends chat and an inbox — for students of any college or university.",
 };
 
 export default async function RootLayout({

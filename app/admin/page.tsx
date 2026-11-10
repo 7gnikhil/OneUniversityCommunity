@@ -166,13 +166,13 @@ export default async function AdminPage() {
   }> = [
     {
       title: "ReqToAdmin queue",
-      body: "Messages students flag with the ReqToAdmin flair inside servers, plus the pending Maya Jwalam reveal requests overview.",
+      body: "Messages students flag with the ReqToAdmin flair inside teas, plus the pending Maya Jwalam reveal requests overview.",
       href: "/admin/requests",
       waiting: null,
     },
     {
       title: "Flair manager",
-      body: "Create, recolour and remove global and per-server flairs. ReqToAdmin is built in — recolour it, never delete it.",
+      body: "Create, recolour and remove global and per-Tea flairs. ReqToAdmin is built in — recolour it, never delete it.",
       href: "/admin/flairs",
       waiting: null,
     },

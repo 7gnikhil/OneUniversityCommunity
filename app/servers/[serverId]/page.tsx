@@ -53,7 +53,7 @@ export default async function ServerPage({
   const sessionUser = await getMySessionUser(supabase);
   if (!account) {
     return (
-      <Shell title="Server">
+      <Shell title="Tea">
         <p className="text-sm text-neutral-400">
           Your account isn&apos;t finished yet — complete sign-up first.
         </p>
@@ -74,9 +74,9 @@ export default async function ServerPage({
     admin = createAdminClient();
   } catch {
     return (
-      <Shell title="Server">
+      <Shell title="Tea">
         <p className="text-sm text-amber-200">
-          Servers aren&apos;t fully configured yet — please try again shortly.
+          Tea isn&apos;t fully configured yet — please try again shortly.
         </p>
       </Shell>
     );
@@ -90,10 +90,10 @@ export default async function ServerPage({
   }
   if (!server) {
     return (
-      <Shell title="Server">
-        <p className="text-sm text-neutral-400">That server doesn&apos;t exist.</p>
+      <Shell title="Tea">
+        <p className="text-sm text-neutral-400">That Tea doesn&apos;t exist.</p>
         <Link href="/servers" className="text-sm text-neutral-300 underline">
-          Back to servers
+          Back to Tea
         </Link>
       </Shell>
     );
@@ -153,11 +153,11 @@ export default async function ServerPage({
     return (
       <Shell title={confirmedServer.name}>
         <p className="text-sm leading-relaxed text-neutral-400">
-          This server is private. You&apos;ll need an invite code, an invite
+          This Tea is private. You&apos;ll need an invite code, an invite
           link, or a direct add from a member to get in.
         </p>
         <Link href="/servers" className="text-sm text-neutral-300 underline">
-          Back to servers
+          Back to Tea
         </Link>
       </Shell>
     );
@@ -249,7 +249,7 @@ export default async function ServerPage({
           <p className="truncate text-sm font-semibold">{confirmedServer.name}</p>
           <p className="truncate text-xs text-neutral-500">
             {confirmedServer.type === "public"
-              ? "Public server"
+              ? "Public Tea"
               : confirmedServer.type === "friends_private"
                 ? "Private · friends"
                 : "Private · strangers"}

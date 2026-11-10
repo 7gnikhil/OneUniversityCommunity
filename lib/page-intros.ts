@@ -17,11 +17,11 @@ export type PageIntroSection =
 
 export const PAGE_INTROS: Record<PageIntroSection, string> = {
   servers:
-    "Your group spaces — subject squads, clubs and campus communities. Maya Jwalam stays fully anonymous.",
+    "Your teas — campus hangouts for every gang and fandom. Sip, chat, stay anonymous in Maya Jwalam.",
   swipe:
-    "Discover students — swipe right to follow, left to pass. Your details unlock only when they accept.",
+    "Fling a follow at someone — swipe right to fling, left to pass. Your details unlock only when they accept.",
   friends:
-    "Your people — chats, online status and typing live here. Yellow double-ticks mean they've seen your message.",
+    "Your homies — chats, online status and typing live here. Yellow double-ticks mean they've seen your message.",
   chirp:
     "Campus in short posts — plus live news and weather for your place, refreshed through the day.",
   profile:

@@ -48,7 +48,7 @@ export default async function DialHomePage() {
   const accent = badges?.accentHex ?? "#171717";
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-6 lg:py-10">
       <header className="flex flex-col items-center gap-1.5 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">OneUco</h1>
         <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
@@ -58,7 +58,7 @@ export default async function DialHomePage() {
       </header>
 
       {/* Student search: OneUco ID (exact) or @username (partial). */}
-      <form action="/search" method="get" className="mt-5 flex items-center gap-2">
+      <form action="/search" method="get" className="mt-5 flex items-center gap-2 lg:mt-8">
         <input
           name="q"
           placeholder="Search @username or OneUco ID"
@@ -75,11 +75,11 @@ export default async function DialHomePage() {
 
       {showDialTip ? <DialTipCard /> : null}
 
-      <div className="flex flex-1 items-center justify-center py-8">
+      <div className="flex flex-1 items-center justify-center py-8 lg:py-10">
         <DialNav badges={badges} themePicker={themePicker} />
       </div>
 
-      <footer className="flex items-center justify-center gap-6 pb-2 text-xs text-neutral-500">
+      <footer className="flex items-center justify-center gap-6 pb-2 text-xs text-neutral-500 lg:pb-4">
         <Link href="/inbox" className="relative transition hover:text-white">
           Inbox
           {inboxUnread > 0 ? (

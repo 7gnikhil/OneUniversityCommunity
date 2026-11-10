@@ -8,7 +8,7 @@ import { accentHex } from "@/lib/validation";
 import SwipeDeck from "./SwipeDeck";
 import PageIntro from "@/components/PageIntro";
 
-// Swipe Deck — the app's #1 priority surface (Tinder-style, verified
+// Fling — the app's #1 priority surface (Tinder-style, verified
 // students only; middleware holds everyone else at /verify).
 //
 // The deck is assembled server-side from PUBLIC data only (see
@@ -24,10 +24,10 @@ export default async function SwipePage() {
   if (!account) {
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-xl font-semibold">Swipe Deck</h1>
+        <h1 className="text-xl font-semibold">Fling</h1>
         <p className="text-sm leading-relaxed text-neutral-400">
           Your account isn&apos;t finished yet — complete sign-up first, then
-          the deck opens up here.
+          Fling opens up here.
         </p>
         <Link
           href="/verify"
@@ -70,7 +70,7 @@ export default async function SwipePage() {
           ← OneUco
         </Link>
         <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
-          Swipe Deck
+          Fling
         </p>
       </div>
       <PageIntro section="swipe" />

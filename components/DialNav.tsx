@@ -109,7 +109,13 @@ export interface DialBadges {
 interface DialStopDef {
   label: string;
   href: string;
-  iconPath: string;
+  /** Single-path icon (the original four stops). */
+  iconPath?: string;
+  /**
+   * Multi-path icon (Tea's spilled cup, Fling's couple): each entry is
+   * one stroke sub-drawing, rendered as its own <path> by DialIcon.
+   */
+  iconPaths?: string[];
   iconCircle?: boolean;
   /**
    * The stop's own hue, as the CSS variable defined in globals.css
@@ -122,32 +128,83 @@ interface DialStopDef {
 // Minimal stroke icons, one consistent set (ported from the demo).
 const STOPS: DialStopDef[] = [
   {
-    label: "Servers",
+    label: "Tea",
     href: "/servers",
     accentVar: "var(--stop-servers)",
-    iconPath:
-      "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
+    // A tea cup tipped to the right, mid-spill: cup body + handle, the
+    // wavy spill stream falling from the low lip, one droplet in the
+    // air, and the puddle wave underneath.
+    iconPaths: [
+      "M4.8 5.4L13.4 7.9l1 8.4-7.8-2.1z",
+      "M5.2 7.8C2.8 8.3 2.6 11.4 6.1 12.3",
+      "M15.2 9.6c1.3 2 .3 3.9 1.5 6 .8 1.6.7 2.7.2 4",
+      "M19.6 11.4c.9 1.1.9 2.1 0 2.9-.9-.8-.9-1.8 0-2.9z",
+      "M11.8 20.9c2.6-1.5 6.8-1.5 9.6.1",
+    ],
   },
   {
-    label: "Swipe Deck",
+    label: "Fling",
     href: "/swipe",
     accentVar: "var(--stop-swipe)",
-    iconPath:
-      "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z",
+    // A girl and a boy facing each other, holding hands at the centre:
+    // circle heads, her hair arc + triangle dress, his straight
+    // trousers, both inner arms meeting at the clasped-hands ring.
+    iconPaths: [
+      "M4.8 5.5a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0-4.4 0",
+      "M4.6 5.4a2.4 2.4 0 0 1 4.8 0",
+      "M4.6 15.5L7 8l2.4 7.5z",
+      "M5.9 15.5v3.8M8.1 15.5v3.8",
+      "M6.3 10.3L4.6 13.2",
+      "M8 10.4L11.9 12.8",
+      "M14.8 5.5a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0-4.4 0",
+      "M17 7.7v5.8",
+      "M14.9 19.8L17 13.5l2.1 6.3",
+      "M17.3 9.9L19.3 13",
+      "M16.7 9.9L12.1 12.8",
+      "M11.1 12.8a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0",
+    ],
   },
   {
-    label: "Friends",
+    label: "Homies",
     href: "/friends",
     accentVar: "var(--stop-friends)",
-    iconPath:
-      "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+    // The homie: a student mid-stride — bucket hat (brim + crown),
+    // sunglasses band, takeaway coffee cup in one hand, phone in the
+    // other, legs caught mid-walk. Bold shapes only: at 25px the hat,
+    // shades and cup carry the read.
+    iconPaths: [
+      "M6.2 6.8h11.6",
+      "M8.5 6.8v-1.6c0-.9.7-1.5 1.6-1.5h3.8c.9 0 1.6.6 1.6 1.5v1.6",
+      "M9 6.8v2.6c0 1.7 1.3 2.8 3 2.8s3-1.1 3-2.8V6.8",
+      "M9.2 9.3h5.6",
+      "M12 12.2l-.6 4.3",
+      "M12.4 13.4l4.2 1.8",
+      "M15.5 15.4h3.4M15.9 15.4l.3 3.6h1.7l.3-3.6",
+      "M11.7 13.4L8.2 15.4",
+      "M6.9 14.2h2.4v3.4H6.9z",
+      "M11.4 16.5l3 2.2.6 3.1",
+      "M11.4 16.5l-2.8 2.6-1.2 2.9",
+    ],
   },
   {
     label: "Chirp",
     href: "/chirp",
     accentVar: "var(--stop-chirp)",
-    iconPath:
-      "M20.2 3.8a6 6 0 0 0-8.5 0L5 10.5V19h8.5l6.7-6.7a6 6 0 0 0 0-8.5zM16 8L2 22M17.5 15H9",
+    // A bird singing into a microphone: round body, head with an OPEN
+    // beak (two lines, mid-song), tail flicks at the back, a capsule
+    // mic on a short stand at beak height, one music note above.
+    iconPaths: [
+      "M4.4 14.5a4.2 4.2 0 1 0 8.4 0a4.2 4.2 0 1 0-8.4 0",
+      "M10 8.3a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0-4.6 0",
+      "M12.5 7.6h.01",
+      "M14.5 7.5l2.9-1.1M14.6 9.2l2.7.8",
+      "M4.7 12.3L2.5 9.7M4.5 14.8L2.3 13.9",
+      "M7 12.8c1.6-.4 3 .3 3.6 1.7",
+      "M7.8 18.6v1.9M10.6 18.6v1.9",
+      "M19.2 5.6a1.6 1.6 0 0 1 3.2 0v2.6a1.6 1.6 0 0 1-3.2 0z",
+      "M20.8 9.8v4.6M18.9 14.4h3.8",
+      "M17.2 1.2v2.7M17.2 1.2c.7.2 1 .7 1.1 1.4M15 3.9a1.1.8 0 1 0 2.2 0a1.1.8 0 1 0-2.2 0",
+    ],
   },
   {
     label: "Profile",
@@ -214,7 +271,15 @@ function readableAccent(hex: string): string {
   return luminance < 0.3 ? "#a3a3a3" : hex;
 }
 
-function DialIcon({ d, circle }: { d: string; circle?: boolean }) {
+function DialIcon({
+  d,
+  paths,
+  circle,
+}: {
+  d?: string;
+  paths?: string[];
+  circle?: boolean;
+}) {
   return (
     <svg
       width="25"
@@ -228,7 +293,11 @@ function DialIcon({ d, circle }: { d: string; circle?: boolean }) {
       aria-hidden
     >
       {circle ? <circle cx="12" cy="8" r="4" /> : null}
-      <path d={d} />
+      {paths
+        ? paths.map((p, i) => <path key={i} d={p} />)
+        : d
+          ? <path d={d} />
+          : null}
     </svg>
   );
 }
@@ -410,8 +479,8 @@ function haptic(ms = 12): void {
 // ── The dial ────────────────────────────────────────────────────────────
 
 /**
- * Which stop a route belongs to (Servers /servers*, Swipe Deck /swipe,
- * Friends /friends*, Chirp /chirp, Profile /profile*). Anything else —
+ * Which stop a route belongs to (Tea /servers*, Fling /swipe,
+ * Homies /friends*, Chirp /chirp, Profile /profile*). Anything else —
  * home, inbox, search, admin, a profile-reveal page — maps to null: no
  * stop is forced and the wheel stays wherever it rests.
  */
@@ -1088,24 +1157,54 @@ export default function DialNav({
 
   // Home dial sizes: mobile keeps the full-size 264px touch dial; md
   // screens step it back to 200px; on lg+ the owner wants it BIG —
-  // 360px, the centrepiece of the PC home. The shell dial is a fixed
-  // compact 190px at every width (it only renders on lg+ anyway).
+  // 360px, the centrepiece of the PC home — but ALSO capped by the
+  // viewport HEIGHT: on laptop-height screens (~700px tall) a 360px
+  // dial plus header, search, intro and footer crowds the column, so
+  // on lg the dial takes at most ~52% of the viewport height
+  // (min(360px, 52dvh)) and tracks window resizes. The shell dial is
+  // a fixed compact 190px at every width (it only renders on lg+
+  // anyway) and is not height-capped.
   const [homeDialSize, setHomeDialSize] = useState<number>(264);
   useEffect(() => {
     if (sizeProp === "shell") return;
     const mqLg = window.matchMedia("(min-width: 1024px)");
     const mqMd = window.matchMedia("(min-width: 768px)");
-    const apply = (): void =>
-      setHomeDialSize(mqLg.matches ? 360 : mqMd.matches ? 200 : 264);
+    const apply = (): void => {
+      if (mqLg.matches) {
+        setHomeDialSize(
+          Math.min(360, Math.round(window.innerHeight * 0.52)),
+        );
+      } else {
+        setHomeDialSize(mqMd.matches ? 200 : 264);
+      }
+    };
     apply();
     mqLg.addEventListener("change", apply);
     mqMd.addEventListener("change", apply);
+    window.addEventListener("resize", apply);
     return () => {
       mqLg.removeEventListener("change", apply);
       mqMd.removeEventListener("change", apply);
+      window.removeEventListener("resize", apply);
     };
   }, [sizeProp]);
   const size = sizeProp === "shell" ? 190 : homeDialSize;
+  // Reserved space around the dial box (applied as its top/bottom
+  // margin below). A wheel skin's furniture can protrude past the
+  // rim — the Pirate Helm's handles reach 30 * (size / 264) px
+  // beyond the face (see DialSkinDecor) — and spinning handles were
+  // covering the intro line above the home dial and the hint below
+  // it (owner screenshot, 2026-11-10). Reserving the maximum
+  // protrusion + a 4px buffer in the layout means the dial's true
+  // footprint includes its furniture: text above/below can NEVER be
+  // overlapped, at home size and docked size alike. Only the pirate
+  // skin protrudes today; the reservation is unconditional, so any
+  // future skin inherits the guarantee and the layout never shifts
+  // when the skin changes. (No left/right reservation: nothing sits
+  // beside the dial — the home column is dial-width, and in the
+  // shell the handles' 22px reach at 190px fits inside the existing
+  // 24px column gap.)
+  const decorReserve = Math.ceil(30 * (size / 264)) + 4;
   const radius = size / 2 - 44 * (size / 264);
   const activeIdx = wrappedIndex(angle);
 
@@ -1166,6 +1265,11 @@ export default function DialNav({
         style={{
           width: size,
           height: size,
+          // The dial's true footprint includes any protruding skin
+          // furniture (decorReserve, above): intro and hint keep
+          // this much clear space above and below the rim, always.
+          marginTop: decorReserve,
+          marginBottom: decorReserve,
           // Haptic-like pulse the moment wheel-style mode engages.
           transform: enteredPulse ? "scale(1.045)" : undefined,
           transition: "transform 200ms ease",
@@ -1307,7 +1411,11 @@ export default function DialNav({
                     : undefined,
                 }}
               >
-                <DialIcon d={stop.iconPath} circle={stop.iconCircle} />
+                <DialIcon
+                  d={stop.iconPath}
+                  paths={stop.iconPaths}
+                  circle={stop.iconCircle}
+                />
                 {count > 0 ? (
                   <span
                     role="status"

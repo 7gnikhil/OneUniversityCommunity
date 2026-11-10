@@ -17,7 +17,10 @@ import { getNewsAction, getWeatherAction } from "@/app/chirp/actions";
 // LIVE dot, a weather chip and the category dropdown; the category is
 // chosen from a native <select> (reliable on phones, accessible), and
 // picking one also opens the panel. Prefetch and the auto-refresh run
-// only once the panel has been opened / while it is open.
+// only once the panel has been opened / while it is open. The panel
+// body ANIMATES open/closed (grid-template-rows 0fr→1fr + opacity,
+// 300ms, chevron rotating in step); `open` remains the data switch —
+// every load fires on the open intent, in parallel with the motion.
 
 const CATEGORY_OPTIONS: { key: NewsCategory; label: string }[] = [
   { key: "top", label: "Top Stories" },
@@ -62,7 +65,7 @@ function Chevron({ open }: { open: boolean }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      className={`shrink-0 text-neutral-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+      className={`shrink-0 text-neutral-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
     >
       <path d="m6 9 6 6 6-6" />
     </svg>
@@ -161,6 +164,13 @@ export default function NewsSection({
   // Prefetch is pointless for a panel that may never be opened, so
   // the warm-up waits for the first open.
   const hasOpenedRef = useRef<boolean>(false);
+  // The panel body mounts on the first open and then STAYS mounted
+  // (collapsed by the grid-rows animation while closed) so closing
+  // animates instead of snapping away.
+  const [everOpened, setEverOpened] = useState<boolean>(false);
+  useEffect(() => {
+    if (open) setEverOpened(true);
+  }, [open ]);
 
   async function loadCategory(
     cat: NewsCategory,
@@ -203,8 +213,8 @@ export default function NewsSection({
   }
 
   // Lazy-load the selected category the first time it is shown. The
-  // panel only renders while open, and choosing a category opens it,
-  // so this never fires for a panel nobody is looking at.
+  // panel's data only loads while open, and choosing a category opens
+  // it, so this never fires for a panel nobody is looking at.
   useEffect(() => {
     if (!open) return;
     if (byCategory[active] === undefined && loading !== active) {
@@ -334,55 +344,80 @@ export default function NewsSection({
         </span>
       </div>
 
-      {open ? (
-        <>
-          {weather ? (
-            <div className="flex items-center justify-between gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-neutral-100">
-                  {weather.placeLabel}
+      {/* The panel body, animated: grid-template-rows 0fr→1fr +
+          opacity over 300ms ease-out (the same technique as the
+          settings dropdowns), chevron rotating in step. `open` still
+          drives ALL data behaviour — the lazy-load / prefetch /
+          refresh effects above fire the moment the open intent
+          lands, in parallel with the motion; nothing waits for the
+          animation. The body mounts on first open (everOpened) and
+          stays mounted afterwards so closing animates too; while
+          closed it is aria-hidden + pointer-events-none, and its
+          -mt-3 cancels this section's flex gap so a closed panel
+          still costs zero space. The regional line lost its -mt-1:
+          inside the clipping wrapper a negative top margin would
+          shave the text. */}
+      <div
+        aria-hidden={!open}
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+          open
+            ? "grid-rows-[1fr] opacity-100"
+            : "pointer-events-none -mt-3 grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          {everOpened ? (
+            <div className="flex flex-col gap-3">
+              {weather ? (
+                <div className="flex items-center justify-between gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-neutral-100">
+                      {weather.placeLabel}
+                    </p>
+                    <p className="mt-0.5 text-xs text-neutral-400">
+                      {weather.conditionLabel} · Humidity{" "}
+                      {weather.humidityPercent}% · Wind {weather.windKmh}{" "}
+                      km/h
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-3xl font-semibold text-neutral-50">
+                    {weather.temperatureC}°
+                    <span className="text-base text-neutral-400">C</span>
+                  </p>
+                </div>
+              ) : null}
+
+              {active === "regional" ? (
+                <p className="text-[11px] text-neutral-500">
+                  News for {regionLabel}
                 </p>
-                <p className="mt-0.5 text-xs text-neutral-400">
-                  {weather.conditionLabel} · Humidity{" "}
-                  {weather.humidityPercent}% · Wind {weather.windKmh} km/h
+              ) : null}
+
+              {items === undefined || loading === active ? (
+                <p className="py-6 text-center text-sm text-neutral-500">
+                  Loading news…
                 </p>
-              </div>
-              <p className="shrink-0 text-3xl font-semibold text-neutral-50">
-                {weather.temperatureC}°
-                <span className="text-base text-neutral-400">C</span>
-              </p>
+              ) : items.length === 0 ? (
+                <p className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm text-neutral-500">
+                  News unavailable right now — check back in a bit.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {items.map((item) => (
+                    <NewsCard
+                      key={item.link}
+                      item={item}
+                      category={active}
+                      categoryLabel={activeLabel}
+                      now={now}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
-
-          {active === "regional" ? (
-            <p className="-mt-1 text-[11px] text-neutral-500">
-              News for {regionLabel}
-            </p>
-          ) : null}
-
-          {items === undefined || loading === active ? (
-            <p className="py-6 text-center text-sm text-neutral-500">
-              Loading news…
-            </p>
-          ) : items.length === 0 ? (
-            <p className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4 text-center text-sm text-neutral-500">
-              News unavailable right now — check back in a bit.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {items.map((item) => (
-                <NewsCard
-                  key={item.link}
-                  item={item}
-                  category={active}
-                  categoryLabel={activeLabel}
-                  now={now}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      ) : null}
+        </div>
+      </div>
     </section>
   );
 }

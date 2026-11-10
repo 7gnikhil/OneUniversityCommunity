@@ -19,6 +19,14 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 //                               in lib/auth/account / lib/server/owner)
 //   - Admin Pass holders are never held at the verification gate.
 export async function middleware(request: NextRequest) {
+  // Stamp the route on the request headers so server components can
+  // gate on it — components/DialShellServer reads x-pathname to skip
+  // the dial-data computation (getDialData) under /admin. Set before
+  // the first NextResponse.next({ request }) so every response built
+  // from this request (including the setAll recreations below)
+  // forwards it.
+  request.headers.set("x-pathname", request.nextUrl.pathname);
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

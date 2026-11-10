@@ -206,7 +206,7 @@ export function CreateFlairForm({
           className="rounded-xl border border-neutral-800 bg-black px-3 py-2 text-sm text-white focus:border-neutral-500 focus:outline-none"
           aria-label="Scope"
         >
-          <option value="">Global (all servers)</option>
+          <option value="">Global (all teas)</option>
           {servers.map((server) => (
             <option key={server.id} value={server.id}>
               {server.name}

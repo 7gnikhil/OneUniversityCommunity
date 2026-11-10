@@ -30,7 +30,7 @@ export default async function FriendsPage() {
   if (!account) {
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-xl font-semibold">Friends</h1>
+        <h1 className="text-xl font-semibold">Homies</h1>
         <p className="text-sm leading-relaxed text-neutral-400">
           Your account isn&apos;t finished yet — complete sign-up first, then
           your chats show up here.
@@ -93,7 +93,7 @@ export default async function FriendsPage() {
           ← OneUco
         </Link>
         <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
-          Friends
+          Homies
         </p>
       </div>
 
@@ -103,14 +103,14 @@ export default async function FriendsPage() {
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 px-6 py-10 text-center">
           <p className="text-base font-semibold">No matches yet</p>
           <p className="text-sm leading-relaxed text-neutral-400">
-            When you and someone like each other in the Swipe Deck, your chat
-            opens here.
+            When you and someone like each other in Fling, your chat opens
+            here.
           </p>
           <Link
             href="/swipe"
             className="rounded-full bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-neutral-200"
           >
-            Open the Swipe Deck
+            Open Fling
           </Link>
         </div>
       ) : (

@@ -1604,3 +1604,238 @@ page.tsx, app/admin/reports/page.tsx). No other files changed except
 the new supabase/migration-0011.sql. Behaviour-neutral by
 construction: every changed await produces the same rows in the same
 order; the only removed query was a byte-identical duplicate count.
+
+
+---
+
+## Addendum 2026-11-10 (late) — Renames (Tea / Fling / Homies), four new dial icons, admin dial-strip, animated dropdowns, PC dial fixes
+
+Owner-directed batch, display strings and presentation only unless
+noted. NO route, identifier, table/column, CSS-var or action name
+changed anywhere in this batch; no migration. Dial stop hrefs are
+unchanged (/servers, /swipe, /friends, /chirp, /profile) and the hue
+vars (--stop-servers / --stop-swipe / --stop-friends / --stop-chirp)
+are untouched — every stop icon still draws in currentColor.
+
+### 1. Servers → "Tea" (+ spilled-tea-cup icon)
+
+Dial stop label "Servers" → "Tea". User-visible strings changed:
+
+- components/DialNav.tsx: stop label "Tea"; route-map comment.
+- lib/page-intros.ts (servers line): "Your teas — campus hangouts
+  for every gang and fandom. Sip, chat, stay anonymous in Maya
+  Jwalam."
+- app/layout.tsx metadata description: "Fling matches, Tea
+  hangouts, Chirp, …".
+- app/servers/page.tsx: h1 "Tea"; section chip "Tea"; "your teas
+  show up here"; "Tea isn't fully configured yet"; "No teas yet —
+  brew the first one below."
+- app/servers/CreateServerForm.tsx: "Create a Tea"; "Tea name";
+  "Create Tea"; "+ Create a Tea"; "Couldn't create the Tea."
+- app/servers/actions.ts (user-facing errors): "Give your Tea a
+  name"; "Pick who the Tea is for"; "That Tea doesn't exist" (×5);
+  "This Tea is private"; "Join this Tea before posting"; flair
+  error "…this Tea"; inbox body "Open Tea to jump in."
+- app/servers/[serverId]/page.tsx: Shell title "Tea" (×3); "That
+  Tea doesn't exist."; "Back to Tea" (×2); "This Tea is private…";
+  "Public Tea".
+- app/servers/[serverId]/ServerChat.tsx: placeholder "Message this
+  Tea…"; non-member line "Join this Tea to post."
+- app/servers/join/[code]/page.tsx: "That Tea doesn't exist
+  anymore."; "Open Tea"; "All teas".
+- app/servers/join/[code]/JoinInviteButton.tsx: "Join Tea".
+- app/inbox/page.tsx: notice fallback "a Tea".
+- app/help/page.tsx: FAQ "What is Tea?" + answer; rules line "in
+  chats, teas, Chirps…".
+- app/admin/page.tsx: tool bodies "inside teas", "per-Tea flairs".
+- app/admin/AdminQueueBits.tsx: option "Global (all teas)".
+- app/admin/reports/page.tsx: label "Tea message:".
+
+Icon: the chat-bubble path was replaced by a SPILLED TEA CUP
+(multi-path, stroke set language — 24×24, currentColor, 1.8 width):
+cup tipped to the right with handle, a wavy spill stream leaving
+the rim, one airborne droplet (closed teardrop), and a puddle wave
+beneath. DialIcon was extended minimally for this: DialStopDef
+gained optional `iconPaths?: string[]` (iconPath now optional) and
+DialIcon renders one <path> per entry when paths are given; the
+other stops' rendering is byte-identical.
+
+### 2. Swipe Deck → "Fling" (+ couple icon)
+
+Dial stop label "Swipe Deck" → "Fling". Strings changed:
+
+- app/swipe/page.tsx: h1 "Fling"; section chip "Fling"; "Fling
+  opens up here"; header comment.
+- lib/page-intros.ts (swipe line): "Fling a follow at someone —
+  swipe right to fling, left to pass. Your details unlock only
+  when they accept."
+- app/friends/page.tsx: empty state "…like each other in Fling…",
+  "Open Fling".
+- app/help/page.tsx: FAQ "How does Fling work?".
+
+Icon: the heart was replaced (Addition 3) by a GIRL + BOY FACING
+EACH OTHER HOLDING HANDS (multi-path): two circle heads, her hair
+arc + triangle dress, his straight torso + trouser lines, arms
+meeting at centre with a small ring (r≈0.9) marking the clasped
+hands at (12, 12.8).
+
+### 3. Friends → "Homies" (+ walking-student icon)
+
+Dial stop label "Friends" → "Homies". Strings changed:
+
+- app/friends/page.tsx: h1 "Homies"; section chip "Homies"; empty
+  state (see Fling list above).
+- lib/page-intros.ts (friends line): "Your homies — chats, online
+  status and typing live here. Yellow double-ticks mean they've
+  seen your message."
+- app/inbox/InboxActions.tsx: accept result "Homies now ✓".
+- components/FollowButton.tsx: matched state "Homies ✓".
+- app/help/page.tsx: FAQ "…a chat opens in Homies."
+
+Note: no "Friend requests" UI string exists in the tree (follow
+requests live in the Inbox under their own wording), so there was
+no "Homie requests" string to create; no grammar was forced.
+
+Icon: the two-people outline was replaced by a single WALKING
+STUDENT character (multi-path): bucket hat (brim + crown), a
+sunglasses band across the face, a takeaway cup with lid in the
+right hand, a phone rectangle in the left, mid-stride legs.
+Legibility priority at 25px was hat + glasses + cup; the legs
+survived the render check (see Verification) and were kept.
+
+### 4. Chirp icon → bird singing into a microphone
+
+Name unchanged ("Chirp"); only the icon changed. The old bird path
+was replaced (multi-path): side-profile bird — round body, head
+with an OPEN beak (two lines), tail flicks, wing arc, legs — facing
+a capsule microphone on a short stand at beak height, with one
+small music note floating above-left of the mic.
+
+All four new icons live only in DialNav's STOPS (`iconPaths`); the
+old icon paths (chat bubble, heart, two-people, old bird) were
+grep-confirmed absent from the rest of the tree — the dial is the
+only place section icons render.
+
+### 5. Admin: dial data stripped under /admin (Addition 2)
+
+- Gate: middleware.ts stamps an `x-pathname` request header;
+  components/DialShellServer.tsx returns bare children for any
+  /admin path BEFORE any fetching, so getDialData never runs for
+  admin renders — saving its ~10 round trips (unread counts,
+  profile, theme, skin reads) per admin render, the dominant block
+  named in the admin speed pass above. components/DialShell.tsx
+  HIDDEN_PREFIXES now lists "/admin" (replacing the two auth-only
+  entries) as the client-side half of the gate for soft
+  navigations.
+- What admin renders instead: its own existing chrome only —
+  subpage "← /admin" links and the admin home's "View site" + Log
+  out. No replacement bar was needed; the admin area was never
+  dependent on the shell for a way back.
+- Non-admin pages (home + five sections) are untouched: the gate
+  matches the /admin prefix only.
+
+### 6. Animated dropdowns (Addition 6)
+
+- New shared client wrapper: components/AnimatedDropdown.tsx.
+  Header row = title + current selection's name in the existing
+  pill + a chevron; closed by default; expands/collapses with the
+  CSS grid-template-rows 0fr→1fr technique + opacity, 300ms
+  ease-out; chevron rotates over the same 300ms. Disclosure
+  semantics: the header is a <button> with aria-expanded /
+  aria-controls (the title stays an <h2> around it), the region is
+  aria-hidden + pointer-events-none while closed, Escape closes,
+  and choosing an option collapses the dropdown via a capture-phase
+  click check (the option's form submission proceeds untouched).
+- components/InterfacePicker.tsx and components/DialSkinPicker.tsx
+  now render inside it (identical rows, forms and server actions;
+  the metal-frame section shell moved into the wrapper). Current
+  selection is still marked in the list ("· on now", highlighted
+  row) and in the closed header pill.
+- Chirp LIVE NEWS panel (components/NewsSection.tsx): the panel
+  body no longer mounts/unmounts. It now sits in the same
+  grid-rows 0fr→1fr + opacity animation (300ms ease-out) and the
+  bar chevron's rotation was harmonised to 300ms. The body mounts
+  on first open (new `everOpened` state) and stays mounted
+  afterwards (aria-hidden + pointer-events-none while closed) so
+  closing animates too; a -mt-3 while closed cancels the section's
+  flex gap so a closed panel still costs zero space. The category
+  control REMAINS the native styled <select>. Data behaviour is
+  byte-identical: every effect still keys off `open`, so lazy-load,
+  prefetch and refresh fire on the open intent, in parallel with
+  the animation — nothing waits for the motion. (One cosmetic
+  casualty: the regional line's -mt-1 was dropped — inside the
+  clipping wrapper a negative top margin would shave the text.)
+
+### 7. PC dial fixes (Addition 7) — decor overflow, height cap, rhythm
+
+From the owner's laptop screenshot (Pirate Helm applied): the
+helm's protruding handles covered the intro line above the home
+dial and the hint below it.
+
+- Reserved overflow: DialSkinDecor's pirate handles protrude
+  30 * (size / 264) px past the rim — the maximum of any skin.
+  DialNav now computes
+  `decorReserve = Math.ceil(30 * (size / 264)) + 4` px and applies
+  it as the dial box's marginTop/marginBottom, so the dial's true
+  footprint includes its furniture and text above/below can never
+  be overlapped. Values: 45px at 360px home, 34px at 264px, 27px
+  at 200px, 26px at the 190px docked size. Unconditional (not
+  pirate-only): the layout never shifts when skins change and any
+  future protruding skin inherits the guarantee. Top/bottom only —
+  nothing sits beside the dial horizontally (home column is
+  dial-width; in the shell the handles' ~22px reach at 190px fits
+  inside the existing 24px column gap).
+- Height-aware home dial: on lg the size is now
+  `min(360, Math.round(window.innerHeight * 0.52))` — i.e.
+  min(360px, ~52dvh) — computed in the existing homeDialSize
+  effect, which now also listens to window resize. Phone (264px)
+  and md (200px) behaviour unchanged; the shell dial is unchanged
+  (fixed 190px, no height cap, its render path and size logic
+  untouched apart from inheriting the shared decor reserve above).
+- PC rhythm (app/page.tsx, lg only): main vertical padding
+  py-6 → lg:py-10; search form mt-5 → lg:mt-8; dial container
+  py-8 → lg:py-10; footer pb-2 → lg:pb-4. Everything stays
+  centred; no rail/sidebar (previously rejected, not revived).
+
+### Judgement calls (renames)
+
+- "Maya Jwalam" — the main community's proper name — unchanged.
+- Create-form audience options "Private among friends/strangers"
+  left as-is: relationship descriptors, not section naming.
+- ServerSettings' panel is titled "Members & invites" (no
+  server/friends naming); its "Add your matches directly" helper
+  left as-is.
+- Generic technical "server" (server-side, Server Actions,
+  "use server", component/type names like ServerChat,
+  CreateServerForm, addableFriends) untouched — identifiers and
+  comments are not display strings.
+- Dial hint copy under the home dial still says "Swipe to browse
+  wheel styles…" in wheel-style mode — that's the verb (the
+  gesture), not the section name.
+
+### Verification (local only — no push, no live-site checks)
+
+- Bun transpiler parse PASS on all 27 touched TS/TSX files
+  (DialNav, DialShell, DialShellServer, AnimatedDropdown,
+  InterfacePicker, DialSkinPicker, NewsSection, FollowButton,
+  AdminQueueBits, middleware.ts, page-intros.ts, layout.tsx,
+  page.tsx, the servers tree incl. ServerChat/ServerSettings
+  neighbours, swipe, friends, inbox, help, admin pages).
+- Icons rendered locally with cairosvg at large size and at a true
+  25px, eyeballed: Tea (tilted cup + stream + droplet + puddle)
+  reads; Fling (two figures, clasped-hands ring) reads; Homies
+  (hat + glasses + cup + phone + stride) reads; Chirp (bird + open
+  beak + mic) reads. Three refinements came out of the render
+  check: the Chirp note was shrunk and moved up-left so it no
+  longer merges with the mic capsule; the Homies brim was narrowed
+  (13 → 11.6 wide) and its cup lengthened; the Tea handle was
+  enlarged slightly.
+- Grep audits: no user-visible "Servers" / "Swipe Deck" /
+  "Friends" section naming remains anywhere in app/, components/
+  or lib/. Every remaining hit is a code comment (e.g. "Friends —
+  the dial's chat stop" in app/friends/page.tsx) or an identifier
+  (FriendsPage, addableFriends, AddableFriendData) — intentional,
+  per the display-strings-only rule. The one late catch,
+  ServerChat's "Join this server to post.", was renamed to "Join
+  this Tea to post." and the final sweep for "this server / the
+  server" phrasing in JSX returns nothing.

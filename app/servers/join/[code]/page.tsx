@@ -42,7 +42,7 @@ export default async function JoinInvitePage({
     } else {
       const server = await getServerById(admin, invite.server_id);
       if (!server) {
-        body = <p className="text-sm text-neutral-400">That server doesn&apos;t exist anymore.</p>;
+        body = <p className="text-sm text-neutral-400">That Tea doesn&apos;t exist anymore.</p>;
       } else if (account) {
         const membership = await getMembership(admin, server.id, account.id);
         body = (
@@ -66,7 +66,7 @@ export default async function JoinInvitePage({
                   href={`/servers/${server.id}`}
                   className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-black transition hover:bg-neutral-200"
                 >
-                  Open server
+                  Open Tea
                 </Link>
               </>
             ) : (
@@ -86,7 +86,7 @@ export default async function JoinInvitePage({
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
       {body}
       <Link href="/servers" className="text-sm text-neutral-500 transition hover:text-white">
-        All servers
+        All teas
       </Link>
     </main>
   );

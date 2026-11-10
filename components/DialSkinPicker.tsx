@@ -1,13 +1,15 @@
 import { getTheme } from "@/lib/themes";
 import { DIAL_SKINS, type DialSkinId } from "@/lib/dial-skins";
 import { setMyDialSkinFormAction } from "@/app/profile/theme-actions";
+import AnimatedDropdown from "@/components/AnimatedDropdown";
 
 // Profile settings → Dial style: the list twin of the dial's
 // long-press wheel-style mode (hold the dial → swipe → tap centre).
 // Same action, same profiles.dial_skin — this list is for anyone who
 // would rather tap than hold-and-swipe. 'Auto' (the first row) means
-// the wheel wears the applied interface's own skin. Server component
-// with plain forms, like the Interface picker above it.
+// the wheel wears the applied interface's own skin. Like the
+// Interface picker above it, the list lives inside the shared
+// AnimatedDropdown; the rows are plain server-rendered forms.
 
 export default function DialSkinPicker({
   currentId,
@@ -49,16 +51,15 @@ export default function DialSkinPicker({
   ];
 
   return (
-    <section className="metal-frame mt-6 w-full rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-left">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-white">Dial style</h2>
-        <span className="rounded-full bg-neutral-800 px-2.5 py-0.5 text-[11px] font-medium text-neutral-300">
-          {currentId === "auto"
-            ? "Auto"
-            : (DIAL_SKINS.find((skin) => skin.id === currentId)?.name ??
-              "Auto")}
-        </span>
-      </div>
+    <AnimatedDropdown
+      title="Dial style"
+      currentLabel={
+        currentId === "auto"
+          ? "Auto"
+          : (DIAL_SKINS.find((skin) => skin.id === currentId)?.name ??
+            "Auto")
+      }
+    >
       <p className="mt-1 text-xs leading-relaxed text-neutral-500">
         The wheel itself — a pirate helm, car wheels, or your
         interface&apos;s own skin. It changes only the dial, never the
@@ -107,6 +108,6 @@ export default function DialSkinPicker({
           </form>
         ))}
       </div>
-    </section>
+    </AnimatedDropdown>
   );
 }

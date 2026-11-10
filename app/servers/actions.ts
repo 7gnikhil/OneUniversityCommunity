@@ -109,13 +109,13 @@ export async function createServerAction(
   const ctx = await requireCtx();
   if (!ctx) return { error: "Please sign in again.", serverId: null };
   const name = input.name.trim().slice(0, 60);
-  if (!name) return { error: "Give your server a name.", serverId: null };
+  if (!name) return { error: "Give your Tea a name.", serverId: null };
   if (
     input.type !== "public" &&
     input.type !== "friends_private" &&
     input.type !== "strangers_private"
   ) {
-    return { error: "Pick who the server is for.", serverId: null };
+    return { error: "Pick who the Tea is for.", serverId: null };
   }
 
   const { data, error } = await ctx.admin
@@ -130,7 +130,7 @@ export async function createServerAction(
     .select("id")
     .single();
   if (error || !data) {
-    return { error: "Couldn't create the server — please try again.", serverId: null };
+    return { error: "Couldn't create the Tea — please try again.", serverId: null };
   }
   const serverId: string = (data as { id: string }).id;
   // The owner's membership row and the default channel are independent
@@ -160,12 +160,12 @@ export async function joinServerAction(serverId: string): Promise<ActionResult> 
     getServerById(ctx.admin, serverId),
     getMembership(ctx.admin, serverId, ctx.account.id),
   ]);
-  if (!server) return { error: "That server doesn't exist." };
+  if (!server) return { error: "That Tea doesn't exist." };
   if (existing) return { error: null };
   // Public servers (incl. Maya Jwalam) are joinable directly; private
   // servers join via invite code/link/direct add only.
   if (server.type !== "public" && !ctx.isAppAdmin) {
-    return { error: "This server is private — you need an invite." };
+    return { error: "This Tea is private — you need an invite." };
   }
   const { error } = await ctx.admin.from("server_members").insert({
     server_id: serverId,
@@ -230,14 +230,14 @@ export async function sendServerMessageAction(
     getServerById(ctx.admin, serverId),
     getMembership(ctx.admin, serverId, ctx.account.id),
   ]);
-  if (!server) return { error: "That server doesn't exist.", messageId: null };
+  if (!server) return { error: "That Tea doesn't exist.", messageId: null };
 
   let membership = fetchedMembership;
   if (!membership) {
     // Public servers auto-join on first post (matches the join button's
     // one-tap model); private servers never auto-join.
     if (server.type !== "public" && !ctx.isAppAdmin) {
-      return { error: "Join this server before posting.", messageId: null };
+      return { error: "Join this Tea before posting.", messageId: null };
     }
     const { error: joinError } = await ctx.admin.from("server_members").insert({
       server_id: serverId,
@@ -375,7 +375,7 @@ export async function setMessageFlairAction(
   } | null;
   if (!message) return { error: "That message is gone." };
   const server = await getServerById(ctx.admin, message.server_id);
-  if (!server) return { error: "That server doesn't exist." };
+  if (!server) return { error: "That Tea doesn't exist." };
 
   let flair: { id: string; server_id: string | null; name: string } | null = null;
   if (flairId) {
@@ -390,7 +390,7 @@ export async function setMessageFlairAction(
       name: string;
     } | null;
     if (!flair || (flair.server_id !== null && flair.server_id !== message.server_id)) {
-      return { error: "That flair doesn't belong to this server." };
+      return { error: "That flair doesn't belong to this Tea." };
     }
   }
 
@@ -433,7 +433,7 @@ export async function togglePinMessageAction(
     getServerById(ctx.admin, message.server_id),
     getMembership(ctx.admin, message.server_id, ctx.account.id),
   ]);
-  if (!server) return { error: "That server doesn't exist." };
+  if (!server) return { error: "That Tea doesn't exist." };
   // Main channel: app admins pin (official pins). Other servers: staff.
   const allowed = server.is_main_channel
     ? ctx.isAppAdmin
@@ -562,7 +562,7 @@ async function requireStaff(
     getServerById(ctx.admin, serverId),
     getMembership(ctx.admin, serverId, ctx.account.id),
   ]);
-  if (!server) return { error: "That server doesn't exist." };
+  if (!server) return { error: "That Tea doesn't exist." };
   if (!isServerStaff(membership, server, ctx.account.id, ctx.isAppAdmin)) {
     return { error: "Only the server owner and mods can do that." };
   }
@@ -667,7 +667,7 @@ export async function directAddMemberAction(
       targetAccountId,
       "group_invite",
       `You've been added to ${server.name}`,
-      "Open Servers to jump in.",
+      "Open Tea to jump in.",
       serverId,
     ),
   ]);

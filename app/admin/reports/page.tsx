@@ -114,7 +114,7 @@ export default async function AdminReportsPage() {
                 </p>
                 {message ? (
                   <p className="rounded-xl bg-black px-3 py-2 text-sm text-neutral-300">
-                    Server message: “{message.body ?? "[photo]"}”{" "}
+                    Tea message: “{message.body ?? "[photo]"}”{" "}
                     <Link
                       href={`/servers/${message.server_id}`}
                       className="text-sky-300 transition hover:underline"
