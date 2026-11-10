@@ -124,8 +124,8 @@ interface DialStopDef {
   iconPaths: string[];
   /**
    * Filled accent sub-drawings (the spill drop, the shades band, the
-   * clasped hands, the mic head, the bird's eye): solid shapes that
-   * carry the read at small sizes where a stroke would vanish.
+   * clasped hands, the swift's body): solid shapes that carry the
+   * read at small sizes where a stroke would vanish.
    */
   iconFills?: string[];
   /** This stop's badge-ring structure (DialBadgeRing). */
@@ -213,22 +213,21 @@ const STOPS: DialStopDef[] = [
     href: "/chirp",
     accentVar: "var(--stop-chirp)",
     ring: "ticks",
-    // A bird singing into a mic: one big round body + head, OPEN
-    // beak (two bold lines) aimed at a solid mic capsule on a stand,
-    // tail flicks at the back, one music note above.
+    // A swift in a glide, nothing else (owner, 2026-11-10: first a
+    // singing bird at a mic, then "a hummingbird, just", then "or a
+    // swift" — both birds were drawn and render-tested at 36/22px;
+    // the swift's crescent read cleanly at 22px, the hummingbird
+    // fused twice, so the swift shipped): two long scythe wings as
+    // closed crescent leaves, one solid teardrop body, short forked
+    // tail.
     iconPaths: [
-      "M3.4 13.8a5.2 5.2 0 1 0 10.4 0a5.2 5.2 0 1 0-10.4 0",
-      "M9.9 8.6a3.1 3.1 0 1 0 6.2 0a3.1 3.1 0 1 0-6.2 0",
-      "M16.4 7.4l2.9-1.1M16.5 9.9l2.8.9",
-      "M4.3 10.6L1.9 7.9",
-      "M20.9 11.2v9.4",
-      "M18.6 20.6h4.6",
-      "M6.6 2.2v3.8",
+      "M11.7 11C8.4 7.8 5.4 6 2.2 5.6c1.2 3.4 3.7 6.1 7 7.7 1.2.6 2.6-.6 2.5-2.3z",
+      "M12.3 11c3.3-3.2 6.3-5 9.5-5.4-1.2 3.4-3.7 6.1-7 7.7-1.2.6-2.6-.6-2.5-2.3z",
+      "M11.3 16.7L9.5 20.2",
+      "M12.7 16.7l1.8 3.5",
     ],
     iconFills: [
-      "M19.4 4a1.5 2.8 0 0 1 3 0v5.6a1.5 2.8 0 0 1-3 0z",
-      "M13.4 7.05a.85.85 0 1 0 0 1.7a.85.85 0 1 0 0-1.7z",
-      "M3.95 6.2a1.25.95 0 1 0 2.5 0a1.25.95 0 1 0-2.5 0z",
+      "M12 10.2c1.3 0 2.1 1 2.1 2.3 0 1.9-.9 3.6-2.1 4.6-1.2-1-2.1-2.7-2.1-4.6 0-1.3.8-2.3 2.1-2.3z",
     ],
   },
   {

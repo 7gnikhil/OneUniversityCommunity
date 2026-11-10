@@ -1929,3 +1929,51 @@ every hue fill.
 - Grep re-confirmed: no component outside DialNav references
   DialIcon/iconPaths — the dial remains the only place section
   icons render.
+
+---
+
+## Addendum 2026-11-10 (late evening): Chirp glyph — the bird is now a swift
+
+Owner, in three short messages: "make chirp icon a humming bird",
+"just" (i.e. the bird alone — no mic, no music note, no stand),
+then "or a swift". Both birds were drawn in the current bold hand
+and render-tested head-to-head; **the swift shipped**.
+
+### What changed (components/DialNav.tsx only)
+The Chirp stop's glyph — previously a bird singing into a mic on a
+stand with a music note — is replaced by a swift in a glide, and
+nothing else: two long scythe wings drawn as closed crescent leaves
+swept back from the centre, one solid teardrop body (iconFills),
+and a short forked tail (two bold strokes). Same iconPaths/
+iconFills system, same stroke 2.4, same glyph size (~60% of the
+badge), same tick-notched badge ring and metal-token ring colours.
+All other stops, dial physics, skins and labels untouched. The
+iconFills doc comment was updated to match (it name-checked the
+mic head / bird's eye, which no longer exist).
+
+### Render test (cairosvg, true-size rasters, nearest-upscaled to eyeball)
+Both candidates rendered at 36px and 22px, idle ink on the dark
+surface and white on the Chirp hue (#0284c7):
+- Hummingbird, round 1 (stroked outline body + closed wing leaf +
+  motion arc + 3-stroke tail fan + eye dot): at 36px the beak read
+  but head/wing/body fused into one scribble; at 22px it was an
+  abstract squiggle — tail and wing gone.
+- Hummingbird, round 2 (simplified per protocol: solid filled
+  body, one wing arc, 2 tail strokes, eye and spare detail cut):
+  cleaner mass, but the wing arc vanished into the solid body and
+  the tail merged with its bottom edge — at 22px a tadpole-like
+  blob with a beak bar; still not a bird.
+- Swift (passed round 1 unchanged): at 36px and at 22px, idle and
+  active, the crescent wings + centre body + fork read instantly
+  as a swift in flight — the crispest of the five glyphs at 22px.
+Decision rule was "cleaner at 22px wins, tie goes to the
+hummingbird" — no tie: the swift won outright after the
+hummingbird's one allowed simplification round.
+Final in-situ check: the shipped file was re-rendered through the
+icon harness (all five stops, 36/22 icons + 71/37 badge mocks);
+the swift sits cleanly inside the tick-notched ring at docked
+size and the set is otherwise byte-identical to 45da0f1.
+
+### Verification (local only — no push, no live-site checks)
+- Bun transpiler parse PASS on components/DialNav.tsx (the only
+  file touched besides this note).
