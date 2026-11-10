@@ -9,7 +9,8 @@ import {
 } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { MessageRow } from "@/lib/social";
-import { imageExtension, validateImageFile } from "@/lib/validation";
+import { validateImageFile } from "@/lib/validation";
+import { describeUploadError, prepareImageForUpload } from "@/lib/images";
 import {
   fetchMessagesAction,
   markMatchReadAction,
@@ -259,14 +260,26 @@ export default function ChatView({
     let imageUrl: string | null = null;
     if (imageFile) {
       const chosen: File = imageFile;
+      // Shrink before upload (lib/images) — same fragile raw-upload
+      // pattern as Chirp's; preparation never blocks a send.
+      const prepared = await prepareImageForUpload(chosen);
+      if ("error" in prepared) {
+        setSending(false);
+        setError(prepared.error);
+        return;
+      }
       const supabase = createClient();
-      const path = `${myAccountId}/dm-${matchId}-${Date.now()}.${imageExtension(chosen)}`;
+      const path = `${myAccountId}/dm-${matchId}-${Date.now()}.${prepared.image.extension}`;
       const { error: uploadError } = await supabase.storage
         .from("chirp-images")
-        .upload(path, chosen, { contentType: chosen.type, upsert: false });
+        .upload(path, prepared.image.blob, {
+          contentType: prepared.image.contentType,
+          upsert: false,
+        });
       if (uploadError) {
+        console.error("[dm] photo upload failed", uploadError);
         setSending(false);
-        setError("Photo upload failed — check your connection and try again.");
+        setError(describeUploadError(uploadError));
         return;
       }
       imageUrl = supabase.storage.from("chirp-images").getPublicUrl(path).data.publicUrl;

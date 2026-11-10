@@ -11,7 +11,8 @@ import {
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { FlairRow, JwalamMessageView } from "@/lib/servers";
-import { imageExtension, validateImageFile } from "@/lib/validation";
+import { validateImageFile } from "@/lib/validation";
+import { describeUploadError, prepareImageForUpload } from "@/lib/images";
 import {
   deleteServerMessageAction,
   fetchJwalamMessagesAction,
@@ -178,14 +179,26 @@ export default function JwalamChat({
     let imageUrl: string | null = null;
     if (imageFile) {
       const chosen: File = imageFile;
+      // Shrink before upload (lib/images) — same fragile raw-upload
+      // pattern as Chirp's; preparation never blocks a send.
+      const prepared = await prepareImageForUpload(chosen);
+      if ("error" in prepared) {
+        setSending(false);
+        setError(prepared.error);
+        return;
+      }
       const supabase = createClient();
-      const path = `${myAccountId}/msg-${serverId}-${Date.now()}.${imageExtension(chosen)}`;
+      const path = `${myAccountId}/msg-${serverId}-${Date.now()}.${prepared.image.extension}`;
       const { error: uploadError } = await supabase.storage
         .from("server-images")
-        .upload(path, chosen, { contentType: chosen.type, upsert: false });
+        .upload(path, prepared.image.blob, {
+          contentType: prepared.image.contentType,
+          upsert: false,
+        });
       if (uploadError) {
+        console.error("[jwalam] photo upload failed", uploadError);
         setSending(false);
-        setError("Photo upload failed — check your connection and try again.");
+        setError(describeUploadError(uploadError));
         return;
       }
       imageUrl = supabase.storage.from("server-images").getPublicUrl(path).data.publicUrl;

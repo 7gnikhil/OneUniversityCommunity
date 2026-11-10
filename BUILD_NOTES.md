@@ -2114,3 +2114,134 @@ NOT repeated in Fling data (separate table, separate fields).
   page.
 - Migration 0012 is written but NOT applied, and no deployment was
   made — the parent applies the migration, then pushes.
+
+
+---
+
+## Addendum 2026-11-10 (late evening) — Chirp photo upload failure: diagnosis + fix
+
+Owner's phone screenshot (21:16 IST): in the Chirp composer he typed
+"Launched OneUco on Diwali 2026", attached the AI launch-poster image
+(preview rendered, ✕ present), tapped Chirp, and got the red line
+"Photo upload failed — check your connection and try again." The post
+text was fine; only the photo upload failed.
+
+### Diagnosis — the exact call chain (BEFORE the fix)
+
+`ChirpFeed.pickImage` → `validateImageFile` (lib/validation.ts: rejects
+non-`image/*`, >5 MB, empty) → preview via `URL.createObjectURL` →
+`ChirpFeed.onPost` (app/chirp/ChirpFeed.tsx):
+
+```
+createClient()  (browser anon-key client, lib/supabase/client.ts)
+supabase.storage.from("chirp-images").upload(
+  `${myAccountId}/chirp-${Date.now()}.${imageExtension(chosen)}`,
+  chosen,                                   // ← the RAW original File
+  { contentType: chosen.type, upsert: false })
+```
+
+- Bucket `chirp-images`, path `<accounts.id>/chirp-<ts>.<ext>`.
+  `myAccountId` is `getMyAccount().id` = `public.accounts.id` — exactly
+  the folder the storage policy scopes writes to
+  (`(storage.foldername(name))[1] = public.current_account_id()::text`,
+  supabase/storage-policies.sql).
+- NO compression/preparation existed anywhere in the app (grep:
+  zero canvas/createImageBitmap/toBlob hits before this fix). Every
+  upload sent the original bytes, whatever their size.
+- The ONLY failure handling: `if (uploadError) setError("Photo upload
+  failed — check your connection and try again.")` — the StorageError
+  object was discarded, not even console-logged. That generic string
+  lives/lived in four files: ChirpFeed, ChatView (DM), ServerChat,
+  JwalamChat — all the same copy-pasted block.
+- The screenshot proves the failure happened at the storage POST, not
+  at pick-time validation: on a validation failure `pickImage` clears
+  the preview and shows the specific validation line; here the preview
+  is still attached and the error is the onPost generic string. So the
+  file passed validation (image, ≤5 MB) and the upload request itself
+  failed.
+
+### Comparison with the WORKING uploads (profile DP / gallery)
+
+ProfileEditor.uploadAvatar is the same pattern byte-for-byte: same
+browser client, same `${accountId}/<slot>-<ts>.<ext>` folder, same raw
+File, same `contentType: file.type, upsert: false` — only the bucket
+differs (`avatars`), and storage-policies.sql defines IDENTICAL
+public-read + owner-folder insert/update/delete policies for `avatars`
+and `chirp-images`. There is NO code-level bucket-name, path or policy
+mismatch for Chirp: the repo cannot tell the two paths apart except
+by bucket name.
+
+### Root-cause assessment (confidence + what would confirm)
+
+Two live candidates, in order:
+
+1. **Raw multi-MB upload over a weak connection (most likely, and the
+   one this fix removes).** The composer's single non-resumable POST
+   of an unprepared file is the most fragile request in the app; the
+   screenshot's status bar showed ~3.58 KB/s throughput. Avatar
+   uploads "working" historically does not contradict this — different
+   files, moments and connections.
+2. **Dashboard-side `chirp-images` bucket configuration (cannot be
+   confirmed or excluded from code — PARENT: check the dashboards).**
+   Buckets and per-bucket settings live in the Supabase dashboard,
+   not the repo (schema.sql documents bucket creation only in
+   comments). If `chirp-images` carries a lower `file_size_limit` or
+   an `allowed_mime_types` list that rejects the poster's type — or if
+   its storage.objects INSERT policy was never created in the live DB —
+   the identical code that succeeds into `avatars` fails here.
+   CHECK: Storage → chirp-images → settings (file size limit, allowed
+   MIME types) vs avatars; and confirm the three chirp-images policies
+   from supabase/storage-policies.sql exist in the live DB.
+
+Confirming evidence going forward: after this fix, every failed upload
+`console.error`s the RAW StorageError (message + status) under a
+`[chirp]`/`[dm]`/`[server-chat]`/`[jwalam]` tag, and the user-facing
+line names the class (size / type / missing bucket / policy / network).
+One reproduced failure with that log open settles (1) vs (2) outright.
+
+### Fix (this addendum's code)
+
+1. **`prepareImageForUpload(file)` — new, lib/images.ts** (the shared
+   image lib; no compressor existed to reuse). Canvas-based:
+   longest side ≤1600px; small files (≤1.5 MB and within the cap) pass
+   through untouched; PNG keeps PNG when the downscaled encode is
+   ≤2 MB (posters stay crisp, transparency survives), else the JPEG
+   ladder (0.85, then 0.8× at 0.80); photos go straight to the JPEG
+   ladder; GIF/SVG pass through (animation/vector); undecodable files
+   (e.g. HEIC in Chrome) pass through as the original bytes — storage
+   stays the judge, so preparation can never break an upload that
+   previously worked. Result carries blob + contentType + extension,
+   and the call sites build the storage path from the PREPARED
+   extension (a PNG→JPEG fall-through correctly lands as `.jpg`).
+2. **`describeUploadError(error)` — new, lib/images.ts.** Maps the
+   StorageError to an honest one-liner: 413/size → too-large line;
+   mime → type line; bucket-not-found/404 → unavailable line;
+   RLS/401/403 → refused/sign-in line; TypeError/failed-to-fetch →
+   the original connection line (now reserved for real network
+   failures); anything else → neutral retry line. Smoke-tested in Bun
+   against all six shapes — mappings verified.
+3. **Wired into all four composers that shared the block** (identical
+   before/after shape; UX otherwise unchanged — attach → preview → ✕
+   → post):
+   - app/chirp/ChirpFeed.tsx → `chirp-images`, prefix `chirp-` (the bug)
+   - app/friends/[matchId]/ChatView.tsx → `chirp-images`, prefix `dm-<matchId>-` (same bucket — would have hit the same failure next)
+   - app/servers/[serverId]/ServerChat.tsx → `server-images`, prefix `msg-<serverId>-`
+   - app/servers/[serverId]/JwalamChat.tsx → `server-images`, prefix `msg-<serverId>-`
+   Each now: `prepareImageForUpload` → upload prepared blob → on
+   error `console.error(tag, uploadError)` + `describeUploadError`.
+   `imageExtension` imports removed from all four (path extension now
+   comes from the prepared image).
+   NOT touched (different buckets, different error strings, working
+   historically — noted as follow-ups if wanted): ProfileEditor avatar
+   upload ("Upload failed — …", avatars bucket) and CreateServerForm
+   icon upload (server-images).
+
+### Verification (local only)
+
+- Bun transpiler parse PASS: lib/images.ts, ChirpFeed.tsx,
+  ChatView.tsx, ServerChat.tsx, JwalamChat.tsx.
+- Grep: no `imageExtension` left in the four components; the generic
+  string survives ONLY inside `describeUploadError`'s network branch.
+- Bun smoke test of `describeUploadError` over six synthetic
+  StorageError shapes — all mapped as designed.
+- Code only: no push, no deploy, no live-site usage.

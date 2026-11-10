@@ -5,7 +5,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { ChirpCommentView, ChirpView } from "@/lib/chirp";
 import Avatar from "@/components/Avatar";
-import { imageExtension, validateImageFile } from "@/lib/validation";
+import { validateImageFile } from "@/lib/validation";
+import { describeUploadError, prepareImageForUpload } from "@/lib/images";
 import {
   addChirpCommentAction,
   createChirpAction,
@@ -71,14 +72,28 @@ export default function ChirpFeed({
     let imageUrl: string | null = null;
     if (imageFile) {
       const chosen: File = imageFile;
+      // Shrink before upload (lib/images): a raw multi-MB photo/poster
+      // as one storage POST is the upload most likely to die on a weak
+      // connection. Preparation never blocks a post — undecodable
+      // files pass through as the original bytes.
+      const prepared = await prepareImageForUpload(chosen);
+      if ("error" in prepared) {
+        setPosting(false);
+        setError(prepared.error);
+        return;
+      }
       const supabase = createClient();
-      const path = `${myAccountId}/chirp-${Date.now()}.${imageExtension(chosen)}`;
+      const path = `${myAccountId}/chirp-${Date.now()}.${prepared.image.extension}`;
       const { error: uploadError } = await supabase.storage
         .from("chirp-images")
-        .upload(path, chosen, { contentType: chosen.type, upsert: false });
+        .upload(path, prepared.image.blob, {
+          contentType: prepared.image.contentType,
+          upsert: false,
+        });
       if (uploadError) {
+        console.error("[chirp] photo upload failed", uploadError);
         setPosting(false);
-        setError("Photo upload failed — check your connection and try again.");
+        setError(describeUploadError(uploadError));
         return;
       }
       imageUrl = supabase.storage.from("chirp-images").getPublicUrl(path).data.publicUrl;
