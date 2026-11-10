@@ -249,3 +249,150 @@ All seven touched/new files — DialNav, DialShell, DialShellServer,
 SideNav stub, layout, home page, lib/dial-badges — passed a
 TypeScript syntax parse (compiler API, zero diagnostics). Remaining
 `SideNav` references are comments only (grep-verified).
+
+---
+
+# Addendum — 2026-11-10: Live News + weather inside Chirp
+
+Owner request: a LIVE news block inside Chirp (/chirp) — photos on
+every card, national / government / regional / tech / sports (+ a
+Celebs tab added the same day), live weather for the student's own
+place, and it must stay fresh without a page reload. Working-tree
+only: nothing pushed, deployed, or applied to Supabase. No new
+dependencies and no API keys anywhere.
+
+## What was built
+- NEW `lib/news.ts` — the whole data layer (server-side only):
+  - A defensive regex RSS parser: CDATA unwrapping (The Hindu wraps
+    title/link/pubDate/description in CDATA), HTML-entity decoding,
+    tag-stripped summaries truncated at 180 chars, and an image hunt
+    in order media:content → media:thumbnail → image enclosure →
+    first <img> in the description. Attribute reading accepts BOTH
+    quote styles — Bollywood Hungama emits `url='…'` single-quoted,
+    which the first cut missed (caught in the live smoke test:
+    celebs went 10/12 → 12/12 images after the fix).
+  - `getNews(category, region)`: fetches the category's feeds in
+    parallel (`fetch` with `next: { revalidate: 600 }`, so Vercel's
+    data cache holds upstream RSS for 10 min), merges, dedupes by
+    link and by title, sorts by pubDate desc, caps at 12 items, then
+    fills missing photos (below).
+  - `getWeather(region)`: Open-Meteo current conditions, same
+    10-min cache; WMO weather_code → label map.
+  - `resolveRegionForAccount(supabase, account)` (below).
+- NEW `components/NewsSection.tsx` (client) — rendered by the chirp
+  page between the page header and the (untouched) ChirpFeed, so
+  user chirps and the composer are exactly as before. Contents:
+  header row (pulsing red LIVE dot + "Updated HH:MM" stamp), the
+  weather card (place, °C, condition, humidity, wind — omitted if
+  the weather fetch failed), category tabs (Top Stories, National,
+  Regional, Tech, Sports, Celebs), and a card grid (1 column, 2 on
+  sm+ within the chirp column): photo (16:9, lazy, hides on error),
+  source + time-ago, headline, 2-line summary; tapping opens the
+  original article in a new tab. Tabs lazy-load on first open; the
+  open tab + weather auto-refresh every 5 minutes via the server
+  actions (no page reload); time-ago labels re-tick every minute.
+  Failed/empty categories show "News unavailable right now — check
+  back in a bit", never an error page.
+- `app/chirp/actions.ts` — NEW `getNewsAction(category)` and
+  `getWeatherAction()`. The category string is validated against the
+  known list (anything else → Top). The region is ALWAYS resolved
+  server-side from the session account; the client never names a
+  place.
+- `app/chirp/page.tsx` — server-renders the first paint: region +
+  Top news + weather in parallel with the existing feed reads, and
+  passes them to NewsSection as props.
+
+## Feeds wired (all verified with curl on 2026-11-10)
+| Tab | Feed | Items | Images | Freshness |
+|---|---|---|---|---|
+| Top | The Hindu front page (thehindu.com/feeder/default.rss) | 60 | media:content on ~54 | same-hour |
+| Top | Indian Express India (indianexpress.com/section/india/feed/) | 200 | media:content + thumbnails | same-hour |
+| National | The Hindu National (…/news/national/feeder/default.rss) | 60 | ~59 | same-hour |
+| National | Indian Express India (same as Top) | 200 | yes | same-hour |
+| Tech | The Hindu Sci-Tech (…/sci-tech/feeder/default.rss) | 60 | ~58 | same-hour |
+| Tech | Indian Express Technology (…/section/technology/feed/) | 200 | media:content | same-hour |
+| Sports | The Hindu Sport (…/sport/feeder/default.rss) | 60 | ~44 | same-hour |
+| Sports | ESPNcricinfo (espncricinfo.com/rss/content/story/feeds/0.xml) | 100 | media:content on all | same-hour |
+| Celebs | Indian Express Entertainment (…/section/entertainment/feed/) | 200 | media:content + thumbnails | same-hour |
+| Celebs | Bollywood Hungama (bollywoodhungama.com/rss/news.xml) | 50 | media:content on all 50 (single-quoted attrs) | same-hour |
+| Regional | The Hindu city/state feeders (below) | 60 each | most items | same-hour |
+
+Regional feeders wired (all verified 200/60 items): Hyderabad,
+Chennai, bangalore (lowercase path works; capital-B also resolves),
+Delhi, mumbai, Kolkata, Kochi, Thiruvananthapuram, Vijayawada, plus
+the Andhra Pradesh and Telangana state feeders used for state-level
+matches and the default region.
+
+Rejected candidates: PIB (pib.gov.in RssMain) — returns 200 with 20
+items but the feed is Hindi-only with NO pubDate, NO description and
+NO photos, so it cannot be time-sorted or card-rendered; "government"
+coverage folds into National via Hindu National + IE India as the
+brief allowed. Gadgets 360 and both NDTV feeds (gadgets + sports)
+return 403 to server-side fetches — dropped, not wired. Pinkvilla
+(/feed 404, /rss is an HTML page), Filmfare (/feed and /rss 404) —
+dead. Times of India Entertainment verifies (20 items, fresh) but
+carries NO images at all — dropped for Celebs, where photos are the
+point; HT Entertainment also verified (72 items, all with
+media:content) but IE + Bollywood Hungama were the stronger pair.
+
+## Region resolution (lib/news.ts)
+Accounts carry a self-declared `college_name` + `college_code`
+(there is no colleges table / profiles.college_id in this schema);
+the `college_codes` registry has a `city` column. Resolution order:
+1. college_codes.city via the account's college_code,
+2. college_codes.city via the exact college_name,
+3. keyword/alias match on the college name (Hyderabad, Chennai,
+   Bengaluru/Bangalore, Delhi, Mumbai, Kolkata, Kochi/Cochin/
+   Ernakulam, Thiruvananthapuram/Trivandrum, Vijayawada, state names),
+4. default: "Andhra Pradesh & Telangana" (both state feeders merged,
+   labelled as such; weather anchored on Hyderabad).
+Each region also carries lat/lon for weather (state regions anchor
+on Vijayawada for AP, Hyderabad for Telangana).
+
+## Weather
+Open-Meteo (no key): /v1/forecast?latitude&longitude&current=
+temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m
+&timezone=auto. Verified with curl for Hyderabad coords during the
+build (26.6 °C, code 0 → "Clear sky" at the time). Failure → the
+weather card is simply omitted.
+
+## Photo fallback (owner refinement: "any with photos — use API,
+open source ones")
+Every card should carry a photo. Chain per item, applied to ALL
+categories inside `getNews` (so it runs once per 10-minute cache
+window per category, capped at the 12-item page — never per page
+view):
+1. The feed's own image (parser hunt above) — the wired feeds are
+   image-rich, so this covers most items.
+2. Openverse API (api.openverse.org/v1/images, anonymous tier, no
+   key): query = the headline's significant words (stopwords
+   stripped, first 5 content words — headlines lead with the
+   subject, which is what makes celeb names land). Field used:
+   `thumbnail` FIRST (Openverse serves it from its own CDN for
+   embedding), falling back to the direct `url`. Caveat: the API
+   itself returns 504 through this build sandbox's proxy on every
+   attempt, so neither field could be load-tested from here — the
+   preference is by design, and step 3 covers the gap if Openverse
+   is unreachable in production too.
+3. Wikimedia Commons API search (generator=search, namespace 6,
+   imageinfo thumburl at width 800) with the same query. VERIFIED
+   end-to-end during the build, including a hotlink check on
+   upload.wikimedia.org (HTTP 200).
+4. Still nothing → the card renders a styled gradient tile with the
+   category label (per-category gradient in NewsSection), never a
+   broken-image icon. Client-side, an <img> that errors also swaps
+   to the same tile.
+
+## Verification done here
+Same constraint as previous builds (no node_modules; Vercel is the
+typecheck): all four touched/new files — lib/news.ts,
+app/chirp/actions.ts, app/chirp/page.tsx, components/NewsSection.tsx
+— passed a TypeScript syntax parse (compiler API, zero diagnostics).
+Beyond parsing, lib/news.ts was transpiled and RUN against the live
+feeds: Top 12 items (12 with photos, correctly merged/sorted across
+both sources), Celebs 12/12 photos after the quote-style fix, Sports
+12/12 (Hindu items without photos visibly filled from Wikimedia
+Commons by the fallback), Regional (default AP+Telangana and
+Hyderabad) 12 items each, and weather returned a full card for the
+default region. NOT verified: Openverse (sandbox 504, above) and
+the in-browser rendering (parent's live check after deploy).

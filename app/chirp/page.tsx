@@ -3,7 +3,13 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { listChirps } from "@/lib/chirp";
+import {
+  getNews,
+  getWeather,
+  resolveRegionForAccount,
+} from "@/lib/news";
 import { accentHex } from "@/lib/validation";
+import NewsSection from "@/components/NewsSection";
 import ChirpFeed from "./ChirpFeed";
 
 // Chirp — the global public feed. Identities are normal here: authors
@@ -40,6 +46,14 @@ export default async function ChirpPage() {
   ]);
   const accent = accentHex(myProfile?.accent_color);
 
+  // The Live block's first paint: my region (from my college), the Top
+  // stories and the local weather — all fail-soft inside lib/news.
+  const region = await resolveRegionForAccount(supabase, me);
+  const [initialNews, initialWeather] = await Promise.all([
+    getNews("top", region),
+    getWeather(region),
+  ]);
+
   // Record views for what was just rendered (denormalised counter; the
   // feed is the view, so no per-chirp view table exists in the schema).
   if (chirps.length > 0) {
@@ -68,6 +82,12 @@ export default async function ChirpPage() {
           Chirp
         </p>
       </div>
+
+      <NewsSection
+        initialNews={initialNews}
+        initialWeather={initialWeather}
+        regionLabel={region.label}
+      />
 
       <ChirpFeed
         initialChirps={chirps}

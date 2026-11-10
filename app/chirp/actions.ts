@@ -8,6 +8,15 @@ import {
   type ChirpCommentView,
   type ChirpView,
 } from "@/lib/chirp";
+import {
+  getNews,
+  getWeather,
+  NEWS_CATEGORIES,
+  resolveRegionForAccount,
+  type NewsCategory,
+  type NewsItem,
+  type WeatherView,
+} from "@/lib/news";
 
 // Chirp actions. Posting/deleting/liking/commenting run on the SESSION
 // client — RLS covers all of them (own rows only; admins may delete any
@@ -138,4 +147,25 @@ export async function fetchChirpCommentsAction(
   const ctx = await requireCtx();
   if (!ctx) return [];
   return listChirpComments(ctx.supabase, chirpId, ctx.account.id);
+}
+
+// ── Live news + weather (the "Live" block above the feed) ───────────
+// The region is always resolved server-side from the signed-in
+// account's college — the client only names a category, never a place.
+
+export async function getNewsAction(category: string): Promise<NewsItem[]> {
+  const ctx = await requireCtx();
+  if (!ctx) return [];
+  const cat: NewsCategory = (NEWS_CATEGORIES as string[]).includes(category)
+    ? (category as NewsCategory)
+    : "top";
+  const region = await resolveRegionForAccount(ctx.supabase, ctx.account);
+  return getNews(cat, region);
+}
+
+export async function getWeatherAction(): Promise<WeatherView | null> {
+  const ctx = await requireCtx();
+  if (!ctx) return null;
+  const region = await resolveRegionForAccount(ctx.supabase, ctx.account);
+  return getWeather(region);
 }
