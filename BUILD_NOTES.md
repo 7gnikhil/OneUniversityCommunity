@@ -1497,3 +1497,110 @@ the gesture once; interfaces moved to Profile settings only.
   the home page's neighbouring elements, skin-mode preview/confirm
   on a device, and the tip card's once-ever behaviour across two
   logins. All fail-soft by construction.
+
+---
+
+## Addendum 2026-11-10 (late) — Admin speed pass ("the admin is very slow")
+
+Full audit of every admin surface's cold-render data path, then
+plumbing-only fixes. Rendered output, row order and numbers are
+IDENTICAL everywhere — only the waiting changed. Parent action:
+apply supabase/migration-0011.sql, then push as usual.
+
+### What every admin render paid BEFORE (shared frame)
+
+Counted in Supabase round trips (RT) on a cold render:
+
+| Layer | Before | Notes |
+|---|---|---|
+| Middleware | 1 RT (accounts) | getSessionUser is local-claims (0 RT); the accounts lookup is unavoidable here — middleware and the page render are separate execution contexts with no shared cache. Unchanged. |
+| Root layout | 2 RT (+0–2 cached) | getMyAccount (accounts) + getProfileThemeId (profiles) via React cache(); theme/diwali settings are unstable_cache(30s), 0 RT warm. Unchanged. |
+| Dial shell (DialShellServer → getDialData) | ~10 RT / 3 serial stages | profile (1) ∥ DM unread (~2); server unread (2) ∥ inbox unread (3 counts); theme_id (1) ∥ dial_skin (1). Request-cached, and IDENTICAL on every signed-in page — not admin-specific. See "not query-shaped" below. |
+| Page gate (requireAdminPage or admin home's inline copy) | 1 Auth-server NETWORK call + 1 RT (accounts) | supabase.auth.getUser() re-validated against the Auth server and getAccountByAuthUserId re-ran the accounts query the layout had JUST resolved for the same render. Paid by every admin page, twice over on admin home (layout + inline gate). |
+
+### Fixes
+
+1. **lib/server/admin-page.ts (requireAdminPage)** — session/account
+   now resolve through lib/auth/my-account (getMySessionUser /
+   getMyAccount, React cache()). The layout already computed both for
+   this render, so the guard costs **0 extra round trips** (was 1
+   Auth-server call + 1 duplicate accounts query on every admin
+   subpage). Redirect outcomes identical: no session → /admin/login;
+   no row / gate fail → /auth/admin-denied. Admin server ACTIONS were
+   deliberately NOT touched: they keep their own auth.getUser() gate,
+   per the codebase's session doctrine that mutation paths re-validate
+   against the Auth server (lib/auth/session.ts header).
+2. **app/admin/page.tsx (admin home)** — same cached gate swap for its
+   inline copy (its null-account warning render is preserved:
+   getMyAccount returns null in exactly the cases the old lookup did);
+   loadStats() no longer counts total accounts twice (its
+   countRows(accounts) was byte-identical to the total getOnlineCounts
+   already returns — presenceCounts.total now feeds the card);
+   stats ∥ getDiwaliMode() in one Promise.all instead of serial.
+3. **app/admin/requests/page.tsx** — the pending-reveals query (which
+   depends on nothing on the page) now starts immediately and is
+   awaited after the flagged chain instead of parked behind it; server
+   names ∥ author profiles in one Promise.all. 5 serial stages → 3.
+4. **app/admin/reports/page.tsx** — reporter profiles now run in the
+   same Promise.all as the message/chirp lookups (all three depend
+   only on the reports list). Post-reports stages 2 → 1.
+5. **supabase/migration-0011.sql (NOT applied)** — six idempotent
+   indexes, each justified in-file by its named query:
+   reports (status, created_at desc) [table had NO index],
+   reveal_requests (status, created_at desc),
+   developer_requests (status, created_at desc) [no index existed],
+   server_messages (flair_id, created_at desc),
+   college_codes (status, created_at),
+   accounts (status).
+
+### Per-page table (page-level only; shared frame above excluded)
+
+Queries = Supabase round trips in the page's own code; Stages = serial
+await rounds. Gate cost is listed separately because fix 1 removed it
+for every subpage at once.
+
+| Admin page | Queries before → after | Serial stages before → after | Gate before → after |
+|---|---|---|---|
+| /admin (home) | 10 → 9 (8 count RTs in 1 parallel round + getUser + acct lookup → 7 count RTs in 1 round; diwali cached 0–1, now parallel) | 3 → 2 | inline getUser + lookup → 0 extra (cached) |
+| /admin/accounts | 3 → 3 (accounts list, then profiles ∥ presence — already batched, no N+1) | 2 → 2 | getUser + lookup → 0 extra |
+| /admin/appearance | 0–1 → 0–1 (theme setting is unstable_cache 30s) | 1 → 1 | getUser + lookup → 0 extra |
+| /admin/requests | 5 → 5 | 5 → 3 | getUser + lookup → 0 extra |
+| /admin/reports | 4 → 4 | 3 → 2 | getUser + lookup → 0 extra |
+| /admin/colleges | 2 → 2 (adder profiles genuinely depend on the list) | 2 → 2 | getUser + lookup → 0 extra |
+| /admin/developer-requests | 2 → 2 (author profiles depend on the list) | 2 → 2 | getUser + lookup → 0 extra |
+| /admin/flairs | 2 → 2 (already one Promise.all) | 1 → 1 | getUser + lookup → 0 extra |
+| /admin/check | unchanged — one-time post-sign-in checkpoint (getUser + account lookup + rare bootstrap writes), not a browsing surface | — | — |
+| /admin/login, /admin/forgot-password | 0 queries on render (static forms; cost lives in their submit actions, incl. the throttled admin-login path, untouched) | — | — |
+
+Net effect per admin subpage render: **−1 Auth-server network call,
+−1 duplicate accounts query, and 0–2 fewer serial stages**; admin home
+additionally drops a duplicate full-table count. With the shared frame
+included, a queue page's cold render went from ~19–20 round trips /
+~8–9 serial stages to ~16–17 / ~6–7, of which the dial shell's ~10
+(see below) is now the dominant block.
+
+### Not query-shaped (named, not "fixed")
+
+- **The dial shell is the biggest remaining cost on admin pages** —
+  getDialData (~10 RT / 3 stages: unread counts, profile, theme,
+  skin) runs for EVERY signed-in page because the dial renders beside
+  admin pages on desktop too. It is request-cached and identical
+  across the whole app, so it is not admin slowness per se; skipping
+  it under /admin would change the admin pages' rendered shell (no
+  dial / no badges there), which is a product decision for the owner,
+  outside this output-identical pass.
+- **Cold serverless starts** (Vercel bom1) stack on top of every
+  figure above; the keep-warm cron covers /login + /api/warm, not
+  /admin, so the owner's first admin click of a session can still pay
+  a cold start. No code fix exists for that in this pass.
+- Middleware's per-request accounts query cannot be deduped into the
+  page render (separate execution context in Next.js).
+
+### Verification (local only)
+
+Bun transpiler parse PASS on all 4 touched TS/TSX files
+(lib/server/admin-page.ts, app/admin/page.tsx, app/admin/requests/
+page.tsx, app/admin/reports/page.tsx). No other files changed except
+the new supabase/migration-0011.sql. Behaviour-neutral by
+construction: every changed await produces the same rows in the same
+order; the only removed query was a byte-identical duplicate count.

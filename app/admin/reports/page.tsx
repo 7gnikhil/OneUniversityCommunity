@@ -35,7 +35,6 @@ export default async function AdminReportsPage() {
     accountIds.add(report.reporter_id);
     if (report.reported_account_id) accountIds.add(report.reported_account_id);
   });
-  const profiles = await getPublicProfilesByIds(admin, [...accountIds]);
 
   const messageIds = reports
     .map((report) => report.server_message_id)
@@ -43,7 +42,11 @@ export default async function AdminReportsPage() {
   const chirpIds = reports
     .map((report) => report.chirp_id)
     .filter((id): id is string => id !== null);
-  const [messagesResult, chirpsResult] = await Promise.all([
+  // Reporter profiles, reported messages and reported chirps all
+  // depend only on the reports list — profiles used to be awaited
+  // alone before the other two started; all three now share one round.
+  const [profiles, messagesResult, chirpsResult] = await Promise.all([
+    getPublicProfilesByIds(admin, [...accountIds]),
     messageIds.length
       ? admin.from("server_messages").select("id, body, server_id").in("id", messageIds)
       : Promise.resolve({ data: [] as Array<{ id: string; body: string | null; server_id: string }> }),

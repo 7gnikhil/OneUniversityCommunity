@@ -12,6 +12,17 @@ import { REVEAL_COLUMNS, type RevealRequestRow } from "@/lib/inbox";
 export default async function AdminRequestsPage() {
   const { admin } = await requireAdminPage();
 
+  // The pending-reveals overview depends on nothing else on this page.
+  // It used to run LAST, parked behind the whole flagged-messages
+  // chain; start it now and await it once the chain lands, so its
+  // round trip overlaps instead of adding a serial stage.
+  const revealsPromise = admin
+    .from("reveal_requests")
+    .select(REVEAL_COLUMNS)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
   const reqFlair = await getReqToAdminFlair(admin);
   let flagged: ServerMessageRow[] = [];
   if (reqFlair) {
@@ -27,24 +38,25 @@ export default async function AdminRequestsPage() {
   }
 
   const serverIds = [...new Set(flagged.map((row) => row.server_id))];
-  const { data: serverData } = serverIds.length
-    ? await admin.from("servers").select("id, name").in("id", serverIds)
-    : { data: [] };
+  // Server names and author profiles both depend only on `flagged` —
+  // they used to run one after the other; one parallel round now.
+  const [serverResult, authorProfiles] = await Promise.all([
+    serverIds.length
+      ? admin.from("servers").select("id, name").in("id", serverIds)
+      : Promise.resolve({
+          data: [] as Array<{ id: string; name: string }>,
+        }),
+    getPublicProfilesByIds(
+      admin,
+      flagged.map((row) => row.author_id),
+    ),
+  ]);
   const serverNames = new Map<string, string>();
-  ((serverData ?? []) as Array<{ id: string; name: string }>).forEach((row) => {
+  ((serverResult.data ?? []) as Array<{ id: string; name: string }>).forEach((row) => {
     serverNames.set(row.id, row.name);
   });
-  const authorProfiles = await getPublicProfilesByIds(
-    admin,
-    flagged.map((row) => row.author_id),
-  );
 
-  const { data: revealData } = await admin
-    .from("reveal_requests")
-    .select(REVEAL_COLUMNS)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const { data: revealData } = await revealsPromise;
   const pendingReveals = (revealData ?? []) as RevealRequestRow[];
 
   return (

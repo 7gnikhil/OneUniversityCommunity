@@ -2,10 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import {
-  getAccountByAuthUserId,
   passesAdminGate,
   type AccountRow,
 } from "@/lib/auth/account";
+import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
 import { getDiwaliMode } from "@/lib/server/diwali-settings";
 import { getOnlineCounts } from "@/lib/presence";
 import DiwaliToggle from "@/components/DiwaliToggle";
@@ -66,7 +66,6 @@ async function loadStats(): Promise<AdminStats> {
   try {
     const admin = createAdminClient();
     const [
-      totalAccounts,
       pendingAccounts,
       pendingVerifications,
       openReports,
@@ -74,7 +73,6 @@ async function loadStats(): Promise<AdminStats> {
       pendingDevRequests,
       presenceCounts,
     ] = await Promise.all([
-      countRows(admin, "accounts"),
       countRows(admin, "accounts", "status", "pending_verification"),
       countRows(admin, "verifications", "status", "pending"),
       countRows(admin, "reports", "status", "open"),
@@ -83,7 +81,10 @@ async function loadStats(): Promise<AdminStats> {
       getOnlineCounts(admin),
     ]);
     return {
-      totalAccounts,
+      // Was a separate countRows(admin, "accounts") — a byte-identical
+      // head-count to the total getOnlineCounts already returns, so the
+      // page used to count every account twice per render.
+      totalAccounts: presenceCounts.total,
       onlineNow: presenceCounts.online,
       pendingAccounts,
       pendingVerifications,
@@ -102,18 +103,21 @@ function formatCount(value: number | null): string {
 }
 
 export default async function AdminPage() {
+  // Gate via the request-cached session/account path (lib/auth/
+  // my-account) — the root layout already resolved both for this
+  // render, so this costs no Auth-server call and no duplicate
+  // accounts query. Outcomes unchanged: no session → /admin/login;
+  // gate failure → /auth/admin-denied; a gate-passing session with NO
+  // account row still renders (the warning section below), exactly as
+  // before, because getMyAccount returns null in the same cases the
+  // old direct lookup did.
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getMySessionUser(supabase);
   if (!user) {
     redirect("/admin/login");
   }
 
-  const account: AccountRow | null = await getAccountByAuthUserId(
-    supabase,
-    user.id,
-  );
+  const account: AccountRow | null = await getMyAccount(supabase);
   if (!passesAdminGate(user.email, account)) {
     redirect("/auth/admin-denied");
   }
@@ -121,8 +125,11 @@ export default async function AdminPage() {
   // (name, @username, OneUco ID, photo, or mail) — only "OneUCo Developer".
   const roleLabel = account?.role === "owner" ? "Owner" : "Admin";
 
-  const stats = await loadStats();
-  const diwaliMode = await getDiwaliMode();
+  // Independent reads — run them together instead of back to back.
+  const [stats, diwaliMode] = await Promise.all([
+    loadStats(),
+    getDiwaliMode(),
+  ]);
   const statCards: Array<{
     label: string;
     value: number | null;
