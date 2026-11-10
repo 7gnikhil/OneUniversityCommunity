@@ -66,12 +66,12 @@ export default async function ServersPage() {
   const accent = accentHex(myProfile?.accent_color);
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
+    <main data-section="servers" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
       <div className="flex items-center justify-between">
         <Link href="/" className="text-sm text-neutral-400 transition hover:text-white">
           ← OneUco
         </Link>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+        <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
           Servers
         </p>
       </div>

@@ -1187,3 +1187,136 @@ before judging this fix; they state server-side final yield per
 category directly. If prod server yield is high but rendering is
 still low, the next investigation is client-side <img> loading
 (NewsCard onError path), not this pipeline.
+
+---
+
+# Addendum 2026-11-10 (evening) — Gold dial + section colours
+
+Owner's words: "Add colors to the dial make gold and add some
+creative colors to the page things." Code only; no push, no deploy,
+no live-site checks — local verification only (owner's standing
+production-check rule).
+
+## 1. Gold dial — Default Midnight + Diwali (lib/themes.ts)
+
+`DialSkinTokens` gained four OPTIONAL fields. Undefined = the exact
+pre-change rendering, which is how the other 16 interfaces stay
+untouched:
+
+| Field | Meaning | Fallback in DialNav |
+|---|---|---|
+| `cap` | centre-hub background | theme `surface2` |
+| `capRing` | centre-hub border colour | skin `ring` |
+| `activeGlow` | extra box-shadow layered under the active stop's hue glow | none |
+| `label` | inactive stop-label colour for faces too bright/dark for the muted tone | theme `muted` |
+
+Plumbed through both palette paths: lib/dial-badges.ts (applied
+interface) and DialNav's previewTheme mapping (interface mode), into
+`DialThemePalette` (same four optional fields).
+
+- **Default Midnight** (dialSkin renamed "Carbon metal" → "Polished
+  gold"; palette/accent tokens NOT changed — buttons etc. are as
+  before): face is a layered polished-gold background — champagne
+  radial sheen top-left, warm radial pool bottom-right, a conic
+  sweep of gold tones (so the metal shifts as the wheel turns),
+  over a linear gold base. ring #8a6414 (outer border + dashed grip
+  ridge), tick #5c430d (engraved bronze on the bright face),
+  glow `0 0 38px rgba(212,175,55,.42)` + drop shadow, cap = radial
+  champagne-to-bronze gradient, capRing #5c430d,
+  activeGlow `0 0 20px rgba(212,175,55,.55)`, label #3d2c05 (deep
+  bronze — the grey muted tone cannot read on polished gold).
+- **Diwali** ("Brass rotary" → "Festive polished gold"): its old
+  flat linear gold was weaker than the new Default skin, so it got
+  the same treatment in an antique register — lamp-light radial
+  highlight, conic brass sweep, deep bronze base (keeps the pale
+  ticks/labels readable against the maroon app). ring #b8860b,
+  tick #fde68a, cap radial gold with capRing #f59e0b,
+  activeGlow amber, label #fde68a.
+- Solar Amber also wears a brass dial but was left as-is (out of
+  the owner's scope; it was not weaker in kind, just simpler).
+
+Dial size, physics, sounds, NAV_DELAY_MS, long-press interface
+mode and all behaviour are untouched — every DialNav change is a
+style value.
+
+## 2. Colourful dial stops — all interfaces (DialNav + globals.css)
+
+New CSS variables, defined once in app/globals.css `:root`
+(defaults; themes MAY override under html[data-theme] rules, none
+must, and none currently do). 600-level tones so labels read on the
+near-black classic face and on light interfaces' pale faces alike:
+
+- `--stop-servers: #7c3aed` (violet)
+- `--stop-swipe: #e11d48` (rose)
+- `--stop-friends: #059669` (emerald)
+- `--stop-chirp: #0284c7` (sky)
+- `--stop-profile: #d97706` (amber)
+
+Each STOPS entry in DialNav carries its `accentVar`. In page mode:
+the ACTIVE stop's circle (background + border) wears its hue with a
+soft glow `0 0 16px color-mix(in srgb, <hue> 48%, transparent)`
+layered over the skin's activeGlow when one exists; the active
+stop's label and the top notch triangle wear the hue; the centre
+hub readout (the resting stop's name) is tinted with the hue.
+Inactive stops are exactly as before, except the label tone may
+come from the skin's new `label` token (gold skins only). In
+interface mode the notch, dots and hub keep the previewed
+interface's accent — unchanged. The unread badge bubble keeps the
+accent (unchanged everywhere).
+
+## 3. Creative colour on pages (globals.css + 5 pages + PageIntro)
+
+- `--section-accent` (new var; `:root` default #737373). Each of
+  the five section pages stamps `data-section="<section>"` on its
+  primary <main> (app/servers, app/swipe, app/friends, app/chirp,
+  app/profile page.tsx), and globals.css binds --section-accent to
+  the matching --stop-* inside that main. Inbox/search have no
+  stamp and keep the neutral default.
+- (a) PageIntro: the dot now uses --section-accent (nested fallback
+  → --accent → #737373), gains a soft halo in the same hue, and a
+  short 16px gradient bar under the dot fading to transparent.
+- (b) Header chip: the five pages had NO icon chip — the header's
+  right-side element is the section label. It now carries the
+  `section-header-chip` class (all five pages): globals.css renders
+  it as a pill — section-hue text on a 14% hue wash, 38% hue border,
+  with a 6px hue dot before the label.
+- (c) Card tint: `main[data-section] .bg-neutral-950/.bg-neutral-900`
+  gain a background-IMAGE only (surface colour never overridden):
+  `linear-gradient(180deg, color-mix(<section hue> 8%), transparent
+  56px)` — a subtle top-edge wash on cards/panels in the section.
+- (d) Semantic colours untouched: the Chirp news LIVE dot stays red
+  (NewsSection not modified), online dots stay emerald, viewed
+  ticks stay amber, errors stay red. No body text recoloured; the
+  login page was not touched at all.
+
+## Variables added — summary
+
+CSS (app/globals.css, all with :root defaults): --stop-servers,
+--stop-swipe, --stop-friends, --stop-chirp, --stop-profile,
+--section-accent. JS skin tokens (lib/themes.ts DialSkinTokens,
+optional, fallback = previous behaviour): cap, capRing,
+activeGlow, label.
+
+## Verification (local only)
+
+- Bun transpiler parse: PASS for lib/themes.ts, lib/dial-badges.ts,
+  components/DialNav.tsx, components/PageIntro.tsx and all five
+  touched page.tsx files.
+- CSS audit: every var() reference in the new code resolves to a
+  definition with a default (the five --stop-* + --section-accent
+  in :root; PageIntro's --accent fallback is the pre-existing :root
+  token). data-section stamps: 5; chip classes: 5.
+- NOT verified (needs parent's single post-deploy live pass):
+  the gold face rendering at 264/360/190px, hue label contrast on
+  the gold face at a glance, and the chip/tint under a light
+  interface (Sakura/Paper) — all are style-only, fail-soft by
+  construction (undefined tokens/vars degrade to today's look).
+
+NOTE for the parent: the gold Default Midnight skin shows when the
+midnight interface is APPLIED (user pick, admin default, or dial
+interface-mode preview). In seasonal-auto with no interface applied
+the dial still renders the classic black palette (DialNav
+constants) — but the per-stop hues and section colours DO show in
+every mode, since they come from globals.css :root defaults. If the
+owner expects gold for everyone immediately, the admin default
+(Admin → Appearance) needs to be set to Default Midnight.

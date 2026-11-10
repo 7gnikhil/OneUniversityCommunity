@@ -54,6 +54,14 @@ export interface DialThemePalette {
   text: string;
   dim: string;
   border: string;
+  /** Optional centre-hub cap background (gold skins). → surface2. */
+  cap?: string;
+  /** Optional centre-hub border colour (gold skins). → ring. */
+  capRing?: string;
+  /** Optional extra glow layered under the active stop's hue glow. */
+  activeGlow?: string;
+  /** Optional inactive stop-label colour (bright/dark faces). → dim. */
+  label?: string;
 }
 
 /**
@@ -78,6 +86,12 @@ interface DialStopDef {
   href: string;
   iconPath: string;
   iconCircle?: boolean;
+  /**
+   * The stop's own hue, as the CSS variable defined in globals.css
+   * (--stop-*). Colours the stop's label and active indicator in
+   * every interface; themes may override the variables, none must.
+   */
+  accentVar: string;
 }
 
 // Minimal stroke icons, one consistent set (ported from the demo).
@@ -85,30 +99,35 @@ const STOPS: DialStopDef[] = [
   {
     label: "Servers",
     href: "/servers",
+    accentVar: "var(--stop-servers)",
     iconPath:
       "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
   },
   {
     label: "Swipe Deck",
     href: "/swipe",
+    accentVar: "var(--stop-swipe)",
     iconPath:
       "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z",
   },
   {
     label: "Friends",
     href: "/friends",
+    accentVar: "var(--stop-friends)",
     iconPath:
       "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
   },
   {
     label: "Chirp",
     href: "/chirp",
+    accentVar: "var(--stop-chirp)",
     iconPath:
       "M20.2 3.8a6 6 0 0 0-8.5 0L5 10.5V19h8.5l6.7-6.7a6 6 0 0 0 0-8.5zM16 8L2 22M17.5 15H9",
   },
   {
     label: "Profile",
     href: "/profile",
+    accentVar: "var(--stop-profile)",
     iconPath: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2",
     iconCircle: true,
   },
@@ -453,6 +472,10 @@ export default function DialNav({
         tick: previewTheme.tokens.dial.tick,
         glow: previewTheme.tokens.dial.glow,
         blur: previewTheme.tokens.dial.blur,
+        cap: previewTheme.tokens.dial.cap,
+        capRing: previewTheme.tokens.dial.capRing,
+        activeGlow: previewTheme.tokens.dial.activeGlow,
+        label: previewTheme.tokens.dial.label,
         surface: previewTheme.tokens.surface,
         surface2: previewTheme.tokens.surface2,
         text: previewTheme.tokens.text,
@@ -470,6 +493,12 @@ export default function DialNav({
   const textTone = pal?.text ?? TEXT;
   const dim = pal?.dim ?? DIM;
   const borderTone = pal?.border ?? BORDER;
+  // Gold-skin extras — every one falls back to the classic treatment,
+  // so skins that don't set them render exactly as before.
+  const cap = pal?.cap ?? surf2;
+  const capRing = pal?.capRing ?? ring;
+  const skinActiveGlow = pal?.activeGlow;
+  const labelTone = pal?.label ?? dim;
 
   const accent =
     previewTheme?.tokens.accent ?? badges?.accentHex ?? FALLBACK_ACCENT;
@@ -923,7 +952,9 @@ export default function DialNav({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       >
-        {/* Top notch marker */}
+        {/* Top notch marker — in page mode it wears the hue of the
+            stop resting at the notch; in interface mode it keeps the
+            previewed interface's accent. */}
         <div
           aria-hidden
           className="absolute left-1/2 -translate-x-1/2 -top-1 z-10"
@@ -932,7 +963,7 @@ export default function DialNav({
             height: 0,
             borderLeft: "9px solid transparent",
             borderRight: "9px solid transparent",
-            borderTop: `13px solid ${accent}`,
+            borderTop: `13px solid ${ifaceMode ? accent : (STOPS[activeIdx]?.accentVar ?? accent)}`,
           }}
         />
         {/* Dial face (rotates; stops are positioned from the same angle
@@ -1037,8 +1068,14 @@ export default function DialNav({
                   width: 52 * (size / 264),
                   height: 52 * (size / 264),
                   color: active ? "#ffffff" : textTone,
-                  background: active ? accent : surf,
-                  borderColor: active ? accentStrong : borderTone,
+                  // The active stop wears its own hue (globals.css
+                  // --stop-*), glowing softly in that hue — plus the
+                  // skin's own halo (gold skins) when it defines one.
+                  background: active ? stop.accentVar : surf,
+                  borderColor: active ? stop.accentVar : borderTone,
+                  boxShadow: active
+                    ? `${skinActiveGlow ? `${skinActiveGlow}, ` : ""}0 0 16px color-mix(in srgb, ${stop.accentVar} 48%, transparent)`
+                    : undefined,
                 }}
               >
                 <DialIcon d={stop.iconPath} circle={stop.iconCircle} />
@@ -1055,7 +1092,7 @@ export default function DialNav({
               </span>
               <span
                 className="mt-1 text-[11px] font-semibold"
-                style={{ color: active ? accentStrong : dim }}
+                style={{ color: active ? stop.accentVar : labelTone }}
               >
                 {stop.label}
               </span>
@@ -1105,8 +1142,8 @@ export default function DialNav({
             style={{
               width: 74 * (size / 264),
               height: 74 * (size / 264),
-              background: surf2,
-              border: `2px solid ${ring}`,
+              background: cap,
+              border: `2px solid ${capRing}`,
             }}
           >
             <span
@@ -1129,13 +1166,16 @@ export default function DialNav({
             style={{
               width: 74 * (size / 264),
               height: 74 * (size / 264),
-              background: surf2,
-              border: `2px solid ${ring}`,
+              background: cap,
+              border: `2px solid ${capRing}`,
             }}
           >
             <span
               className="px-1 text-center font-extrabold leading-tight tracking-tight"
-              style={{ color: accentStrong, fontSize: 13 * (size / 264) }}
+              style={{
+                color: STOPS[activeIdx]?.accentVar ?? accentStrong,
+                fontSize: 13 * (size / 264),
+              }}
             >
               {STOPS[activeIdx]?.label ?? "OneUCo"}
             </span>

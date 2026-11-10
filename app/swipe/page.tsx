@@ -61,7 +61,7 @@ export default async function SwipePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
+    <main data-section="swipe" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
       <div className="flex items-center justify-between">
         <Link
           href="/"
@@ -69,7 +69,7 @@ export default async function SwipePage() {
         >
           ← OneUco
         </Link>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+        <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
           Swipe Deck
         </p>
       </div>

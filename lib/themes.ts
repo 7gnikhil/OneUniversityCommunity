@@ -36,6 +36,26 @@ export interface DialSkinTokens {
   glow: string;
   /** backdrop-filter for frosted skins ("" for opaque skins). */
   blur: string;
+  /**
+   * Optional CSS background for the centre hub cap. Undefined keeps
+   * the classic behaviour (the hub wears the theme's surface-2 tone),
+   * so skins that don't set it render exactly as before.
+   */
+  cap?: string;
+  /** Optional border colour for the centre hub. Undefined → `ring`. */
+  capRing?: string;
+  /**
+   * Optional extra box-shadow layered under the ACTIVE stop's glow
+   * (e.g. the gold halo on the gold skins). Undefined → no extra
+   * shadow; the stop still glows in its own per-stop hue.
+   */
+  activeGlow?: string;
+  /**
+   * Optional colour for INACTIVE stop labels, for skins whose face
+   * is too bright (polished gold) or too dark for the theme's muted
+   * tone to read on. Undefined → the theme's muted tone, as before.
+   */
+  label?: string;
 }
 
 export interface ThemeTokens {
@@ -73,7 +93,7 @@ export const THEMES: ReadonlyArray<AppTheme> = [
     name: "Default Midnight",
     vibe: "The original OneUco black",
     mode: "dark",
-    dialSkin: "Carbon metal",
+    dialSkin: "Polished gold",
     bgPattern: "none",
     surfaceStyle: "flat",
     tokens: {
@@ -82,8 +102,17 @@ export const THEMES: ReadonlyArray<AppTheme> = [
       accent: "#a3a3a3", accent2: "#737373", accentText: "#000000",
       text: "#fafafa", text2: "#d4d4d4", muted: "#a1a1aa",
       dial: {
-        face: "linear-gradient(145deg, #1a1a1e, #101013)",
-        ring: "#2e2e33", tick: "#a1a1aa", glow: "none", blur: "",
+        // Polished-gold watch face: a champagne sheen from the top
+        // left, warmth pooled at the bottom right, and a conic sweep
+        // so the metal shifts tone as the wheel turns under it.
+        face: "radial-gradient(circle at 30% 22%, rgba(255, 252, 214, 0.95) 0%, rgba(255, 252, 214, 0) 34%), radial-gradient(circle at 78% 84%, rgba(122, 72, 0, 0.38) 0%, rgba(122, 72, 0, 0) 48%), conic-gradient(from 215deg, #8a6414, #f7dc6f, #caa12f, #fff0a6, #97701a, #e6bd45, #8a6414), linear-gradient(145deg, #e9c766, #a87b1e)",
+        ring: "#8a6414", tick: "#5c430d",
+        glow: "0 0 38px rgba(212, 175, 55, 0.42), 0 18px 42px rgba(0, 0, 0, 0.45)",
+        blur: "",
+        cap: "radial-gradient(circle at 34% 28%, #fff6bf 0%, #f3d267 34%, #caa12f 68%, #7a5410 100%)",
+        capRing: "#5c430d",
+        activeGlow: "0 0 20px rgba(212, 175, 55, 0.55)",
+        label: "#3d2c05",
       },
     },
   },
@@ -92,7 +121,7 @@ export const THEMES: ReadonlyArray<AppTheme> = [
     name: "Diwali",
     vibe: "Gold on deep maroon — festive",
     mode: "dark",
-    dialSkin: "Brass rotary",
+    dialSkin: "Festive polished gold",
     bgPattern: "stars",
     surfaceStyle: "bordered",
     tokens: {
@@ -101,9 +130,17 @@ export const THEMES: ReadonlyArray<AppTheme> = [
       accent: "#f59e0b", accent2: "#ef4444", accentText: "#1c0a00",
       text: "#fff7ed", text2: "#fed7aa", muted: "#c99a5b",
       dial: {
-        face: "linear-gradient(145deg, #8a6d1f, #5c430d)",
+        // Antique festive gold: a lamp-light highlight at the top, a
+        // conic sweep of brass tones, and a deep bronze base so the
+        // pale ticks and labels stay readable against the maroon app.
+        face: "radial-gradient(circle at 30% 20%, rgba(255, 236, 170, 0.55) 0%, rgba(255, 236, 170, 0) 36%), radial-gradient(circle at 80% 86%, rgba(59, 10, 6, 0.45) 0%, rgba(59, 10, 6, 0) 50%), conic-gradient(from 210deg, #5c430d, #c9971c, #77550c, #f6d365, #8a6414, #b8860b, #5c430d), linear-gradient(145deg, #a87b1e, #5c430d)",
         ring: "#b8860b", tick: "#fde68a",
-        glow: "0 0 34px rgba(245, 158, 11, 0.35)", blur: "",
+        glow: "0 0 38px rgba(245, 158, 11, 0.45), 0 18px 42px rgba(0, 0, 0, 0.45)",
+        blur: "",
+        cap: "radial-gradient(circle at 34% 28%, #fff3b0 0%, #f6d365 32%, #d9a41e 66%, #77550c 100%)",
+        capRing: "#f59e0b",
+        activeGlow: "0 0 20px rgba(245, 158, 11, 0.55)",
+        label: "#fde68a",
       },
     },
   },
