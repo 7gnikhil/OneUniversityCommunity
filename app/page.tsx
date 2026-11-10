@@ -1,14 +1,10 @@
 import Link from "next/link";
 import DialNav, { type DialBadges } from "@/components/DialNav";
 import LiveClock from "@/components/LiveClock";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
 import { isOwnerEmail } from "@/lib/server/owner";
-import { getProfileByAccountId } from "@/lib/profile";
-import { getTotalDmUnread } from "@/lib/social";
-import { getTotalServerUnread } from "@/lib/servers";
-import { getInboxUnreadCount } from "@/lib/inbox";
-import { accentHex } from "@/lib/validation";
+import { getDialData } from "@/lib/dial-badges";
 
 // Dial Home — the app's home screen (signed-in, verified users land here;
 // the middleware sends everyone else to /login or the /verify shell).
@@ -29,29 +25,11 @@ export default async function DialHomePage() {
   let badges: DialBadges | undefined;
   let inboxUnread = 0;
   if (account) {
-    // Independent reads run in parallel — the dial home used to wait on
-    // them one by one, which made the home screen feel asleep.
-    const [myProfile, dmUnread] = await Promise.all([
-      getProfileByAccountId(supabase, account.id),
-      getTotalDmUnread(supabase, account.id),
-    ]);
-    const accent = accentHex(myProfile?.accent_color);
-    let serverUnread = 0;
-    try {
-      const admin = createAdminClient();
-      const counts = await Promise.all([
-        getTotalServerUnread(admin, account.id),
-        getInboxUnreadCount(admin, account.id),
-      ]);
-      serverUnread = counts[0];
-      inboxUnread = counts[1];
-    } catch {
-      // Badge counts are best-effort; the dial itself never breaks.
-    }
-    badges = {
-      counts: { "/friends": dmUnread, "/servers": serverUnread },
-      accentHex: accent,
-    };
+    // Shared with the desktop shell dial — one computation, both
+    // placements (lib/dial-badges).
+    const dialData = await getDialData(supabase, account.id);
+    badges = dialData.badges;
+    inboxUnread = dialData.inboxUnread;
   }
   const accent = badges?.accentHex ?? "#171717";
 

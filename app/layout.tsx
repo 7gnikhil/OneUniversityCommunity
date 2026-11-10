@@ -3,10 +3,9 @@ import "./globals.css";
 import { isDiwaliLive } from "@/lib/server/diwali-settings";
 import { createClient } from "@/lib/supabase/server";
 import { getMySessionUser } from "@/lib/auth/my-account";
-import { isOwnerEmail } from "@/lib/server/owner";
 import DiwaliBanner from "@/components/DiwaliBanner";
 import PresenceHeartbeat from "@/components/PresenceHeartbeat";
-import SideNav from "@/components/SideNav";
+import DialShellServer from "@/components/DialShellServer";
 
 export const metadata: Metadata = {
   title: "OneUco — One University Community",
@@ -24,14 +23,13 @@ export default async function RootLayout({
   // login, dial home and all sections. Fails soft to off.
   const diwali: boolean = await isDiwaliLive();
 
-  // The app shell needs to know whether anyone is signed in (desktop
-  // rail + presence heartbeat). The session resolves locally (JWT
+  // The app shell needs to know whether anyone is signed in (dial
+  // shell + presence heartbeat). The session resolves locally (JWT
   // claims, request-cached — see lib/auth/my-account) so this costs no
   // Auth-server round trip; signed-out visitors get neither.
   const supabase = await createClient();
   const sessionUser = await getMySessionUser(supabase);
   const signedIn = sessionUser !== null;
-  const isOwner = isOwnerEmail(sessionUser?.email);
 
   return (
     <html lang="en" className="dark">
@@ -39,24 +37,26 @@ export default async function RootLayout({
         {diwali ? <DiwaliBanner variant="app" /> : null}
         {signedIn ? <PresenceHeartbeat /> : null}
         {/*
-          App shell:
-          - Below lg: exactly the mobile shell the app shipped with —
-            per-page headers and the round dial navigation (Servers ·
-            Swipe Deck · Friends · Chirp · Profile) on the dial home.
-          - lg and up: a left navigation rail (components/SideNav,
-            sticky, viewport height) with the content flowing to its
-            right in the remaining width. The rail hides itself on
-            auth/legal/setup routes, and signed-out visitors never
-            render it at all.
-          Chat pages keep their h-dvh mains: inside this shell the
-          content column starts at the top of the viewport and the rail
-          is sticky rather than a fixed-height box, so a viewport-height
-          chat still fits the screen exactly.
+          App shell — the dial is the navigation on every screen size
+          (owner's design; the SideNav rail shipped 2026-11-10 was
+          rejected and removed the same day):
+          - Home renders its own big dial, centred (360px on lg+).
+          - Inside a section, on lg+ screens, components/DialShell
+            puts a compact dial in a sticky left column and the section
+            content in the right column; below lg the shell is a plain
+            block and sections render exactly as on mobile.
+          - Auth/legal/setup routes and signed-out visitors render
+            bare — no shell at all.
+          Chat pages keep their h-dvh mains: the shell's right column
+          is an unconstrained block, so a viewport-height chat still
+          fits the screen (while the Diwali banner is live it adds its
+          height above the shell, as it did above every page before).
         */}
-        <div className="lg:flex">
-          {signedIn ? <SideNav isOwner={isOwner} /> : null}
-          <div className="min-w-0 lg:flex-1">{children}</div>
-        </div>
+        {signedIn ? (
+          <DialShellServer>{children}</DialShellServer>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

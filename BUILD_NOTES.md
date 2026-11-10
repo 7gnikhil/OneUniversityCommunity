@@ -164,3 +164,88 @@ parse (compiler API, zero parse diagnostics), and all call sites of
 the two changed action signatures (fetchMessagesAction,
 fetchServerMessagesAction) were grep-checked — ChatView and
 ServerChat are the only callers and both are updated.
+
+---
+
+# Addendum — 2026-11-10 correction: the dial IS the desktop navigation
+
+The owner rejected the SideNav rail above the same day it shipped:
+"i dont want the side bar — the dial will be same and big for the pc
+users; after clicking in the dial the user gets the dial to the left
+and the chat interface will open [on the right]". This addendum
+supersedes section D of the notes above. Working-tree only again:
+nothing pushed or deployed.
+
+## What changed
+- `components/SideNav.tsx` — gutted to an inert stub (comment +
+  `export {}`); snapshot pushes cannot delete remote files, so the
+  stub is what removes the rail. Nothing imports it.
+- `app/layout.tsx` — SideNav import and the `lg:flex` rail wrapper
+  removed; content is full-width again. For signed-in users the
+  children are wrapped in the new `DialShellServer`; the layout's
+  session resolution is unchanged and still shared with the presence
+  heartbeat (request-cached, no double Auth fetch). The now-unused
+  `isOwnerEmail` import went with the rail.
+- NEW `components/DialShell.tsx` (client) — pathname-driven shell:
+  - `/` → children bare (home renders its own big dial).
+  - Auth/legal/setup routes (`/login`, `/signup`, `/forgot-password`,
+    `/reset-password`, `/admin/login`, `/admin/forgot-password`,
+    `/verify`, `/privacy`, `/terms`, `/auth/*`) → children bare.
+  - Any other route → `lg:flex` row: a left column (`hidden` below
+    lg; `lg:flex`, 230px, sticky, `h-dvh`, wordmark on top) holding
+    the compact dial, and the page in a `flex-1 min-w-0` right
+    column. Below lg the wrapper is a plain block, so phones/tablets
+    render byte-identically to before. Admin routes DO get the shell
+    (there is no app/admin/layout.tsx to conflict with; the dial sits
+    outside the admin pages' own padding/headers).
+- NEW `components/DialShellServer.tsx` — resolves the account
+  (request-cached `getMyAccount`) and the dial badges via the shared
+  helper, then renders `DialShell`. Signed-out → children bare.
+- NEW `lib/dial-badges.ts` — `getDialData()`: the badge computation
+  factored verbatim out of the dial home (profile accent + DM unread
+  in parallel; server + inbox unread via the service-role client,
+  fail-soft). Returns `{ badges, inboxUnread }`.
+- `app/page.tsx` — dial home now calls `getDialData()`; rendered
+  output unchanged.
+- `components/DialNav.tsx` — two new optional props (home usage
+  untouched):
+  - `size?: "home" | "shell"`. Home sizing is now three-step:
+    264px below md (unchanged), 200px on md (unchanged), **360px on
+    lg+** (was 200px — the "dial reads small on PC" complaint). Shell
+    is a fixed 190px and drops the "Drag the dial…" caption (no room
+    for it in a 230px column; the wheel works identically).
+  - `activePath?: string`.
+
+## How the active stop is derived
+`stopIndexForPath()` (exported from DialNav): /servers* → Servers,
+/swipe → Swipe Deck, /friends* → Friends, /chirp → Chirp,
+/profile* → Profile; anything else (home, /inbox, /search, /admin,
+public profile pages) → null, no stop forced. The shell dial
+initialises its angle/selection from the route, and an effect snaps
+(no spring, no sound) to the new section's stop when the route
+changes — the tap that navigated already played the full spin, and
+link/keyboard navigation shouldn't replay sounds. Dragging to
+explore never changes the route, so it never trips the effect;
+tapping a stop keeps the existing spin-then-`router.push` behaviour.
+
+## Chat heights in the shell
+DM chat (`app/friends/[matchId]`) and server pages keep their
+`h-dvh` mains. The shell's right column is an unconstrained block
+(not a height-bounded flex child), so those pages fill the viewport
+exactly as before — no nested-dvh double scroll, no page edits
+needed. The one standing caveat is unchanged from the rail design:
+while the Diwali banner is live it adds its height above the shell.
+
+## Known minor cost
+On `/` the badge counts are computed twice per request — once by
+DialShellServer (which cannot know the pathname server-side; the
+middleware sets no pathname header) and once by the home page
+itself. Four lightweight count queries; the shell discards its copy
+on `/`. Left as-is rather than growing middleware surface for it.
+
+## Verification done here
+Same constraint as above (no node_modules; Vercel is the typecheck).
+All seven touched/new files — DialNav, DialShell, DialShellServer,
+SideNav stub, layout, home page, lib/dial-badges — passed a
+TypeScript syntax parse (compiler API, zero diagnostics). Remaining
+`SideNav` references are comments only (grep-verified).

@@ -313,14 +313,55 @@ function haptic(ms = 12): void {
 
 // ── The dial ────────────────────────────────────────────────────────────
 
-export default function DialNav({ badges }: { badges?: DialBadges }) {
+/**
+ * Which stop a route belongs to (Servers /servers*, Swipe Deck /swipe,
+ * Friends /friends*, Chirp /chirp, Profile /profile*). Anything else —
+ * home, inbox, search, admin, a profile-reveal page — maps to null: no
+ * stop is forced and the wheel stays wherever it rests.
+ */
+export function stopIndexForPath(path?: string): number | null {
+  if (!path) return null;
+  if (path === "/servers" || path.startsWith("/servers/")) return 0;
+  if (path === "/swipe") return 1;
+  if (path === "/friends" || path.startsWith("/friends/")) return 2;
+  if (path === "/chirp") return 3;
+  if (path === "/profile" || path.startsWith("/profile/")) return 4;
+  return null;
+}
+
+export interface DialNavProps {
+  badges?: DialBadges;
+  /**
+   * "home" (default): the big dial on the dial home — 264px on phones,
+   * stepping back to 200px on md screens, and 360px on lg+ so it reads
+   * as the centrepiece on PC. "shell": the compact ~190px dial pinned
+   * in the left column inside sections on desktop (components/
+   * DialShell); fixed size, no help caption.
+   */
+  size?: "home" | "shell";
+  /**
+   * Current pathname (shell use). The stop matching the route starts
+   * at the notch and follows route changes, so the dial doubles as the
+   * "you are here" indicator next to the open section.
+   */
+  activePath?: string;
+}
+
+export default function DialNav({
+  badges,
+  size: sizeProp = "home",
+  activePath,
+}: DialNavProps) {
   const router = useRouter();
   const accent = badges?.accentHex ?? FALLBACK_ACCENT;
   const accentStrong = readableAccent(accent);
 
-  const [angle, setAngle] = useState<number>(0);
+  const routeIdx = stopIndexForPath(activePath);
+  const [angle, setAngle] = useState<number>(() =>
+    routeIdx !== null ? -routeIdx * SPACING : 0,
+  );
   const [dragging, setDragging] = useState<boolean>(false);
-  const [selIdx, setSelIdx] = useState<number>(0);
+  const [selIdx, setSelIdx] = useState<number>(() => routeIdx ?? 0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{
     pointerAngle: number;
@@ -383,6 +424,22 @@ export default function DialNav({ badges }: { badges?: DialBadges }) {
   };
 
   useEffect(() => () => cancelAnimationFrame(animRef.current), []);
+
+  // Follow the route (shell dial): when navigation lands on a section,
+  // rest that section's stop at the notch. A plain snap, no spring —
+  // the tap that caused the navigation already played the full spin,
+  // and arrow-key / link navigation shouldn't replay sounds. Dragging
+  // the wheel to explore never changes the route, so it never trips
+  // this effect.
+  const prevRouteIdx = useRef<number | null>(routeIdx);
+  useEffect(() => {
+    if (routeIdx === prevRouteIdx.current) return;
+    prevRouteIdx.current = routeIdx;
+    if (routeIdx === null) return;
+    cancelAnimationFrame(animRef.current);
+    setSelIdx(routeIdx);
+    setAngle(-routeIdx * SPACING);
+  }, [routeIdx]);
 
   // Tap a stop (or arrow-key to it): spin it to the notch by the shortest
   // rotation, then navigate once the wheel has clunked into place.
@@ -455,18 +512,26 @@ export default function DialNav({ badges }: { badges?: DialBadges }) {
     springTo(cur, base + turns * 360, d.moved ? velRef.current * 22 : 0);
   };
 
-  // On tablet / laptop / desktop the dial steps back: same wheel, less
-  // dominance, so the bigger screen's space goes to content. Mobile
-  // keeps the full-size touch dial.
-  const [compactDial, setCompactDial] = useState<boolean>(false);
+  // Home dial sizes: mobile keeps the full-size 264px touch dial; md
+  // screens step it back to 200px; on lg+ the owner wants it BIG —
+  // 360px, the centrepiece of the PC home. The shell dial is a fixed
+  // compact 190px at every width (it only renders on lg+ anyway).
+  const [homeDialSize, setHomeDialSize] = useState<number>(264);
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const apply = (): void => setCompactDial(mq.matches);
+    if (sizeProp === "shell") return;
+    const mqLg = window.matchMedia("(min-width: 1024px)");
+    const mqMd = window.matchMedia("(min-width: 768px)");
+    const apply = (): void =>
+      setHomeDialSize(mqLg.matches ? 360 : mqMd.matches ? 200 : 264);
     apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-  const size = compactDial ? 200 : 264;
+    mqLg.addEventListener("change", apply);
+    mqMd.addEventListener("change", apply);
+    return () => {
+      mqLg.removeEventListener("change", apply);
+      mqMd.removeEventListener("change", apply);
+    };
+  }, [sizeProp]);
+  const size = sizeProp === "shell" ? 190 : homeDialSize;
   const radius = size / 2 - 44 * (size / 264);
   const activeIdx = wrappedIndex(angle);
 
@@ -619,13 +684,15 @@ export default function DialNav({ badges }: { badges?: DialBadges }) {
           </span>
         </div>
       </div>
-      <p
-        className="mt-3 text-xs md:mt-2 md:text-[11px]"
-        style={{ color: DIM }}
-      >
-        Drag the dial, flick it, or tap a stop — it clicks and whirs like a
-        real rotary dial
-      </p>
+      {sizeProp === "shell" ? null : (
+        <p
+          className="mt-3 text-xs md:mt-2 md:text-[11px]"
+          style={{ color: DIM }}
+        >
+          Drag the dial, flick it, or tap a stop — it clicks and whirs like
+          a real rotary dial
+        </p>
+      )}
     </div>
   );
 }
