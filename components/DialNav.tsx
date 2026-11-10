@@ -106,17 +106,30 @@ export interface DialBadges {
   dialSkin?: DialSkinPalette;
 }
 
+/**
+ * The five badge-ring structures — one per stop, same family and
+ * weight, different geometry (DialBadgeRing). Drawn in the ACTIVE
+ * interface's metal (--metal-ring / --metal-accent, lib/themes.ts),
+ * so the stop circles visibly belong to the current interface.
+ */
+type BadgeRingVariant = "double" | "beads" | "dashed" | "ticks" | "thick";
+
 interface DialStopDef {
   label: string;
   href: string;
-  /** Single-path icon (the original four stops). */
-  iconPath?: string;
   /**
-   * Multi-path icon (Tea's spilled cup, Fling's couple): each entry is
-   * one stroke sub-drawing, rendered as its own <path> by DialIcon.
+   * Stroke sub-drawings of the stop's icon: each entry is one <path>
+   * rendered by DialIcon. Bold hand — thick strokes, few shapes.
    */
-  iconPaths?: string[];
-  iconCircle?: boolean;
+  iconPaths: string[];
+  /**
+   * Filled accent sub-drawings (the spill drop, the shades band, the
+   * clasped hands, the mic head, the bird's eye): solid shapes that
+   * carry the read at small sizes where a stroke would vanish.
+   */
+  iconFills?: string[];
+  /** This stop's badge-ring structure (DialBadgeRing). */
+  ring: BadgeRingVariant;
   /**
    * The stop's own hue, as the CSS variable defined in globals.css
    * (--stop-*). Colours the stop's label and active indicator in
@@ -125,93 +138,110 @@ interface DialStopDef {
   accentVar: string;
 }
 
-// Minimal stroke icons, one consistent set (ported from the demo).
+// Bold stroke icons, one consistent hand (redrawn 2026-11-10 after
+// the owner rejected the first, finer set live: "make them big" —
+// thick 2.4 strokes on the 24-grid, generous shapes, few internal
+// details, solid filled accents where a stroke would vanish at
+// stop size). Each glyph is render-tested at ~36px and ~22px.
 const STOPS: DialStopDef[] = [
   {
     label: "Tea",
     href: "/servers",
     accentVar: "var(--stop-servers)",
-    // A tea cup tipped to the right, mid-spill: cup body + handle, the
-    // wavy spill stream falling from the low lip, one droplet in the
-    // air, and the puddle wave underneath.
+    ring: "double",
+    // A big cup with the tea sloshing out over its left rim: the
+    // pour wave down the outside, one fat filled drop mid-fall, and
+    // the puddle wave it lands in.
     iconPaths: [
-      "M4.8 5.4L13.4 7.9l1 8.4-7.8-2.1z",
-      "M5.2 7.8C2.8 8.3 2.6 11.4 6.1 12.3",
-      "M15.2 9.6c1.3 2 .3 3.9 1.5 6 .8 1.6.7 2.7.2 4",
-      "M19.6 11.4c.9 1.1.9 2.1 0 2.9-.9-.8-.9-1.8 0-2.9z",
-      "M11.8 20.9c2.6-1.5 6.8-1.5 9.6.1",
+      "M7.5 8.5h11l-1 9a2.8 2.8 0 0 1-2.8 2.5h-3.4A2.8 2.8 0 0 1 8.5 17.5l-1-9z",
+      "M18.2 11h1a2.6 2.6 0 0 1 0 5.2h-1.3",
+      "M7.8 8.3c-2 .2-3 1.5-2.9 3.1.1 1.5.2 2.7-.4 4.1",
+      "M1.8 21.4c1.7-1 3.5-1 5.2 0",
+    ],
+    iconFills: [
+      "M3.1 15.4c.9 1.3 1.5 2.2 1.5 3a1.5 1.5 0 1 1-3 0c0-.8.6-1.7 1.5-3z",
     ],
   },
   {
     label: "Fling",
     href: "/swipe",
     accentVar: "var(--stop-swipe)",
-    // A girl and a boy facing each other, holding hands at the centre:
-    // circle heads, her hair arc + triangle dress, his straight
-    // trousers, both inner arms meeting at the clasped-hands ring.
+    ring: "beads",
+    // A girl and a boy facing each other, holding hands at the
+    // centre: round heads, her triangle dress, his straight legs,
+    // both inner arms meeting at the filled clasped-hands dot.
     iconPaths: [
-      "M4.8 5.5a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0-4.4 0",
-      "M4.6 5.4a2.4 2.4 0 0 1 4.8 0",
-      "M4.6 15.5L7 8l2.4 7.5z",
-      "M5.9 15.5v3.8M8.1 15.5v3.8",
-      "M6.3 10.3L4.6 13.2",
-      "M8 10.4L11.9 12.8",
-      "M14.8 5.5a2.2 2.2 0 1 0 4.4 0a2.2 2.2 0 1 0-4.4 0",
-      "M17 7.7v5.8",
-      "M14.9 19.8L17 13.5l2.1 6.3",
-      "M17.3 9.9L19.3 13",
-      "M16.7 9.9L12.1 12.8",
-      "M11.1 12.8a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0",
+      "M4.2 5.8a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0-4.6 0",
+      "M6.5 8.6L3.6 18.6h5.8L6.5 8.6z",
+      "M5.2 18.6v2.2M7.8 18.6v2.2",
+      "M8.6 11.8L11 13.8",
+      "M15.2 5.8a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0-4.6 0",
+      "M17.5 8.4v6.2",
+      "M17.5 14.6l-2.3 6M17.5 14.6l2.3 6",
+      "M15.4 11.8L13 13.8",
+    ],
+    iconFills: [
+      "M12 12.7a1.3 1.3 0 1 0 0 2.6a1.3 1.3 0 1 0 0-2.6z",
     ],
   },
   {
     label: "Homies",
     href: "/friends",
     accentVar: "var(--stop-friends)",
-    // The homie: a student mid-stride — bucket hat (brim + crown),
-    // sunglasses band, takeaway coffee cup in one hand, phone in the
-    // other, legs caught mid-walk. Bold shapes only: at 25px the hat,
-    // shades and cup carry the read.
+    ring: "dashed",
+    // The homie, bold edition: bucket hat (crown + one thick brim
+    // line), a SOLID sunglasses band across the face, takeaway cup
+    // in one hand, legs mid-stride. (A phone in the other hand was
+    // drawn, then cut in the render test — it read as noise.)
     iconPaths: [
-      "M6.2 6.8h11.6",
-      "M8.5 6.8v-1.6c0-.9.7-1.5 1.6-1.5h3.8c.9 0 1.6.6 1.6 1.5v1.6",
-      "M9 6.8v2.6c0 1.7 1.3 2.8 3 2.8s3-1.1 3-2.8V6.8",
-      "M9.2 9.3h5.6",
-      "M12 12.2l-.6 4.3",
-      "M12.4 13.4l4.2 1.8",
-      "M15.5 15.4h3.4M15.9 15.4l.3 3.6h1.7l.3-3.6",
-      "M11.7 13.4L8.2 15.4",
-      "M6.9 14.2h2.4v3.4H6.9z",
-      "M11.4 16.5l3 2.2.6 3.1",
-      "M11.4 16.5l-2.8 2.6-1.2 2.9",
+      "M8 7V5.4A1.9 1.9 0 0 1 9.9 3.5h4.2A1.9 1.9 0 0 1 16 5.4V7",
+      "M3.8 7h16.4",
+      "M8 7v2.4c0 2.2 1.8 3.6 4 3.6s4-1.4 4-3.6V7",
+      "M12 13.2v3.6",
+      "M12.3 14.6l3.4 1.3",
+      "M15.2 14.9h3.4l-.4 4h-2.6l-.4-4z",
+      "M11.7 14.6L8.6 17.2",
+      "M12 16.8l-3.2 4.5",
+      "M12 16.8l3.4 1.7 1.2 2.9",
+    ],
+    iconFills: [
+      "M8.1 8.9h7.8a.9.9 0 0 1 .9.9v.7a1.6 1.6 0 0 1-1.6 1.6H8.8a1.6 1.6 0 0 1-1.6-1.6v-.7a.9.9 0 0 1 .9-.9z",
     ],
   },
   {
     label: "Chirp",
     href: "/chirp",
     accentVar: "var(--stop-chirp)",
-    // A bird singing into a microphone: round body, head with an OPEN
-    // beak (two lines, mid-song), tail flicks at the back, a capsule
-    // mic on a short stand at beak height, one music note above.
+    ring: "ticks",
+    // A bird singing into a mic: one big round body + head, OPEN
+    // beak (two bold lines) aimed at a solid mic capsule on a stand,
+    // tail flicks at the back, one music note above.
     iconPaths: [
-      "M4.4 14.5a4.2 4.2 0 1 0 8.4 0a4.2 4.2 0 1 0-8.4 0",
-      "M10 8.3a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0-4.6 0",
-      "M12.5 7.6h.01",
-      "M14.5 7.5l2.9-1.1M14.6 9.2l2.7.8",
-      "M4.7 12.3L2.5 9.7M4.5 14.8L2.3 13.9",
-      "M7 12.8c1.6-.4 3 .3 3.6 1.7",
-      "M7.8 18.6v1.9M10.6 18.6v1.9",
-      "M19.2 5.6a1.6 1.6 0 0 1 3.2 0v2.6a1.6 1.6 0 0 1-3.2 0z",
-      "M20.8 9.8v4.6M18.9 14.4h3.8",
-      "M17.2 1.2v2.7M17.2 1.2c.7.2 1 .7 1.1 1.4M15 3.9a1.1.8 0 1 0 2.2 0a1.1.8 0 1 0-2.2 0",
+      "M3.4 13.8a5.2 5.2 0 1 0 10.4 0a5.2 5.2 0 1 0-10.4 0",
+      "M9.9 8.6a3.1 3.1 0 1 0 6.2 0a3.1 3.1 0 1 0-6.2 0",
+      "M16.4 7.4l2.9-1.1M16.5 9.9l2.8.9",
+      "M4.3 10.6L1.9 7.9",
+      "M20.9 11.2v9.4",
+      "M18.6 20.6h4.6",
+      "M6.6 2.2v3.8",
+    ],
+    iconFills: [
+      "M19.4 4a1.5 2.8 0 0 1 3 0v5.6a1.5 2.8 0 0 1-3 0z",
+      "M13.4 7.05a.85.85 0 1 0 0 1.7a.85.85 0 1 0 0-1.7z",
+      "M3.95 6.2a1.25.95 0 1 0 2.5 0a1.25.95 0 1 0-2.5 0z",
     ],
   },
   {
     label: "Profile",
     href: "/profile",
     accentVar: "var(--stop-profile)",
-    iconPath: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2",
-    iconCircle: true,
+    ring: "thick",
+    // The person, redrawn in the same bold hand: big round head,
+    // one generous shoulder arc.
+    iconPaths: [
+      "M12 11.2a3.3 3.3 0 1 0 0-6.6a3.3 3.3 0 1 0 0 6.6z",
+      "M5.2 20.2c.9-3.8 3.6-5.7 6.8-5.7s5.9 1.9 6.8 5.7",
+    ],
   },
 ];
 
@@ -272,32 +302,121 @@ function readableAccent(hex: string): string {
 }
 
 function DialIcon({
-  d,
   paths,
-  circle,
+  fills,
+  px,
 }: {
-  d?: string;
-  paths?: string[];
-  circle?: boolean;
+  paths: string[];
+  fills?: string[];
+  /** Rendered size in px — ~0.6 of the stop badge's diameter. */
+  px: number;
 }) {
   return (
     <svg
-      width="25"
-      height="25"
+      width={px}
+      height={px}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="2.4"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
     >
-      {circle ? <circle cx="12" cy="8" r="4" /> : null}
-      {paths
-        ? paths.map((p, i) => <path key={i} d={p} />)
-        : d
-          ? <path d={d} />
-          : null}
+      {paths.map((p, i) => (
+        <path key={i} d={p} />
+      ))}
+      {fills
+        ? fills.map((p, i) => (
+            <path key={`f${i}`} d={p} fill="currentColor" stroke="none" />
+          ))
+        : null}
+    </svg>
+  );
+}
+
+/**
+ * A stop's badge ring — the round structure around its icon. Every
+ * stop gets a DIFFERENT geometry (the owner's ask) in the same
+ * weight and family, drawn in the ACTIVE interface's metal tokens:
+ * the main ring wears --metal-ring, the secondary marks
+ * --metal-accent, so the circles visibly belong to whichever
+ * interface is applied (Midnight = bronze ring + polished-gold
+ * marks; themes without their own metal derive both from their
+ * accent/border — lib/themes.ts themeCssVars). Identical in idle
+ * and active states — the active stop's hue lives in the badge
+ * FILL behind this ring, never in the ring itself. Drawn on a
+ * 60-grid over the badge; pointer-events-none + aria-hidden.
+ */
+function DialBadgeRing({ variant }: { variant: BadgeRingVariant }) {
+  const metalRing = { stroke: "var(--metal-ring)" } as CSSProperties;
+  const metalAccent = { stroke: "var(--metal-accent)" } as CSSProperties;
+  const metalAccentFill = {
+    fill: "var(--metal-accent)",
+  } as CSSProperties;
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      viewBox="0 0 60 60"
+      fill="none"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      {variant === "double" ? (
+        <>
+          {/* Tea — two concentric rings. */}
+          <circle cx="30" cy="30" r="28" strokeWidth="2.6" style={metalRing} />
+          <circle cx="30" cy="30" r="23" strokeWidth="1.7" style={metalAccent} />
+        </>
+      ) : variant === "beads" ? (
+        <>
+          {/* Fling — one ring, two beads riding it at the top. */}
+          <circle cx="30" cy="30" r="28" strokeWidth="2.6" style={metalRing} />
+          <circle cx="17.7" cy="4.8" r="3" stroke="none" style={metalAccentFill} />
+          <circle cx="42.3" cy="4.8" r="3" stroke="none" style={metalAccentFill} />
+        </>
+      ) : variant === "dashed" ? (
+        <>
+          {/* Homies — a dashed ring, streetwear stitch. */}
+          <circle
+            cx="30"
+            cy="30"
+            r="28"
+            strokeWidth="2.6"
+            strokeDasharray="6.5 4.5"
+            style={metalRing}
+          />
+        </>
+      ) : variant === "ticks" ? (
+        <>
+          {/* Chirp — a ring with short tick notches inside it,
+              a little sound-wave / clock engraving. */}
+          <circle cx="30" cy="30" r="28" strokeWidth="2.6" style={metalRing} />
+          {Array.from({ length: 8 }).map((_, i) => {
+            const rad = (i * 45 * Math.PI) / 180;
+            const x1 = 30 + 23.5 * Math.sin(rad);
+            const y1 = 30 - 23.5 * Math.cos(rad);
+            const x2 = 30 + 26.3 * Math.sin(rad);
+            const y2 = 30 - 26.3 * Math.cos(rad);
+            return (
+              <line
+                key={i}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                strokeWidth="2.2"
+                style={metalAccent}
+              />
+            );
+          })}
+        </>
+      ) : (
+        <>
+          {/* Profile — one single thick ring. */}
+          <circle cx="30" cy="30" r="27" strokeWidth="4.6" style={metalRing} />
+        </>
+      )}
     </svg>
   );
 }
@@ -1396,25 +1515,28 @@ export default function DialNav({
               }}
             >
               <span
-                className="relative flex items-center justify-center rounded-full border-2 shadow-sm"
+                className="relative flex items-center justify-center rounded-full shadow-sm"
                 style={{
                   width: 52 * (size / 264),
                   height: 52 * (size / 264),
                   color: active ? "#ffffff" : textTone,
                   // The active stop wears its own hue (globals.css
-                  // --stop-*), glowing softly in that hue — plus the
-                  // skin's own halo (gold skins) when it defines one.
+                  // --stop-*) as its FILL, glowing softly in that
+                  // hue — plus the skin's own halo (gold skins) when
+                  // it defines one. The badge's RING is no longer
+                  // this span's border: DialBadgeRing draws it in
+                  // the active interface's metal, per-stop geometry.
                   background: active ? stop.accentVar : surf,
-                  borderColor: active ? stop.accentVar : borderTone,
                   boxShadow: active
                     ? `${skinActiveGlow ? `${skinActiveGlow}, ` : ""}0 0 16px color-mix(in srgb, ${stop.accentVar} 48%, transparent)`
                     : undefined,
                 }}
               >
+                <DialBadgeRing variant={stop.ring} />
                 <DialIcon
-                  d={stop.iconPath}
                   paths={stop.iconPaths}
-                  circle={stop.iconCircle}
+                  fills={stop.iconFills}
+                  px={Math.round(52 * (size / 264) * 0.6)}
                 />
                 {count > 0 ? (
                   <span

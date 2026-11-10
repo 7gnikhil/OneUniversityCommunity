@@ -1839,3 +1839,93 @@ dial and the hint below it.
   ServerChat's "Join this server to post.", was renamed to "Join
   this Tea to post." and the final sweep for "this server / the
   server" phrasing in JSX returns nothing.
+
+## Addendum — Dial icon redo: bigger, bolder, interface-matched rings (2026-11-10, code only)
+
+Owner verdict on the f1fed38 icon set, seen live: "the icons are not
+good, change them, make them big, and the outline should match
+according to the dial interface; set different round structure
+differently for each thing." Concepts kept (he chose them minutes
+earlier — the complaint was execution, size and style). All changes
+in components/DialNav.tsx; nothing outside stop rendering changed
+(physics, sounds, nav timing, hrefs, labels, hue vars, wheel skins
+untouched).
+
+### 1. All five icons redrawn big, bold, simple
+New DialIcon: strokeWidth 1.8 → 2.4 on the 24-grid, and a new
+`iconFills` channel (DialStopDef.iconFills) for solid accents that
+carry the read where a stroke would vanish. Profile also moved from
+the old iconPath/iconCircle pair onto iconPaths, so all five stops
+share one shape. The glyphs (fewer, larger shapes than the rejected
+set): Tea = big cup, tea sloshing over the left rim (pour wave, one
+fat FILLED drop, puddle wave); Fling = two round heads, her triangle
+dress, his straight legs, arms meeting at a FILLED clasped-hands dot;
+Homies = bucket hat (crown + one thick brim line), SOLID sunglasses
+band, plain takeaway cup, stride legs; Chirp = one big round body +
+head, open beak (two bold lines) aimed at a SOLID mic capsule on a
+stand, one tail flick, one music note; Profile = big head + one
+shoulder arc, redrawn in the same hand.
+
+### 2. Icons bigger on the stops
+DialIcon no longer renders at a fixed 25px: it takes `px` =
+Math.round(52 × (size/264) × 0.6) — ~0.60 of the badge diameter, up
+from the fixed 25px (~0.35–0.48 depending on dial size). Rendered:
+~43px on the 360 home dial, ~31px at 264, ~22px on the 190 docked
+dial. Badge diameter, stop geometry and the label under the icon are
+unchanged, so label fit is exactly as before at home and docked
+sizes (checked in the badge-mock renders below).
+
+### 3. Badge outline now matches the active interface
+The stop span's themed `border-2` is gone. The ring is drawn by the
+new DialBadgeRing (SVG over the badge, pointer-events-none) in the
+metal tokens the active interface resolves — var(--metal-ring) for
+the ring, var(--metal-accent) for the secondary marks — so the
+circles belong to the current interface on every theme, idle and
+active alike; the active stop keeps its per-stop hue as the badge
+FILL behind the ring (plus its existing hue glow).
+Contrast check from the token values (lib/themes.ts themeCssVars):
+the ring sits on the badge fill, never on the dial face. Midnight —
+ring #8a6414 / accent #d4af37 over idle surface #0a0a0a (bronze and
+gold both clearly read on near-black) and over the active hue fills
+(#7c3aed/#e11d48/#059669/#0284c7/#d97706 — dark bronze reads on all
+five, darkest-on-amber included, confirmed in the active renders).
+Ocean Deep (no metal block → derived: accent = its accent #38bdf8,
+ring = its border #155e75) over idle surface #06283d: the ring is the
+theme's own border tone on its own surface — the same pairing the
+theme already uses app-wide — and the #38bdf8 accent marks are
+bright on it. Icon ink logic unchanged (theme text tone idle, white
+on the hue fill active) and re-verified in the same renders.
+
+### 4. A different round structure per stop (DialBadgeRing, 60-grid)
+Tea = DOUBLE concentric ring (ring + accent inner ring). Fling =
+ring with two accent BEADS riding it at the top. Homies = DASHED
+ring. Chirp = ring with eight short accent TICK notches inside it.
+Profile = one single THICK ring. Same family/weight (2.6-unit main
+stroke; Profile's 4.6 is its variant), identical idle/active,
+scaling with the badge.
+
+### Render test (cairosvg, paths extracted from the shipped file)
+Icons alone at 36px and 22px (idle ink on dark, white on each stop
+hue) + full badge mocks at 71px (home) and 37px (docked), idle and
+active. Round 1 findings → simplifications made → re-rendered:
+- Homies was muddy below the shades (cup lid line + phone + two arm
+  lines merged into a scribble): phone fill DELETED, cup lid line
+  deleted, free arm simplified to one plain line.
+- Chirp's centre was clutter (wing arc + note flag + two tail
+  flicks + legs overlapping the body/head circles): wing arc
+  deleted, one tail flick deleted, legs deleted, note redrawn as a
+  plain stem + filled head, beak lengthened so it reaches the mic.
+- Tea's spill was cramped against the cup and clipped by the double
+  ring: cup shifted right 1 unit, pour wave bowed further out, the
+  filled drop moved out and down so it hangs clear of the cup.
+- Fling and Profile passed round 1 unchanged.
+Round 2 renders: all five read at 22px and on the 37px docked badge;
+rings distinct and metal-toned at both badge sizes, on dark and on
+every hue fill.
+
+### Verification (local only — no push, no live-site checks)
+- Bun transpiler parse PASS on components/DialNav.tsx (the only
+  file touched besides this note).
+- Grep re-confirmed: no component outside DialNav references
+  DialIcon/iconPaths — the dial remains the only place section
+  icons render.
