@@ -2,21 +2,20 @@
 
 import { usePathname } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
-import type { DialBadges } from "@/components/DialNav";
+import type { DialBadges } from "@/lib/nav-stops";
 
-// Navigation shell (owner's call, 2026-11-11). The dial is the home
-// centrepiece — the brand moment — but it is no longer the way
-// around the app: a bottom tab bar (components/BottomBar) is the
-// primary navigation on every signed-in screen, home included, so
-// every section is one tap away ("people need faster access").
+// Navigation shell (owner's calls, 2026-11-11). A bottom tab bar
+// (components/BottomBar) is the primary navigation on every
+// signed-in screen, home included, so every section is one tap
+// away ("people need faster access"). The rotary dial that used to
+// anchor this shell — big on home, docked in a column inside
+// sections — was retired the same night ("I think we don't need
+// that dial anymore"); /home is a plain brand home now.
 //
-// This replaces the 2026-11-10 arrangement where a compact dial
-// docked in a left column inside sections on lg+ screens (and
-// mobile sections had no persistent navigation at all). Sections
-// now render full-width at every size — the pages carry their own
-// max-w-md columns — with bottom padding so content clears the
-// fixed bar. The home page pads its own <main> instead (its dial
-// layout is exactly viewport-height), so the wrapper adds none.
+// Sections render full-width at every size — the pages carry their
+// own max-w-md columns — with bottom padding so content clears the
+// fixed bar. The home page pads its own <main> instead (its layout
+// is exactly viewport-height), so the wrapper adds none.
 //
 // Auth / legal / setup routes never get the shell. Admin routes
 // never get it either: the admin area carries its own header/nav,

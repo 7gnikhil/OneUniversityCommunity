@@ -2575,3 +2575,41 @@ a piece broken, a pirate photo in it, algae on it, dust on it.
 - app/loading.tsx: min-height now calc(100dvh − 6rem) so the
   medallion centres in the free screen above the bottom bar,
   netting out the shell's bottom padding.
+
+---
+
+## The dial is retired (2026-11-11, late)
+
+Owner's decision change, superseding the same evening's "dial
+stays as the home centrepiece": "I think we don't need that dial
+anymore." The rotary dial is removed entirely; the bottom tab bar
+is the only navigation; the app still opens on Fling. (The pirate
+helm LOADER is a separate thing and stays exactly as specified.)
+
+### What shipped
+- **app/home/page.tsx rebuilt without the dial**: wordmark header
+  + LiveClock + student search + a plain centred brand block +
+  the same footer doors (Inbox with real unread count, Admin,
+  Settings). DialNav and DialTipCard are no longer rendered
+  anywhere.
+- **Contracts moved, not deleted**: STOPS, DialStopDef, DialBadges
+  and the palette/picker types moved verbatim from DialNav into
+  lib/nav-stops.ts; BottomBar, DialShell and lib/dial-badges now
+  import from there.
+- **components/DialNav.tsx is an inert stub** (snapshot pushes
+  cannot delete remote files) with a retirement note, re-exporting
+  lib/nav-stops so any stale import path still resolves.
+
+### Flagged, deliberately untouched (owner's call needed)
+- **Wheel skins**: lib/dial-skins, the profiles.dial_skin column
+  and Settings' DialSkinPicker (Profile page) styled only the
+  dial; they are now orphaned but left in place.
+- **DialTipCard** component and the dial_tip_seen flag: unmounted,
+  left in the tree.
+- **getDialData's themePicker / badges.theme / dialSkin fields**
+  are computed but unconsumed now; badges.counts + accentHex are
+  still live (bottom bar). Slimming this is a cleanup candidate.
+- **InterfacePicker in Profile settings is NOT orphaned**: the 18
+  interfaces theme the whole app, and picking them lives there —
+  only the dial's long-press shortcut to the same picker is gone.
+  The dial-metal CSS tokens in lib/themes + globals.css are inert.

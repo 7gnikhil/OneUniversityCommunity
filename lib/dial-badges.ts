@@ -17,7 +17,7 @@ import type {
   DialBadges,
   DialSkinPalette,
   DialThemePicker,
-} from "@/components/DialNav";
+} from "@/lib/nav-stops";
 
 // Server-side dial data — the ONE computation behind both dial
 // placements: the big home dial (app/page.tsx) and the compact shell

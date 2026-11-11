@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { STOPS, type DialBadges } from "@/components/DialNav";
+import { STOPS, type DialBadges } from "@/lib/nav-stops";
 
-// Bottom tab bar — the FAST navigation (owner's call, 2026-11-11:
-// "people need faster access to the app"). The dial stays as the
-// home centrepiece, but it is no longer the way around: the five
-// stops are one tap away from every signed-in screen. Same glyphs
-// and per-stop hues as the dial (STOPS in DialNav) and the same
-// unread badges (counts keyed by href, from lib/dial-badges).
+// Bottom tab bar — the app's navigation (owner's calls, 2026-11-11:
+// "people need faster access to the app"; the rotary dial it
+// replaced was retired outright the same night). The five stops
+// are one tap away from every signed-in screen. The glyphs and
+// per-stop hues come from the stops list (lib/nav-stops — the
+// dial's own icon set, kept) and the unread badges are the same
+// counts the dial showed (keyed by href, from lib/dial-badges).
 // Rendered by DialShell for app routes only — auth, legal and admin
 // routes never mount the shell, so they never see the bar.
 //
