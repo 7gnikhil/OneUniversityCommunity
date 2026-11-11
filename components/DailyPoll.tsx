@@ -3,28 +3,43 @@
 import { useState, useTransition } from "react";
 import { voteDailyPollAction } from "@/app/swipe/poll-actions";
 
-// Poll of the day card (Fling, 2026-11-11). Before voting: the
-// options are plain tappable rows. After voting — or on arrival
-// with a vote already cast — the card flips to result bars with
-// percentages; tapping another option changes the vote (the
-// server upserts). Counts are aggregates only (daily_poll_counts
-// RPC); the card never learns who voted what.
+// Polls of the day (Fling + Chirp hub, 2026-11-11/12). A daily
+// SET of questions ("ask numerous questions, not just one") —
+// each card votes independently. Before voting: the options are
+// plain tappable rows. After voting — or on arrival with a vote
+// already cast — the card flips to result bars with percentages;
+// tapping another option changes the vote (the server upserts).
+// Counts are aggregates only (daily_poll_counts RPC); the cards
+// never learn who voted what.
 
-interface DailyPollProps {
+export interface DailyPollEntryView {
+  pollIndex: number;
   question: string;
   options: string[];
-  initialCounts: number[];
-  initialMyVote: number | null;
+  counts: number[];
+  myVote: number | null;
 }
 
-export default function DailyPoll({
-  question,
-  options,
-  initialCounts,
-  initialMyVote,
-}: DailyPollProps) {
-  const [counts, setCounts] = useState<number[]>(initialCounts);
-  const [myVote, setMyVote] = useState<number | null>(initialMyVote);
+export default function DailyPolls({
+  entries,
+}: {
+  entries: DailyPollEntryView[];
+}) {
+  return (
+    <div className="flex w-full flex-col gap-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-neutral-500">
+        Polls of the day
+      </p>
+      {entries.map((entry) => (
+        <PollCard key={entry.pollIndex} entry={entry} />
+      ))}
+    </div>
+  );
+}
+
+function PollCard({ entry }: { entry: DailyPollEntryView }) {
+  const [counts, setCounts] = useState<number[]>(entry.counts);
+  const [myVote, setMyVote] = useState<number | null>(entry.myVote);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -44,7 +59,7 @@ export default function DailyPoll({
     setCounts(optimistic);
     setMyVote(optionIndex);
     startTransition(async () => {
-      const result = await voteDailyPollAction(optionIndex);
+      const result = await voteDailyPollAction(entry.pollIndex, optionIndex);
       if (result.ok) {
         setCounts(result.counts);
         setMyVote(result.myVote);
@@ -57,14 +72,11 @@ export default function DailyPoll({
   };
 
   return (
-    <section className="w-full max-w-sm self-center rounded-3xl border border-neutral-800 bg-neutral-950 px-5 py-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-neutral-500">
-        Poll of the day
-      </p>
-      <p className="mt-1.5 text-sm font-medium text-neutral-100">{question}</p>
+    <section className="w-full rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3">
+      <p className="text-sm font-medium text-neutral-100">{entry.question}</p>
 
-      <div className="mt-3 flex flex-col gap-2">
-        {options.map((option, i) => {
+      <div className="mt-2.5 flex flex-col gap-2">
+        {entry.options.map((option, i) => {
           const votes = counts[i] ?? 0;
           const pct = total > 0 ? Math.round((votes / total) * 100) : 0;
           const mine = myVote === i;
@@ -106,10 +118,10 @@ export default function DailyPoll({
         })}
       </div>
 
-      <p className="mt-2.5 text-[11px] text-neutral-600">
+      <p className="mt-2 text-[11px] text-neutral-600">
         {total === 0
-          ? "No votes yet today — yours could be the first."
-          : `${total} vote${total === 1 ? "" : "s"} today${showResults ? " · tap another option to change yours" : ""}`}
+          ? "No votes yet — yours could be the first."
+          : `${total} vote${total === 1 ? "" : "s"}${showResults ? " · tap another option to change yours" : ""}`}
       </p>
       {error ? <p className="mt-1 text-[11px] text-red-400">{error}</p> : null}
     </section>

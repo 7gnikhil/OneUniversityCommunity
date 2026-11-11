@@ -13,7 +13,7 @@ import {
 import { accentHex } from "@/lib/validation";
 import Avatar from "@/components/Avatar";
 import PageIntro from "@/components/PageIntro";
-import DailyPoll from "@/components/DailyPoll";
+import DailyPolls from "@/components/DailyPoll";
 import { getDailyPollState } from "@/lib/daily-poll-data";
 import ChirpFeed from "./ChirpFeed";
 
@@ -127,15 +127,17 @@ export default async function ChirpPage() {
         />
       </div>
 
-      {/* Poll of the day — same poll as Fling's, same vote. */}
-      <div className="flex justify-center">
-        <DailyPoll
-          question={pollState.poll.question}
-          options={pollState.poll.options}
-          initialCounts={pollState.counts}
-          initialMyVote={pollState.myVote}
-        />
-      </div>
+      {/* Polls of the day — the same set as Fling's, same votes.
+          Full-width like every other card on the hub. */}
+      <DailyPolls
+        entries={pollState.map((entry) => ({
+          pollIndex: entry.poll.index,
+          question: entry.poll.question,
+          options: entry.poll.options,
+          counts: entry.counts,
+          myVote: entry.myVote,
+        }))}
+      />
 
       {trendingChirps.length > 0 ? (
         <TrendingCard chirps={trendingChirps} />

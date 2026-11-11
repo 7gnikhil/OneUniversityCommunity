@@ -2699,3 +2699,21 @@ with its like/swipe counts. No ratings table exists.
 - Trending card on the hub: the recent-30 chirp read (the Campus
   Tweets preview slices the same fetch) ranked by likes +
   2×comments, top 3, hidden on a zero-engagement day.
+
+### Polls go plural + Chirp layout cleaned + Admin door restored (2026-11-12)
+- Owner: "poll of the day has some issue — ask numerous questions
+  not just one." The daily poll is now a SET of 5 questions
+  (lib/daily-polls pollsOfTheDay: a rotating window over the 14,
+  advancing by 5/day), each independently votable, on Fling AND
+  the Chirp hub. Migration 0015 was rewritten BEFORE its first
+  application (a probe confirmed the table never landed) with
+  poll_index in the PK and daily_poll_counts() grouped by
+  question; schema.sql's 0015 block was replaced to match.
+- Chirp layout cleanup (owner's other tap): every hub card is
+  full-width with one rhythm (rounded-3xl, px-4 py-3) — the poll
+  stack no longer renders narrower than the doorway cards.
+- Admin door: the /home footer carried the only in-app Admin
+  link, so removing /home took it away (owner: "where is the
+  admin things went off"). The admin AREA never went anywhere —
+  /admin is untouched — and the door now sits on the Profile
+  page, owner-email only, same rule as the gate itself.

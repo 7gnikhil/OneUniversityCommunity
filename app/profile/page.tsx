@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
+import { isOwnerEmail } from "@/lib/server/owner";
 import {
   ratingForAccount,
   type FlingRating,
@@ -162,6 +163,23 @@ export default async function ProfilePage() {
         </p>
       </div>
       <PageIntro section="profile" />
+
+      {/* Owner-only Admin door. This used to live in the /home
+          footer; when the home page was removed (2026-11-11) the
+          admin area lost its only in-app entrance, so it lives
+          here now — rendered for the owner's email alone, exactly
+          the population the /admin gate itself admits. */}
+      {isOwnerEmail(account.email) ? (
+        <Link
+          href="/admin"
+          className="flex items-center justify-between rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3 text-sm transition hover:border-neutral-600"
+        >
+          <span className="font-semibold uppercase tracking-[0.2em] text-neutral-100">
+            Admin
+          </span>
+          <span className="text-neutral-500">Open the admin area →</span>
+        </Link>
+      ) : null}
 
       {/* The five sections as animated dropdowns. The wrapper's -mt-6
           cancels the main gap so each dropdown's own built-in mt-6

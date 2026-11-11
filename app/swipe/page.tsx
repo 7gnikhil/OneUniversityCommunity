@@ -7,7 +7,7 @@ import { getDeveloperAccountId } from "@/lib/server/owner";
 import { accentHex } from "@/lib/validation";
 import SwipeDeck from "./SwipeDeck";
 import PageIntro from "@/components/PageIntro";
-import DailyPoll from "@/components/DailyPoll";
+import DailyPolls from "@/components/DailyPoll";
 import { quoteOfTheDay } from "@/lib/loading-quotes";
 import { getDailyPollState } from "@/lib/daily-poll-data";
 import { istMidnightUtc } from "@/lib/daily";
@@ -73,13 +73,9 @@ export default async function SwipePage() {
   // error page. The quote is pure code; the rest are small reads.
   const quote = quoteOfTheDay();
 
-  // Poll of the day: aggregate counts + my own vote (shared helper —
-  // the Chirp hub shows the same poll through the same path).
-  const {
-    poll,
-    counts: pollCounts,
-    myVote: pollMyVote,
-  } = await getDailyPollState(supabase, account.id);
+  // Polls of the day: aggregate counts + my own votes (shared
+  // helper — the Chirp hub shows the same set the same way).
+  const pollEntries = await getDailyPollState(supabase, account.id);
 
   // "New today" pulse: joins, chirps and matches since IST midnight.
   let pulse: { joined: number; chirps: number; matches: number } | null =
@@ -157,11 +153,14 @@ export default async function SwipePage() {
         </p>
       ) : null}
 
-      <DailyPoll
-        question={poll.question}
-        options={poll.options}
-        initialCounts={pollCounts}
-        initialMyVote={pollMyVote}
+      <DailyPolls
+        entries={pollEntries.map((entry) => ({
+          pollIndex: entry.poll.index,
+          question: entry.poll.question,
+          options: entry.poll.options,
+          counts: entry.counts,
+          myVote: entry.myVote,
+        }))}
       />
 
       <SwipeDeck

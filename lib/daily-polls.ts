@@ -1,10 +1,11 @@
-// Poll of the day (owner's pick from the starting-page features,
-// 2026-11-11). One campus question a day, picked deterministically
-// by IST day number — the same question for everyone, turning over
-// at India midnight, exactly like the quote of the day
-// (lib/loading-quotes). Questions live here in code; only the
-// VOTES live in the database (daily_poll_votes, migration 0015),
-// keyed by IST date — no admin tooling, no daily job to run.
+// Polls of the day (owner's picks, 2026-11-11/12: a poll on the
+// starting pages — then "ask numerous questions, not just one").
+// A daily SET of questions, picked deterministically by IST day
+// number — the same set for everyone, turning over at India
+// midnight, exactly like the quote of the day (lib/loading-
+// quotes). Questions live here in code; only the VOTES live in
+// the database (daily_poll_votes, migration 0015), keyed by IST
+// date + question index — no admin tooling, no daily job to run.
 
 import { istDateString, istDayNumber } from "@/lib/daily";
 
@@ -12,6 +13,9 @@ export interface DailyPoll {
   question: string;
   options: string[];
 }
+
+/** How many questions make up one day's set. */
+export const POLLS_PER_DAY = 5;
 
 const POLLS: DailyPoll[] = [
   {
@@ -79,7 +83,20 @@ export interface TodaysPoll extends DailyPoll {
   index: number;
 }
 
-export function pollOfTheDay(now: Date = new Date()): TodaysPoll {
-  const index = istDayNumber(now) % POLLS.length;
-  return { date: istDateString(now), index, ...POLLS[index] };
+/**
+ * Today's set: POLLS_PER_DAY questions in a rotating window over
+ * the full list (the window advances by the set size each day, so
+ * over three days every question appears). Deterministic by IST
+ * day — everyone gets the same set.
+ */
+export function pollsOfTheDay(now: Date = new Date()): TodaysPoll[] {
+  const date = istDateString(now);
+  const start =
+    (istDayNumber(now) * POLLS_PER_DAY) % POLLS.length;
+  const out: TodaysPoll[] = [];
+  for (let i = 0; i < POLLS_PER_DAY; i += 1) {
+    const index = (start + i) % POLLS.length;
+    out.push({ date, index, ...POLLS[index] });
+  }
+  return out;
 }
