@@ -87,5 +87,5 @@ export async function loginAction(
   const verified = admin || row.status === "verified";
 
   if (!verified) redirect("/verify");
-  redirect(next ?? "/");
+  redirect(next ?? "/swipe");
 }

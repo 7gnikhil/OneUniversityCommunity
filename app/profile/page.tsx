@@ -135,7 +135,7 @@ export default async function ProfilePage() {
     <main data-section="profile" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <Link
-          href="/"
+          href="/home"
           className="text-sm text-neutral-400 transition hover:text-white"
         >
           ← OneUco

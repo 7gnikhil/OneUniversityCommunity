@@ -10,7 +10,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "OneUco",
     description:
       "OneUco is a students-only community app: Fling matches, Tea hangouts, Chirp, friends chat and an inbox — for students of any college or university.",
-    start_url: "/",
+    start_url: "/swipe",
     scope: "/",
     display: "standalone",
     background_color: "#000000",

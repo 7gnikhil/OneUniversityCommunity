@@ -307,7 +307,7 @@ export async function completeProfileAction(
     return { error: "Finish creating your account first (step 1 above)." };
   }
   if (passesAdminGate(user.email, account) || account.status === "verified") {
-    redirect("/");
+    redirect("/swipe");
   }
   if (account.status === "suspended") {
     return {
@@ -371,5 +371,5 @@ export async function completeProfileAction(
     return { error: "Couldn't save your profile — please try again." };
   }
 
-  redirect("/");
+  redirect("/swipe");
 }

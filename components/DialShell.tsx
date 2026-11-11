@@ -55,7 +55,7 @@ export default function DialShell({
 
   return (
     <>
-      <div className={pathname === "/" ? undefined : "pb-24"}>{children}</div>
+      <div className={pathname === "/home" ? undefined : "pb-24"}>{children}</div>
       <BottomBar badges={badges} />
     </>
   );

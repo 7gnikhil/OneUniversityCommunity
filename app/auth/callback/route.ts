@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 // `next` (a same-site path only — open redirects are refused).
 
 function safeNext(raw: string | null): string {
-  if (!raw) return "/";
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
+  if (!raw) return "/swipe";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/swipe";
   return raw;
 }
 

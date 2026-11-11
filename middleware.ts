@@ -120,7 +120,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
   if (pathname.startsWith("/admin")) {
-    return admin ? response : redirect("/");
+    return admin ? response : redirect("/swipe");
   }
 
   // Signed-in users don't need the login/sign-up/forgot pages again.
@@ -129,7 +129,7 @@ export async function middleware(request: NextRequest) {
     pathname === "/signup" ||
     pathname === "/forgot-password"
   ) {
-    return redirect(verified ? "/" : "/verify");
+    return redirect(verified ? "/swipe" : "/verify");
   }
   // Reached WITH a (recovery) session from the email link — always allowed.
   if (pathname === "/reset-password") return response;
@@ -137,6 +137,13 @@ export async function middleware(request: NextRequest) {
   // Verification gate: pending / unverified students live in the shell.
   if (!verified) {
     return pathname === "/verify" ? response : redirect("/verify");
+  }
+
+  // Landing rule (2026-11-11): the app opens on Fling. A verified
+  // user asking for the root goes straight to the deck; the dial
+  // home lives at /home.
+  if (pathname === "/") {
+    return redirect("/swipe");
   }
 
   return response;

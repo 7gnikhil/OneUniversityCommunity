@@ -2492,3 +2492,33 @@ dial stays as the home centrepiece.
   consumed solely by the home page's own getDialData call.
 - The dial itself is untouched: big dial on home, wheel skins,
   interface picker, DialSkinPicker, badges — all as before.
+
+---
+
+## The app opens on Fling (2026-11-11)
+
+Owner's direction (main chat, same evening as the bottom bar): when
+a signed-in user opens OneUco, the first page is Fling — not the
+dial home.
+
+### What shipped
+- **Dial home moved**: app/page.tsx → app/home/page.tsx, unchanged
+  inside. The dial is reached by the "← OneUco" header links (now
+  pointed at /home on swipe, profile, other-profiles, servers,
+  friends, chirp, inbox, search) — fittingly, the landing page
+  itself carries the most prominent one.
+- **Root is a doorway**: new app/page.tsx redirects signed-in →
+  /swipe, signed-out → /login; the middleware applies the same
+  landing rule first for verified users (pathname "/" → /swipe,
+  after the verification gate), so the redirector is a backstop.
+- **Every entrance now lands on the deck**: middleware sends
+  verified users from /login|/signup|/forgot-password and from a
+  blocked /admin attempt to /swipe; login action default next →
+  /swipe; OAuth callback safeNext defaults → /swipe; both
+  post-verification redirects → /swipe; PWA manifest start_url →
+  /swipe (installed app opens on Fling with no redirect hop).
+  Explicit `next` deep links are untouched — a user heading
+  somewhere specific still lands there.
+- **DialShell**: bottom-padding exemption moved from "/" to
+  "/home" (the dial page pads its own viewport-height main);
+  /home lights no bottom-bar tab, correctly.
