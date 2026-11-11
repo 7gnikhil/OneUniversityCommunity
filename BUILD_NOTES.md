@@ -2613,3 +2613,25 @@ helm LOADER is a separate thing and stays exactly as specified.)
   interfaces theme the whole app, and picking them lives there —
   only the dial's long-press shortcut to the same picker is gone.
   The dial-metal CSS tokens in lib/themes + globals.css are inert.
+
+---
+
+## Quote of the day on the loading screen (2026-11-11)
+
+Owner's ask: while loading, show a day quote — love, relationships,
+college, friendship. lib/loading-quotes.ts holds 30 original lines
+across the four themes (no borrowed quotes, no attributions); the
+pick is deterministic by IST day number, so the whole app sees one
+quote per day, turning over at India midnight, with no database
+or fetch. app/loading.tsx renders it under the helm medallion,
+labelled "Quote of the day", above the "Steering…" caption.
+
+---
+
+## Fling "Start again" wait: 2 minutes → 30 seconds (2026-11-11)
+
+Owner's call ("make the fling time to 30 sec"): RESET_WAIT_MS in
+SwipeDeck 120_000 → 30_000. The visible countdown after deck
+exhaustion now runs 0:30; comments in SwipeDeck and
+app/swipe/actions.ts updated to match. Nothing else about the
+reset changed — passes only, likes/matches never undone.

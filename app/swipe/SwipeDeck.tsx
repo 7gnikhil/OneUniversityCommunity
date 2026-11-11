@@ -19,13 +19,13 @@ import { recordSwipeAction, resetPassesAction } from "./actions";
 // consumed once the swipe has been recorded server-side; a mutual like
 // returns matched=true and the match moment takes over the screen.
 //
-// "Start again" after exhaustion sits behind a VISIBLE 2-minute
+// "Start again" after exhaustion sits behind a VISIBLE 30-second
 // countdown (product rule) and then resets only my passes server-side —
 // likes and matches are never undone.
 
 const SWIPE_THRESHOLD_PX = 90;
 const FLY_MS = 220;
-const RESET_WAIT_MS = 120_000;
+const RESET_WAIT_MS = 30_000;
 
 function playMatchChime(): void {
   // Short two-note "love-birds" chime generated with WebAudio — no audio
