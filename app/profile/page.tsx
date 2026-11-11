@@ -21,6 +21,7 @@ import ProfileEditor, { type ProfileEditorInitial } from "./ProfileEditor";
 import FlingProfileEditor from "./FlingProfileEditor";
 import InterfacePicker from "@/components/InterfacePicker";
 import DialSkinPicker from "@/components/DialSkinPicker";
+import NotificationSettings from "@/components/NotificationSettings";
 import AnimatedDropdown from "@/components/AnimatedDropdown";
 import PageIntro from "@/components/PageIntro";
 import { getTheme } from "@/lib/themes";
@@ -30,8 +31,9 @@ import {
   getProfileThemeId,
 } from "@/lib/server/theme-settings";
 
-// Profile & Settings, organised into FIVE sections (owner's layout,
-// 2026-11-10) — every field lives in exactly ONE of them:
+// Profile & Settings, organised into SIX sections (owner's layout,
+// 2026-11-10; section 6 added with the re-engagement batch,
+// 2026-11-11) — every field lives in exactly ONE of them:
 //   1. Profile      — personal data (ProfileEditor + privacy toggles).
 //   2. Fling data   — the separate deck-only profile (migration 0012).
 //   3. Display      — the interface picker + dial wheel picker.
@@ -39,6 +41,9 @@ import {
 //                     developer_requests flow as /help — not a copy).
 //   5. About & FAQs — about OneUco + the shared FAQ/rules content
 //                     (lib/help-content.ts, also rendered by /help).
+//   6. Notifications & app — per-device push toggles + PWA install
+//                     (re-engagement batch; device state, not account
+//                     fields, so nothing here duplicates a field above).
 // Each section is presented as an AnimatedDropdown (owner's follow-up
 // ask): the closed bar carries the section title + a one-line summary,
 // the body expands/collapses with the shared 300ms animation. Profile
@@ -230,6 +235,19 @@ export default async function ProfilePage() {
                 <li key={rule}>{rule}</li>
               ))}
             </ul>
+          </div>
+        </AnimatedDropdown>
+
+        {/* ── 6 · Notifications & app — push + install ──────────── */}
+        <AnimatedDropdown
+          title="Notifications & app"
+          currentLabel="Matches, messages & requests"
+          collapseOnSubmit={false}
+        >
+          <div className="mt-4 flex flex-col gap-4">
+            <NotificationSettings
+              vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null}
+            />
           </div>
         </AnimatedDropdown>
       </div>

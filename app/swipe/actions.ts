@@ -3,6 +3,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getAccountByAuthUserId, type AccountRow } from "@/lib/auth/account";
 import { orderedPair, type MatchRow } from "@/lib/social";
+import { getNotifyDisplayName, notifyAccount } from "@/lib/push";
 
 export interface SwipeResult {
   matched: boolean;
@@ -104,6 +105,19 @@ export async function recordSwipeAction(
     .maybeSingle();
   const match = (matchData ?? null) as MatchRow | null;
   if (!match) return NO_MATCH;
+
+  // Re-engagement (2026-11-11): ping the other student's devices —
+  // a match is the app's biggest moment and they may be offline.
+  // Awaited, but lib/push fails soft: a push problem must never
+  // cost anyone their match.
+  const myName = await getNotifyDisplayName(admin, me.id);
+  await notifyAccount(admin, candidateId, {
+    title: "It's a match",
+    body: `${myName} matched with you on Fling — say hello.`,
+    url: `/friends/${match.id}`,
+    tag: `match-${match.id}`,
+  });
+
   return { matched: true, matchId: match.id, error: null };
 }
 

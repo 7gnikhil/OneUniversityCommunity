@@ -456,6 +456,25 @@ create table public.fling_profiles (
   updated_at timestamptz not null default now()
 );
 
+-- ── Push subscriptions (migration 0013) ─────────────────────────────
+-- One row per browser/device subscription. Service-role access ONLY:
+-- RLS is enabled with no client policies (endpoints are capability
+-- URLs for reaching a student's device — never client-readable).
+
+create table public.push_subscriptions (
+  id         uuid primary key default gen_random_uuid(),
+  account_id uuid not null references public.accounts (id) on delete cascade,
+  endpoint   text not null unique,
+  p256dh     text not null,
+  auth       text not null,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index push_subscriptions_account_id_idx
+  on public.push_subscriptions (account_id);
+
 -- ── updated_at triggers ────────────────────────────────────────────────────
 
 create trigger accounts_set_updated_at      before update on public.accounts
@@ -477,6 +496,8 @@ create trigger reveal_set_updated_at        before update on public.reveal_reque
 create trigger devreq_set_updated_at        before update on public.developer_requests
   for each row execute function public.set_updated_at();
 create trigger fling_profiles_set_updated_at before update on public.fling_profiles
+  for each row execute function public.set_updated_at();
+create trigger push_subscriptions_set_updated_at before update on public.push_subscriptions
   for each row execute function public.set_updated_at();
 
 -- ── Public profile view ────────────────────────────────────────────────────
@@ -530,6 +551,7 @@ alter table public.blocks            enable row level security;
 alter table public.reports           enable row level security;
 alter table public.developer_requests enable row level security;
 alter table public.fling_profiles    enable row level security;
+alter table public.push_subscriptions enable row level security;
 
 -- accounts: read/update self; admins read all. INSERT happens via the
 -- sign-up server action (service role) so uniqueness + verification

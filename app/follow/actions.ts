@@ -11,6 +11,7 @@ import {
   type FollowRequestRow,
 } from "@/lib/follows";
 import { orderedPair } from "@/lib/social";
+import { notifyAccount } from "@/lib/push";
 
 // Follow requests. A FOLLOW is an explicit ask from a profile or search
 // result (a swipe stays a silent mutual-like). The ask lands in the
@@ -149,6 +150,14 @@ export async function sendFollowRequestAction(
     `@${me.username} wants to follow you`,
     request.id,
   );
+  // Re-engagement (2026-11-11): the same event as a push, for
+  // devices that subscribed (fails soft inside lib/push).
+  await notifyAccount(ctx.admin, targetAccountId, {
+    title: "New follow request",
+    body: `@${me.username} wants to follow you`,
+    url: "/inbox",
+    tag: "follow-requests",
+  });
   return { state: "requested", error: null };
 }
 
@@ -201,6 +210,12 @@ export async function respondFollowRequestAction(
       `@${me.username} accepted — you are friends now. Say hello!`,
       requestId,
     );
+    await notifyAccount(ctx.admin, requesterId, {
+      title: "Follow request accepted",
+      body: `@${me.username} accepted — you are friends now. Say hello!`,
+      url: "/friends",
+      tag: "follow-accepted",
+    });
   } else {
     await deliverInboxItem(
       ctx.admin,

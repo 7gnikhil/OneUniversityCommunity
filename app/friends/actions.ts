@@ -17,6 +17,11 @@ import {
   isOnline,
   isTypingAt,
 } from "@/lib/presence";
+import {
+  getNotifyDisplayName,
+  isRecentlyActive,
+  notifyAccount,
+} from "@/lib/push";
 
 // DM chat actions. Reads/writes that RLS covers (reading a match I'm in,
 // sending as myself, marking THEIR messages read) run on the SESSION
@@ -113,8 +118,33 @@ export async function sendMessageAction(
       .from("matches")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", matchId);
+
+    // Re-engagement (2026-11-11): push the message to the other side —
+    // but only for the FIRST message of a burst (one ping per
+    // conversation, not one per line) and never to someone already in
+    // the app (presence window). Same best-effort block: the message
+    // is saved whatever happens here.
+    const recipientId = otherPartyId(match, ctx.accountId);
+    if (!(await isRecentlyActive(admin, recipientId))) {
+      const burstCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { count } = await admin
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("match_id", matchId)
+        .eq("sender_id", ctx.accountId)
+        .gte("created_at", burstCutoff);
+      if ((count ?? 0) <= 1) {
+        const myName = await getNotifyDisplayName(admin, ctx.accountId);
+        await notifyAccount(admin, recipientId, {
+          title: myName,
+          body: text ? text.slice(0, 90) : "Sent you a photo",
+          url: `/friends/${matchId}`,
+          tag: `dm-${matchId}`,
+        });
+      }
+    }
   } catch {
-    // Ordering nicety only; ignore.
+    // Ordering + notification niceties only; ignore.
   }
 
   return { message: data as MessageRow, error: null };

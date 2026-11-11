@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { CSSProperties } from "react";
 import "./globals.css";
 import { isDiwaliLive } from "@/lib/server/diwali-settings";
@@ -8,12 +8,22 @@ import { themeCssVars, type AppTheme } from "@/lib/themes";
 import { resolveAppliedTheme } from "@/lib/server/theme-settings";
 import DiwaliBanner from "@/components/DiwaliBanner";
 import PresenceHeartbeat from "@/components/PresenceHeartbeat";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import DialShellServer from "@/components/DialShellServer";
 
 export const metadata: Metadata = {
   title: "OneUco — One University Community",
   description:
     "OneUco is a students-only community app for students everywhere: Fling matches, Tea hangouts, Chirp, friends chat and an inbox — for students of any college or university.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "OneUco",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
 };
 
 export default async function RootLayout({
@@ -74,6 +84,7 @@ export default async function RootLayout({
       <body className="min-h-dvh bg-black text-white antialiased">
         {diwali ? <DiwaliBanner variant="app" /> : null}
         {signedIn ? <PresenceHeartbeat /> : null}
+        {signedIn ? <ServiceWorkerRegister /> : null}
         {/*
           App shell — the dial is the navigation on every screen size
           (owner's design; the SideNav rail shipped 2026-11-10 was

@@ -2372,3 +2372,54 @@ DeveloperRequestForm and both pickers are unmodified.
   app/chirp/campus/page.tsx (full mount).
 - NOT touched (in-flight upload fix): app/chirp/ChirpFeed.tsx,
   lib/images.ts, the storage upload path.
+
+---
+
+## Re-engagement batch — PWA + Web Push (2026-11-11)
+
+Owner direction: fix the #1 limitation from the engagement review —
+no way back into a student's day (no app install, no push). Research
+page "OneUco Engagement Features Research" recommendation #3.
+
+### What shipped
+- **PWA**: app/manifest.ts (standalone, black theme, gold-dial icons —
+  public/icons/icon-192.png, icon-512.png, icon-maskable-512.png,
+  generated dial art; app/icon.png + app/apple-icon.png by file
+  convention). Layout gains appleWebApp metadata + a themeColor
+  viewport export.
+- **Service worker** (public/sw.js): push + notificationclick ONLY.
+  No fetch handler, no caching — it can never serve a stale app.
+  Registered for signed-in students by components/ServiceWorkerRegister
+  (root layout, next to PresenceHeartbeat); the same component stashes
+  the beforeinstallprompt event on window.__oneucoInstallPrompt and
+  broadcasts 'oneuco-install-ready' for the Settings install button.
+- **Push backend** (migration 0013): push_subscriptions table —
+  service-role access only (RLS on, NO client policies; endpoints are
+  capability URLs). lib/push.ts sends via web-push (new dependency):
+  notifyAccount (prunes 404/410 dead subs), getNotifyDisplayName,
+  isRecentlyActive (presence window, 3 min). Everything fails soft —
+  push can never break the triggering action.
+- **Hooks** (awaited, best-effort):
+  - recordSwipeAction: a created match pings the other student.
+  - follow actions: follow_request + follow_accepted ping alongside
+    the existing Inbox items (declines deliberately do NOT push).
+  - sendMessageAction: DM ping only for the first message of a burst
+    (≤1 of my messages in this chat in 15 min) and never to someone
+    seen within 3 minutes; tag dm-<matchId> collapses repeats.
+- **Settings section 6 · "Notifications & app"** (the five-section
+  layout becomes six; the new section holds only NEW device state —
+  no existing field moved): components/NotificationSettings.tsx —
+  push state machine (checking / unsupported / iPhone needs-install /
+  denied / on / off) via app/push/actions.ts (subscribe/unsubscribe,
+  upsert on endpoint), plus install (captured prompt, else Android /
+  iOS manual steps; iOS copy explains Home-Screen-first).
+- **Config**: Vercel Production env NEXT_PUBLIC_VAPID_PUBLIC_KEY +
+  VAPID_PRIVATE_KEY + VAPID_SUBJECT (mailto owner). Keys generated
+  2026-11-11; the private key lives ONLY in Vercel env (never in the
+  repo). .env.example documents the three names.
+
+### Verification
+- Local: tsc --noEmit PASS; next build PASS (routes include
+  /manifest.webmanifest and /icon.png; /profile 9.8 kB).
+- Migration 0013 applied via Supabase dashboard; VAPID env set via
+  Vercel dashboard (both verified by the dashboard task report).
