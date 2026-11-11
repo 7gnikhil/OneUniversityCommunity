@@ -2557,3 +2557,21 @@ never leaves the rim; the wheel swings ±19°
 skin, so none crosses his face; hands land on the rim at 10 and 2.
 The wheel-only first version (commit 0d54aa4) shipped minutes
 earlier and is superseded by this batch.
+
+### Refinement later that night — real artefact, small, centred
+Owner's design notes: loading symbol only (not a control); the
+vector version was TOO BIG — make it small and align it correctly
+in the centre; and the look must be an old, real, sea-worn wheel —
+a piece broken, a pirate photo in it, algae on it, dust on it.
+- The SVG pirate/wheel was replaced by a photograph-style artefact
+  image (generated to spec, hand-checked): pirate captain's face
+  and bandana above the wheel, both hands gripping, a chunk of the
+  rim broken and splintered, green algae on the lower rim, salt
+  dust in the grooves, tarnished verdigris hub. Processed to
+  480×480 WebP, 39 KB, at public/images/pirate-helm-loader.webp.
+- PirateHelmLoader now renders that photo in a brass-ringed round
+  medallion at 84px, rocking ±10° (.helm-photo-rock, 2.2s) — the
+  two-group SVG animation and its keyframes are gone.
+- app/loading.tsx: min-height now calc(100dvh − 6rem) so the
+  medallion centres in the free screen above the bottom bar,
+  netting out the shell's bottom padding.
