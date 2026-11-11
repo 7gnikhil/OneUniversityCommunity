@@ -7,6 +7,10 @@ import { getDeveloperAccountId } from "@/lib/server/owner";
 import { accentHex } from "@/lib/validation";
 import SwipeDeck from "./SwipeDeck";
 import PageIntro from "@/components/PageIntro";
+import DailyPoll from "@/components/DailyPoll";
+import { quoteOfTheDay } from "@/lib/loading-quotes";
+import { pollOfTheDay } from "@/lib/daily-polls";
+import { istMidnightUtc } from "@/lib/daily";
 
 // Fling — the app's #1 priority surface (Tinder-style, verified
 // students only; middleware holds everyone else at /verify).
@@ -60,6 +64,93 @@ export default async function SwipePage() {
     candidates = [];
   }
 
+  // ── Starting-page features (2026-11-11) ─────────────────────────
+  // All fail-soft: any failure renders the deck alone, never an
+  // error page. The quote is pure code; the rest are small reads.
+  const quote = quoteOfTheDay();
+  const poll = pollOfTheDay();
+
+  // Poll of the day: aggregate counts (RPC) + my own vote.
+  let pollCounts = new Array<number>(poll.options.length).fill(0);
+  let pollMyVote: number | null = null;
+  try {
+    const { data: countRows } = await supabase.rpc("daily_poll_counts", {
+      p_date: poll.date,
+    });
+    for (const row of (countRows ?? []) as {
+      option_index: number;
+      votes: number | string;
+    }[]) {
+      if (row.option_index >= 0 && row.option_index < poll.options.length) {
+        pollCounts[row.option_index] = Number(row.votes);
+      }
+    }
+    const { data: myVoteRow } = await supabase
+      .from("daily_poll_votes")
+      .select("option_index")
+      .eq("poll_date", poll.date)
+      .eq("account_id", account.id)
+      .maybeSingle();
+    pollMyVote = myVoteRow?.option_index ?? null;
+  } catch {
+    pollCounts = new Array<number>(poll.options.length).fill(0);
+    pollMyVote = null;
+  }
+
+  // "New today" pulse: joins, chirps and matches since IST midnight.
+  let pulse: { joined: number; chirps: number; matches: number } | null =
+    null;
+  try {
+    const admin = createAdminClient();
+    const since = istMidnightUtc().toISOString();
+    const countSince = async (table: string): Promise<number> => {
+      const { count } = await admin
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", since);
+      return count ?? 0;
+    };
+    pulse = {
+      joined: await countSince("accounts"),
+      chirps: await countSince("chirps"),
+      matches: await countSince("matches"),
+    };
+  } catch {
+    pulse = null;
+  }
+
+  // My given 1–10 ratings for the dealt candidates (own-row RLS).
+  const myRatings: Record<string, number> = {};
+  if (candidates.length > 0) {
+    try {
+      const { data: ratingRows } = await supabase
+        .from("profile_ratings")
+        .select("rated_account_id, rating")
+        .eq("rater_account_id", account.id)
+        .in(
+          "rated_account_id",
+          candidates.map((row) => row.profile.accountId),
+        );
+      for (const row of ratingRows ?? []) {
+        myRatings[row.rated_account_id] = row.rating;
+      }
+    } catch {
+      // Ratings pre-migration or a transient failure: the control
+      // simply starts unmarked.
+    }
+  }
+
+  const pulseParts: string[] = [];
+  if (pulse) {
+    if (pulse.joined > 0)
+      pulseParts.push(
+        `${pulse.joined} joined`,
+      );
+    if (pulse.chirps > 0) pulseParts.push(`${pulse.chirps} chirps`);
+    if (pulse.matches > 0)
+      pulseParts.push(`${pulse.matches} new match${pulse.matches === 1 ? "" : "es"}`);
+  }
+
   return (
     <main data-section="swipe" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
       <div className="flex items-center justify-between">
@@ -74,6 +165,26 @@ export default async function SwipePage() {
         </p>
       </div>
       <PageIntro section="swipe" />
+
+      {/* Quote of the day — the loader's quote, on the front page. */}
+      <p className="text-center text-[13px] italic leading-relaxed text-neutral-400">
+        &ldquo;{quote}&rdquo;
+      </p>
+
+      {/* New-today pulse: quiet proof the community is alive. */}
+      {pulseParts.length > 0 ? (
+        <p className="text-center text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+          Today on OneUco · {pulseParts.join(" · ")}
+        </p>
+      ) : null}
+
+      <DailyPoll
+        question={poll.question}
+        options={poll.options}
+        initialCounts={pollCounts}
+        initialMyVote={pollMyVote}
+      />
+
       <SwipeDeck
         // Remount when the dealt deck changes (e.g. after Start Again
         // resets passes and the server re-deals) — the deck keeps its
@@ -81,6 +192,7 @@ export default async function SwipePage() {
         key={candidates.map((row) => row.profile.accountId).join(",")}
         candidates={candidates}
         accentHex={accentHex(myProfile?.accent_color)}
+        initialRatings={myRatings}
       />
     </main>
   );

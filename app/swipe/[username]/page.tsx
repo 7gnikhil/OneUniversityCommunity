@@ -15,6 +15,7 @@ import { INTENTIONS } from "@/lib/preferences";
 import { accentHex, normaliseUsername } from "@/lib/validation";
 import type { Intention } from "@/lib/types";
 import FlingActions from "./FlingActions";
+import RateProfile from "@/components/RateProfile";
 
 // A stranger's FLING profile — what tapping "View Fling profile" on a
 // deck card opens (and the only profile a deck card leads to).
@@ -119,6 +120,23 @@ export default async function FlingProfilePage({
 
   const fling = await getFlingProfile(supabase, profile.accountId);
 
+  // My given 1–10 rating for this profile (migration 0016), so the
+  // rating control below opens already marked. Fail-soft.
+  let myRatingForThem: number | null = null;
+  if (account && account.id !== profile.accountId) {
+    try {
+      const { data: ratingRow } = await supabase
+        .from("profile_ratings")
+        .select("rating")
+        .eq("rater_account_id", account.id)
+        .eq("rated_account_id", profile.accountId)
+        .maybeSingle();
+      myRatingForThem = ratingRow?.rating ?? null;
+    } catch {
+      myRatingForThem = null;
+    }
+  }
+
   // Already matched (accepted follow / mutual swipe)? Then this person
   // is not a deck stranger anymore — the deck no longer deals them
   // (Part C), and this view points at the chat instead of Fling/Pass.
@@ -217,6 +235,19 @@ export default async function FlingProfilePage({
           accentHex={accent}
         />
       )}
+
+      {/* 1–10 rating (migration 0016) — the same control the deck
+          card carries; hidden on the developer's masked profile and
+          on my own (the fetch above stays null for both). */}
+      {account && account.id !== profile.accountId && !isDeveloper ? (
+        <div className="flex justify-center pt-1">
+          <RateProfile
+            accountId={profile.accountId}
+            initialRating={myRatingForThem}
+            label={`Rate ${displayName} from 1 to 10`}
+          />
+        </div>
+      ) : null}
     </main>
   );
 }

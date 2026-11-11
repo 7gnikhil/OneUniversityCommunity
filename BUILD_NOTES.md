@@ -2646,3 +2646,35 @@ point straight at /swipe, and DialShell's old /home bottom-padding
 exemption is gone (every shelled page takes pb-24). Anything still
 landing on /home — bookmarks, an installed PWA, stale links —
 ends up on the deck.
+
+---
+
+## Starting-page features + Fling ratings (2026-11-11, late)
+
+Owner approved the suggested trio for the starting page (Fling)
+and added a feature of his own: a 1–10 rating in Fling.
+
+### Quote card + "new today" pulse (Fling page)
+- The loader's quote of the day (lib/loading-quotes) also prints
+  as a slim line at the top of Fling.
+- Pulse line: joins / chirps / new matches since IST midnight
+  (lib/daily.istMidnightUtc; IST helpers shared by all daily
+  features). Zero segments hide; the line hides if all are zero.
+
+### Poll of the day (migration 0015)
+- lib/daily-polls.ts: 14 campus questions, picked by IST day —
+  same question for everyone, no admin tooling. Votes only are
+  stored: daily_poll_votes (PK poll_date+account, own-row RLS),
+  counts via the security-definer daily_poll_counts() RPC
+  (aggregates only — nobody can see who voted what). One vote per
+  day; voting again changes it. components/DailyPoll.tsx renders
+  options, then result bars after voting; optimistic with rollback.
+
+### Fling rating 1–10 (migration 0016)
+- RateProfile control under the deck card's buttons AND on the
+  Fling profile page: tap 1–10, tap again to change. Independent
+  of swipes — rating never likes/passes/matches anyone.
+- profile_ratings (PK rater+rated, 1–10 check, no self-rating),
+  own-row RLS on the GIVEN side. Received ratings are never shown
+  publicly; the owner sees only their own average + count (the
+  my_received_rating() RPC) in Profile → Fling data.

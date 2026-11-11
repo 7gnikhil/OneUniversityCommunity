@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { DeckCandidate } from "@/lib/social";
 import { sizedPhotoUrl } from "@/lib/images";
+import RateProfile from "@/components/RateProfile";
 import { recordSwipeAction, resetPassesAction } from "./actions";
 
 // The swipe deck (client). Cards arrive pre-filtered from the server
@@ -78,9 +79,12 @@ function shuffleTail<T>(items: T[], fromIndex: number): T[] {
 export default function SwipeDeck({
   candidates,
   accentHex: accent,
+  initialRatings = {},
 }: {
   candidates: DeckCandidate[];
   accentHex: string;
+  /** My given 1–10 ratings by account id (migration 0016). */
+  initialRatings?: Record<string, number>;
 }) {
   const router = useRouter();
   const [queue, setQueue] = useState<DeckCandidate[]>(candidates);
@@ -320,6 +324,16 @@ export default function SwipeDeck({
               ♥
             </button>
           </div>
+
+          {/* 1–10 rating for the card on top (migration 0016) —
+              keyed by account so the control resets per person;
+              independent of Like/Pass, it never swipes the card. */}
+          <RateProfile
+            key={current.profile.accountId}
+            accountId={current.profile.accountId}
+            initialRating={initialRatings[current.profile.accountId] ?? null}
+            label={`Rate @${current.profile.username} from 1 to 10`}
+          />
 
           {!interacted ? (
             <p className="hidden text-xs text-neutral-600 sm:block">

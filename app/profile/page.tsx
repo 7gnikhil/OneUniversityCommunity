@@ -114,6 +114,25 @@ export default async function ProfilePage() {
   // fling profile until the table lands.
   const flingProfile = await getFlingProfile(supabase, account.id);
 
+  // My received Fling rating (migration 0016): my own average +
+  // count via the aggregate RPC. Shown only to me, in the Fling
+  // data section below; absent entirely until someone rates me.
+  let receivedRating: { average: number; count: number } | null = null;
+  try {
+    const { data: ratingData } = await supabase.rpc("my_received_rating");
+    const row = (ratingData ?? [])[0] as
+      | { average: number | string | null; ratings_count: number | string }
+      | undefined;
+    if (row && Number(row.ratings_count) > 0) {
+      receivedRating = {
+        average: Number(row.average),
+        count: Number(row.ratings_count),
+      };
+    }
+  } catch {
+    receivedRating = null;
+  }
+
   // Queries — my existing developer requests, for the shared form's
   // tracking list (same action /help uses).
   const myRequests = await listMyDeveloperRequestsAction();
@@ -169,6 +188,19 @@ export default async function ProfilePage() {
           collapseOnSubmit={false}
         >
           <div className="mt-4 flex flex-col gap-4">
+            {receivedRating ? (
+              <p className="text-sm text-neutral-300">
+                Your Fling rating:{" "}
+                <span className="font-semibold text-white">
+                  ★ {receivedRating.average.toFixed(1)}
+                </span>{" "}
+                <span className="text-neutral-500">
+                  · from {receivedRating.count} rating
+                  {receivedRating.count === 1 ? "" : "s"} — only you can
+                  see this
+                </span>
+              </p>
+            ) : null}
             <FlingProfileEditor initial={flingProfile} accentHex={accent} />
           </div>
         </AnimatedDropdown>
