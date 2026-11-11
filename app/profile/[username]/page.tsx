@@ -135,7 +135,7 @@ export default async function PublicProfilePage({
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <Link
-          href="/home"
+          href="/swipe"
           className="text-sm text-neutral-400 transition hover:text-white"
         >
           ← OneUco

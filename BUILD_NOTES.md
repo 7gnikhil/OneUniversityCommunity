@@ -2635,3 +2635,14 @@ SwipeDeck 120_000 → 30_000. The visible countdown after deck
 exhaustion now runs 0:30; comments in SwipeDeck and
 app/swipe/actions.ts updated to match. Nothing else about the
 reset changed — passes only, likes/matches never undone.
+
+### Follow-up the same night — the /home PAGE is removed too
+Owner confirmed: "yes — the dial page." Not just the dial widget:
+the page goes. app/home/page.tsx is now a redirector to /swipe
+(snapshot pushes can't delete files, so the route remains as a
+doorway). The eight "← OneUco" header links (swipe, profile,
+profile/[username], servers, friends, chirp, inbox, search) now
+point straight at /swipe, and DialShell's old /home bottom-padding
+exemption is gone (every shelled page takes pb-24). Anything still
+landing on /home — bookmarks, an installed PWA, stale links —
+ends up on the deck.

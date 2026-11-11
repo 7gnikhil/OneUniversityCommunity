@@ -1,7 +1,7 @@
 // RETIRED 2026-11-11 — the rotary dial was removed by the owner's
 // call ("I think we don't need that dial anymore"). The bottom tab
 // bar (components/BottomBar) is the app's navigation, the app opens
-// on Fling, and /home is a plain brand home now.
+// on Fling, and the /home page itself was removed the same night and now redirects to /swipe.
 //
 // This file remains only because snapshot pushes cannot delete
 // remote files; it is an inert stub. The dial's data contracts

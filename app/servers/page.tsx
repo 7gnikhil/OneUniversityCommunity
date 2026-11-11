@@ -68,7 +68,7 @@ export default async function ServersPage() {
   return (
     <main data-section="servers" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
       <div className="flex items-center justify-between">
-        <Link href="/home" className="text-sm text-neutral-400 transition hover:text-white">
+        <Link href="/swipe" className="text-sm text-neutral-400 transition hover:text-white">
           ← OneUco
         </Link>
         <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">

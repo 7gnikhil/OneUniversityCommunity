@@ -10,12 +10,11 @@ import type { DialBadges } from "@/lib/nav-stops";
 // away ("people need faster access"). The rotary dial that used to
 // anchor this shell — big on home, docked in a column inside
 // sections — was retired the same night ("I think we don't need
-// that dial anymore"); /home is a plain brand home now.
+// that dial anymore"); the /home page itself was removed the same night and now redirects to /swipe.
 //
 // Sections render full-width at every size — the pages carry their
 // own max-w-md columns — with bottom padding so content clears the
-// fixed bar. The home page pads its own <main> instead (its layout
-// is exactly viewport-height), so the wrapper adds none.
+// fixed bar.
 //
 // Auth / legal / setup routes never get the shell. Admin routes
 // never get it either: the admin area carries its own header/nav,
@@ -54,7 +53,7 @@ export default function DialShell({
 
   return (
     <>
-      <div className={pathname === "/home" ? undefined : "pb-24"}>{children}</div>
+      <div className="pb-24">{children}</div>
       <BottomBar badges={badges} />
     </>
   );

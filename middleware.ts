@@ -140,8 +140,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // Landing rule (2026-11-11): the app opens on Fling. A verified
-  // user asking for the root goes straight to the deck; the dial
-  // home lives at /home.
+  // user asking for the root goes straight to the deck. (The dial
+  // home that briefly lived at /home was removed the same night —
+  // that route now redirects to /swipe too.)
   if (pathname === "/") {
     return redirect("/swipe");
   }
