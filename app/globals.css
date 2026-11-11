@@ -334,35 +334,64 @@ main[data-section] .section-header-chip::before {
 }
 
 /* Pirate helm loader (components/PirateHelmLoader, app/loading.tsx):
-   the helm rocks like a helmsman steering — swing to port, settle,
-   swing to starboard — never a full spin. Reduced-motion users get
-   the same wheel at a calmer pace rather than a frozen frame. */
-@keyframes helm-rock {
+   a pirate AT the helm. Two motions, one steering feel — the wheel
+   group (wheel + arms + hands, so the grip never leaves the rim)
+   swings ±19°, and the body group leans ±6° a beat behind it.
+   Reduced-motion users get the same scene at a calmer pace rather
+   than a frozen frame. */
+@keyframes helm-wheel-rock {
   0% {
-    transform: rotate(0deg) translateY(0);
+    transform: rotate(0deg);
   }
   25% {
-    transform: rotate(17deg) translateY(1px);
+    transform: rotate(19deg);
   }
   50% {
-    transform: rotate(0deg) translateY(0);
+    transform: rotate(0deg);
   }
   75% {
-    transform: rotate(-17deg) translateY(1px);
+    transform: rotate(-19deg);
   }
   100% {
-    transform: rotate(0deg) translateY(0);
+    transform: rotate(0deg);
   }
 }
 
-.helm-rock {
-  animation: helm-rock 2.4s ease-in-out infinite;
+@keyframes helm-body-sway {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(6deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+  75% {
+    transform: rotate(-6deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.helm-wheel-rock {
+  animation: helm-wheel-rock 2.4s ease-in-out infinite;
+  transform-box: fill-box;
   transform-origin: 50% 50%;
   will-change: transform;
 }
 
+.helm-body-sway {
+  animation: helm-body-sway 2.4s ease-in-out -0.18s infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .helm-rock {
+  .helm-wheel-rock,
+  .helm-body-sway {
     animation-duration: 6s;
   }
 }

@@ -2545,3 +2545,15 @@ no spinners anywhere; pages just hung on the old screen.)
   inside the shell (bottom bar stays mounted) on every navigation
   that makes the next page fetch; helm + a small "Steering…"
   caption. Covers all routes (no segment has its own loading file).
+
+### Clarification same evening — a PIRATE at the helm
+Owner clarified: not a wheel rocking alone — a pirate gripping the
+wheel and turning it. PirateHelmLoader redrawn accordingly: the
+figure stands behind the wheel (bandana + tails, beard, eye patch,
+coat), arms and hands IN the wheel's animation group so his grip
+never leaves the rim; the wheel swings ±19°
+(.helm-wheel-rock) while the body leans ±6° a beat behind it
+(.helm-body-sway, −0.18s delay). Handles offset 22.5° like the
+skin, so none crosses his face; hands land on the rim at 10 and 2.
+The wheel-only first version (commit 0d54aa4) shipped minutes
+earlier and is superseded by this batch.

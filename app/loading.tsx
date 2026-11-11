@@ -13,7 +13,7 @@ export default function Loading() {
       role="status"
       aria-label="Loading"
     >
-      <PirateHelmLoader size={124} />
+      <PirateHelmLoader size={148} />
       <p className="text-[11px] uppercase tracking-[0.25em] text-neutral-500">
         Steering…
       </p>
