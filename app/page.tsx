@@ -48,7 +48,7 @@ export default async function DialHomePage() {
   const accent = badges?.accentHex ?? "#171717";
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-6 lg:py-10">
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 pt-6 pb-24 lg:pt-10 lg:pb-24">
       <header className="flex flex-col items-center gap-1.5 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">OneUco</h1>
         <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">

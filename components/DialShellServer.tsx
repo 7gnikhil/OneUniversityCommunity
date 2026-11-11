@@ -39,10 +39,6 @@ export default async function DialShellServer({
   const account = await getMyAccount(supabase);
   if (!account) return <>{children}</>;
 
-  const { badges, themePicker } = await getDialData(supabase, account.id);
-  return (
-    <DialShell badges={badges} themePicker={themePicker}>
-      {children}
-    </DialShell>
-  );
+  const { badges } = await getDialData(supabase, account.id);
+  return <DialShell badges={badges}>{children}</DialShell>;
 }

@@ -114,7 +114,7 @@ export interface DialBadges {
  */
 type BadgeRingVariant = "double" | "beads" | "dashed" | "ticks" | "thick";
 
-interface DialStopDef {
+export interface DialStopDef {
   label: string;
   href: string;
   /**
@@ -143,7 +143,7 @@ interface DialStopDef {
 // thick 2.4 strokes on the 24-grid, generous shapes, few internal
 // details, solid filled accents where a stroke would vanish at
 // stop size). Each glyph is render-tested at ~36px and ~22px.
-const STOPS: DialStopDef[] = [
+export const STOPS: DialStopDef[] = [
   {
     label: "Tea",
     href: "/servers",

@@ -2453,3 +2453,42 @@ that date/time.
   queue renders under the composer with per-row Cancel. Everything
   lives INSIDE the <form>, so the /chirp hub's composer-only mount
   shows it too (globals.css scope hides only non-form children).
+
+### Verification
+- Local: tsc --noEmit PASS; next build PASS (/chirp + /chirp/campus
+  rebuilt with the composer changes).
+- Migration 0014 applied via Supabase dashboard, verified there:
+  scheduled_chirps exists (0 rows); cron.job shows
+  'post-due-scheduled-chirps' on '* * * * *', active = true; a test
+  call of post_due_scheduled_chirps() on the empty queue returned 0.
+- Pushed as commit 4d8504d; Vercel production deployment Ready.
+
+---
+
+## Bottom tab bar — dial demoted to home centrepiece (2026-11-11)
+
+Owner's call, verbatim logic: "who uses the dial… people need
+faster access to the app." Three cosmetic redesign directions were
+shown and rejected ("this sucks") before he named the real problem:
+the dial as NAVIGATION. Decision (his tap): bottom bar for speed,
+dial stays as the home centrepiece.
+
+### What shipped
+- **components/BottomBar.tsx (new)**: fixed bottom tab bar, five
+  stops (Tea/Fling/Homies/Chirp/Profile), one tap from every
+  signed-in screen. Reuses the dial's own glyphs and per-stop hues
+  (STOPS + DialStopDef now exported from DialNav) and the same
+  unread badges (counts keyed by href — Tea = server unread,
+  Homies = DM unread). Active tab takes its stop's hue; /inbox
+  lights Homies. Safe-area inset padding; max-w-lg centred.
+- **DialShell rewritten**: the lg+ docked-dial column is GONE (and
+  mobile sections previously had no persistent nav at all).
+  Sections render full-width (pages keep their own max-w-md
+  columns) inside a pb-24 wrapper so content clears the bar. The
+  bar renders on the home route too; the home <main> pads itself
+  (pt-6 pb-24) since its dial layout is viewport-height. Hidden
+  prefixes unchanged (auth/legal/admin — admin keeps its own nav).
+- **DialShellServer**: passes only badges now; themePicker is
+  consumed solely by the home page's own getDialData call.
+- The dial itself is untouched: big dial on home, wheel skins,
+  interface picker, DialSkinPicker, badges — all as before.
