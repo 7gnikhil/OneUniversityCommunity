@@ -9,8 +9,12 @@ import SwipeDeck from "./SwipeDeck";
 import PageIntro from "@/components/PageIntro";
 import DailyPoll from "@/components/DailyPoll";
 import { quoteOfTheDay } from "@/lib/loading-quotes";
-import { pollOfTheDay } from "@/lib/daily-polls";
+import { getDailyPollState } from "@/lib/daily-poll-data";
 import { istMidnightUtc } from "@/lib/daily";
+import {
+  ratingsForAccounts,
+  type FlingRating,
+} from "@/lib/fling-rating";
 
 // Fling — the app's #1 priority surface (Tinder-style, verified
 // students only; middleware holds everyone else at /verify).
@@ -68,34 +72,14 @@ export default async function SwipePage() {
   // All fail-soft: any failure renders the deck alone, never an
   // error page. The quote is pure code; the rest are small reads.
   const quote = quoteOfTheDay();
-  const poll = pollOfTheDay();
 
-  // Poll of the day: aggregate counts (RPC) + my own vote.
-  let pollCounts = new Array<number>(poll.options.length).fill(0);
-  let pollMyVote: number | null = null;
-  try {
-    const { data: countRows } = await supabase.rpc("daily_poll_counts", {
-      p_date: poll.date,
-    });
-    for (const row of (countRows ?? []) as {
-      option_index: number;
-      votes: number | string;
-    }[]) {
-      if (row.option_index >= 0 && row.option_index < poll.options.length) {
-        pollCounts[row.option_index] = Number(row.votes);
-      }
-    }
-    const { data: myVoteRow } = await supabase
-      .from("daily_poll_votes")
-      .select("option_index")
-      .eq("poll_date", poll.date)
-      .eq("account_id", account.id)
-      .maybeSingle();
-    pollMyVote = myVoteRow?.option_index ?? null;
-  } catch {
-    pollCounts = new Array<number>(poll.options.length).fill(0);
-    pollMyVote = null;
-  }
+  // Poll of the day: aggregate counts + my own vote (shared helper —
+  // the Chirp hub shows the same poll through the same path).
+  const {
+    poll,
+    counts: pollCounts,
+    myVote: pollMyVote,
+  } = await getDailyPollState(supabase, account.id);
 
   // "New today" pulse: joins, chirps and matches since IST midnight.
   let pulse: { joined: number; chirps: number; matches: number } | null =
@@ -119,24 +103,19 @@ export default async function SwipePage() {
     pulse = null;
   }
 
-  // My given 1–10 ratings for the dealt candidates (own-row RLS).
-  const myRatings: Record<string, number> = {};
+  // Fling ratings for the dealt candidates — DERIVED from likes
+  // received (lib/fling-rating; no ratings table, no manual vote).
+  // One grouped read over the candidates' received swipes.
+  let deckRatings: Record<string, FlingRating> = {};
   if (candidates.length > 0) {
     try {
-      const { data: ratingRows } = await supabase
-        .from("profile_ratings")
-        .select("rated_account_id, rating")
-        .eq("rater_account_id", account.id)
-        .in(
-          "rated_account_id",
-          candidates.map((row) => row.profile.accountId),
-        );
-      for (const row of ratingRows ?? []) {
-        myRatings[row.rated_account_id] = row.rating;
-      }
+      const admin = createAdminClient();
+      deckRatings = await ratingsForAccounts(
+        admin,
+        candidates.map((row) => row.profile.accountId),
+      );
     } catch {
-      // Ratings pre-migration or a transient failure: the control
-      // simply starts unmarked.
+      deckRatings = {};
     }
   }
 
@@ -192,7 +171,7 @@ export default async function SwipePage() {
         key={candidates.map((row) => row.profile.accountId).join(",")}
         candidates={candidates}
         accentHex={accentHex(myProfile?.accent_color)}
-        initialRatings={myRatings}
+        ratings={deckRatings}
       />
     </main>
   );

@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { DeckCandidate } from "@/lib/social";
 import { sizedPhotoUrl } from "@/lib/images";
-import RateProfile from "@/components/RateProfile";
+import type { FlingRating } from "@/lib/fling-rating";
 import { recordSwipeAction, resetPassesAction } from "./actions";
 
 // The swipe deck (client). Cards arrive pre-filtered from the server
@@ -79,12 +79,12 @@ function shuffleTail<T>(items: T[], fromIndex: number): T[] {
 export default function SwipeDeck({
   candidates,
   accentHex: accent,
-  initialRatings = {},
+  ratings = {},
 }: {
   candidates: DeckCandidate[];
   accentHex: string;
-  /** My given 1–10 ratings by account id (migration 0016). */
-  initialRatings?: Record<string, number>;
+  /** Likes-derived Fling ratings by account id (lib/fling-rating). */
+  ratings?: Record<string, FlingRating>;
 }) {
   const router = useRouter();
   const [queue, setQueue] = useState<DeckCandidate[]>(candidates);
@@ -257,7 +257,10 @@ export default function SwipeDeck({
           <div className="relative h-[480px] w-full max-w-sm select-none">
             {nextCard ? (
               <div className="absolute inset-0 scale-95 overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 opacity-60">
-                <CardFace candidate={nextCard} />
+                <CardFace
+                  candidate={nextCard}
+                  rating={ratings[nextCard.profile.accountId]}
+                />
               </div>
             ) : null}
             <div
@@ -273,7 +276,10 @@ export default function SwipeDeck({
                 touchAction: "pan-y",
               }}
             >
-              <CardFace candidate={current} />
+              <CardFace
+                candidate={current}
+                rating={ratings[current.profile.accountId]}
+              />
               {/* View Fling profile — the one tap target on the card.
                   Its pointerdown is stopped so the tap never starts a
                   drag (the parent only swipes past 90px); the page it
@@ -325,16 +331,6 @@ export default function SwipeDeck({
             </button>
           </div>
 
-          {/* 1–10 rating for the card on top (migration 0016) —
-              keyed by account so the control resets per person;
-              independent of Like/Pass, it never swipes the card. */}
-          <RateProfile
-            key={current.profile.accountId}
-            accountId={current.profile.accountId}
-            initialRating={initialRatings[current.profile.accountId] ?? null}
-            label={`Rate @${current.profile.username} from 1 to 10`}
-          />
-
           {!interacted ? (
             <p className="hidden text-xs text-neutral-600 sm:block">
               Tip: drag the card, use the ← → arrow keys, or the buttons.
@@ -371,7 +367,13 @@ export default function SwipeDeck({
   );
 }
 
-function CardFace({ candidate }: { candidate: DeckCandidate }) {
+function CardFace({
+  candidate,
+  rating,
+}: {
+  candidate: DeckCandidate;
+  rating?: FlingRating | null;
+}) {
   const photo: string | null = candidate.photos[0] ?? null;
   const { profile } = candidate;
   // Name is optional at sign-up — fall back to the @handle.
@@ -401,6 +403,11 @@ function CardFace({ candidate }: { candidate: DeckCandidate }) {
         <p className="text-xl font-semibold">{displayName}</p>
         <p className="text-sm text-neutral-400">@{profile.username}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          {rating ? (
+            <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+              ★ {rating.rating.toFixed(1)}
+            </span>
+          ) : null}
           {profile.branch ? (
             <span className="rounded-full border border-neutral-600 px-2.5 py-0.5 text-xs text-neutral-200">
               {profile.branch}

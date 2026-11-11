@@ -13,6 +13,8 @@ import {
 import { accentHex } from "@/lib/validation";
 import Avatar from "@/components/Avatar";
 import PageIntro from "@/components/PageIntro";
+import DailyPoll from "@/components/DailyPoll";
+import { getDailyPollState } from "@/lib/daily-poll-data";
 import ChirpFeed from "./ChirpFeed";
 
 // Chirp — the hub. Identities are normal here: authors show their
@@ -74,11 +76,26 @@ export default async function ChirpPage() {
   // accent), the Live News card's region/news/weather (the same
   // cached fetches the news page uses), and the Campus Tweets
   // preview (the latest 3 chirps, masked by listChirps as usual).
-  const [myProfile, previewChirps] = await Promise.all([
+  // The chirp read fetches 30: the preview slices its first 3 and
+  // the Trending card ranks the same set by engagement — one read,
+  // two cards.
+  const [myProfile, recentChirps] = await Promise.all([
     getProfileByAccountId(supabase, me.id),
-    listChirps(supabase, me.id, 3, admin),
+    listChirps(supabase, me.id, 30, admin),
   ]);
+  const previewChirps = recentChirps.slice(0, 3);
+  const trendingChirps = [...recentChirps]
+    .filter((chirp) => chirp.likeCount + chirp.commentCount > 0)
+    .sort(
+      (a, b) =>
+        b.likeCount + 2 * b.commentCount - (a.likeCount + 2 * a.commentCount),
+    )
+    .slice(0, 3);
   const accent = accentHex(myProfile?.accent_color);
+
+  // Poll of the day — the same poll Fling shows, through the same
+  // helper, so a vote cast in either place is the same vote.
+  const pollState = await getDailyPollState(supabase, me.id);
 
   const region = await resolveRegionForAccount(supabase, me);
   const [topNews, weather] = await Promise.all([
@@ -109,6 +126,20 @@ export default async function ChirpPage() {
           accentHex={accent}
         />
       </div>
+
+      {/* Poll of the day — same poll as Fling's, same vote. */}
+      <div className="flex justify-center">
+        <DailyPoll
+          question={pollState.poll.question}
+          options={pollState.poll.options}
+          initialCounts={pollState.counts}
+          initialMyVote={pollState.myVote}
+        />
+      </div>
+
+      {trendingChirps.length > 0 ? (
+        <TrendingCard chirps={trendingChirps} />
+      ) : null}
 
       <LiveNewsCard topItem={topNews[0] ?? null} weather={weather} />
 
@@ -239,6 +270,63 @@ function CampusTweetsCard({ chirps }: { chirps: ChirpView[] }) {
           })}
         </span>
       )}
+    </Link>
+  );
+}
+
+// Trending on Chirp (2026-11-12, owner's pick: "add features to
+// Chirp (trending, poll)"). The hub's recent-30 read, ranked by
+// engagement — likes + comments weighted double — top 3, rendered
+// in the Campus Tweets card's idiom and opening the same feed.
+// Renders only when at least one recent chirp has any engagement,
+// so a quiet day shows no empty card.
+function TrendingCard({ chirps }: { chirps: ChirpView[] }) {
+  return (
+    <Link
+      href="/chirp/campus"
+      className="group flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3 transition hover:border-neutral-600"
+      aria-label="Open trending chirps"
+    >
+      <span className="flex items-center gap-2">
+        <span className="text-sm font-semibold uppercase tracking-[0.2em] text-neutral-100">
+          Trending
+        </span>
+        <span className="ml-auto">
+          <DoorwayChevron />
+        </span>
+      </span>
+      <span className="flex flex-col gap-2.5">
+        {chirps.map((chirp) => {
+          const firstLine =
+            chirp.body
+              ?.split("\n")
+              .find((line) => line.trim().length > 0)
+              ?.trim() ??
+            (chirp.imageUrl ? "📷 Photo" : "");
+          return (
+            <span key={chirp.id} className="flex min-w-0 items-center gap-2.5">
+              <Avatar
+                name={chirp.author?.name ?? "?"}
+                photoUrl={chirp.author?.photoUrl ?? null}
+                developer={chirp.author?.developer}
+                sizeClass="h-7 w-7"
+                textClass="text-[10px]"
+              />
+              <span className="shrink-0 text-xs font-medium text-neutral-200">
+                {chirp.author?.name ?? "A student"}
+              </span>
+              {firstLine ? (
+                <span className="min-w-0 flex-1 truncate text-xs text-neutral-400">
+                  {firstLine}
+                </span>
+              ) : null}
+              <span className="shrink-0 text-[11px] text-neutral-500">
+                ♥ {chirp.likeCount} · 💬 {chirp.commentCount}
+              </span>
+            </span>
+          );
+        })}
+      </span>
     </Link>
   );
 }

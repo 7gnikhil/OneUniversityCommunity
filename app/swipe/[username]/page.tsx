@@ -15,7 +15,7 @@ import { INTENTIONS } from "@/lib/preferences";
 import { accentHex, normaliseUsername } from "@/lib/validation";
 import type { Intention } from "@/lib/types";
 import FlingActions from "./FlingActions";
-import RateProfile from "@/components/RateProfile";
+import { ratingForAccount, type FlingRating } from "@/lib/fling-rating";
 
 // A stranger's FLING profile — what tapping "View Fling profile" on a
 // deck card opens (and the only profile a deck card leads to).
@@ -120,21 +120,14 @@ export default async function FlingProfilePage({
 
   const fling = await getFlingProfile(supabase, profile.accountId);
 
-  // My given 1–10 rating for this profile (migration 0016), so the
-  // rating control below opens already marked. Fail-soft.
-  let myRatingForThem: number | null = null;
-  if (account && account.id !== profile.accountId) {
-    try {
-      const { data: ratingRow } = await supabase
-        .from("profile_ratings")
-        .select("rating")
-        .eq("rater_account_id", account.id)
-        .eq("rated_account_id", profile.accountId)
-        .maybeSingle();
-      myRatingForThem = ratingRow?.rating ?? null;
-    } catch {
-      myRatingForThem = null;
-    }
+  // Their Fling rating — derived from likes received
+  // (lib/fling-rating), computed server-side. Fail-soft.
+  let theirRating: FlingRating | null = null;
+  try {
+    const admin = createAdminClient();
+    theirRating = await ratingForAccount(admin, profile.accountId);
+  } catch {
+    theirRating = null;
   }
 
   // Already matched (accepted follow / mutual swipe)? Then this person
@@ -182,6 +175,12 @@ export default async function FlingProfilePage({
           <p className="text-xl font-semibold">{displayName}</p>
           <p className="text-sm text-neutral-400">@{profile.username}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
+            {theirRating ? (
+              <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+                ★ {theirRating.rating.toFixed(1)} · {theirRating.likes}{" "}
+                like{theirRating.likes === 1 ? "" : "s"}
+              </span>
+            ) : null}
             {profile.branch ? (
               <span className="rounded-full border border-neutral-600 px-2.5 py-0.5 text-xs text-neutral-200">
                 {profile.branch}
@@ -235,19 +234,6 @@ export default async function FlingProfilePage({
           accentHex={accent}
         />
       )}
-
-      {/* 1–10 rating (migration 0016) — the same control the deck
-          card carries; hidden on the developer's masked profile and
-          on my own (the fetch above stays null for both). */}
-      {account && account.id !== profile.accountId && !isDeveloper ? (
-        <div className="flex justify-center pt-1">
-          <RateProfile
-            accountId={profile.accountId}
-            initialRating={myRatingForThem}
-            label={`Rate ${displayName} from 1 to 10`}
-          />
-        </div>
-      ) : null}
     </main>
   );
 }

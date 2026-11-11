@@ -2678,3 +2678,24 @@ and added a feature of his own: a 1–10 rating in Fling.
   own-row RLS on the GIVEN side. Received ratings are never shown
   publicly; the owner sees only their own average + count (the
   my_received_rating() RPC) in Profile → Fling data.
+
+### Rating design settled the same night — DERIVED, not manual
+The manual tap-to-rate build above was superseded within the
+hour by the owner's design rule: "the rating is based on likes
+received — the more right swipes a user gets, the higher their
+rating." Migration 0016 was WITHDRAWN before ever being applied
+(the file is now a comment-only record) and the manual control /
+action are inert stubs. What shipped instead: lib/fling-rating.ts
+computes the score live from swipes — rating = 1 + 9 × (L+3)/(T+6)
+for L likes of T received swipes, one decimal, unrated until the
+first swipe lands — shown as a ★ chip on the deck card and the
+Fling profile page, and on the owner's own Profile → Fling data
+with its like/swipe counts. No ratings table exists.
+
+### Chirp features (2026-11-12, owner's pick: trending + poll)
+- Poll of the day also renders on the Chirp hub, through the
+  shared lib/daily-poll-data.ts helper (the Fling page was
+  refactored onto it too) — one poll, one vote, both places.
+- Trending card on the hub: the recent-30 chirp read (the Campus
+  Tweets preview slices the same fetch) ranked by likes +
+  2×comments, top 3, hidden on a zero-engagement day.

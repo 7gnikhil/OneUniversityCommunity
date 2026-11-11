@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
+import {
+  ratingForAccount,
+  type FlingRating,
+} from "@/lib/fling-rating";
 import { getProfileByAccountId } from "@/lib/profile";
 import {
   DEFAULT_PRIVACY,
@@ -114,21 +118,15 @@ export default async function ProfilePage() {
   // fling profile until the table lands.
   const flingProfile = await getFlingProfile(supabase, account.id);
 
-  // My received Fling rating (migration 0016): my own average +
-  // count via the aggregate RPC. Shown only to me, in the Fling
-  // data section below; absent entirely until someone rates me.
-  let receivedRating: { average: number; count: number } | null = null;
+  // My Fling rating — derived from likes received (lib/fling-
+  // rating), the same score my deck card shows everyone. Absent
+  // until at least one person has swiped on me.
+  let receivedRating: FlingRating | null = null;
   try {
-    const { data: ratingData } = await supabase.rpc("my_received_rating");
-    const row = (ratingData ?? [])[0] as
-      | { average: number | string | null; ratings_count: number | string }
-      | undefined;
-    if (row && Number(row.ratings_count) > 0) {
-      receivedRating = {
-        average: Number(row.average),
-        count: Number(row.ratings_count),
-      };
-    }
+    receivedRating = await ratingForAccount(
+      createAdminClient(),
+      account.id,
+    );
   } catch {
     receivedRating = null;
   }
@@ -192,12 +190,15 @@ export default async function ProfilePage() {
               <p className="text-sm text-neutral-300">
                 Your Fling rating:{" "}
                 <span className="font-semibold text-white">
-                  ★ {receivedRating.average.toFixed(1)}
+                  ★ {receivedRating.rating.toFixed(1)}
                 </span>{" "}
                 <span className="text-neutral-500">
-                  · from {receivedRating.count} rating
-                  {receivedRating.count === 1 ? "" : "s"} — only you can
-                  see this
+                  · from {receivedRating.likes} like
+                  {receivedRating.likes === 1 ? "" : "s"} (
+                  {receivedRating.total} swipe
+                  {receivedRating.total === 1 ? "" : "s"} received) — it
+                  rides on your Fling card; more right swipes, higher it
+                  climbs
                 </span>
               </p>
             ) : null}
