@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { ChirpCommentView, ChirpView } from "@/lib/chirp";
@@ -9,11 +9,15 @@ import { validateImageFile } from "@/lib/validation";
 import { describeUploadError, prepareImageForUpload } from "@/lib/images";
 import {
   addChirpCommentAction,
+  cancelScheduledChirpAction,
   createChirpAction,
   deleteChirpAction,
   fetchChirpCommentsAction,
   fetchChirpsAction,
+  listMyScheduledChirpsAction,
+  scheduleChirpAction,
   toggleChirpLikeAction,
+  type ScheduledChirpView,
 } from "./actions";
 
 // Chirp feed: compose (text + optional photo) and the global timeline.
@@ -36,6 +40,24 @@ export default function ChirpFeed({
   const [posting, setPosting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Scheduled chirps (migration 0014): the schedule panel's state and
+  // my pending queue, loaded on mount and refreshed after a schedule.
+  const [scheduleOpen, setScheduleOpen] = useState<boolean>(false);
+  const [scheduleAt, setScheduleAt] = useState<string>("");
+  const [scheduling, setScheduling] = useState<boolean>(false);
+  const [scheduled, setScheduled] = useState<ScheduledChirpView[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listMyScheduledChirpsAction().then((rows) => {
+      if (!cancelled) setScheduled(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function refresh(): Promise<void> {
     const fresh = await fetchChirpsAction();
@@ -61,6 +83,38 @@ export default function ChirpFeed({
     setImagePreview(URL.createObjectURL(file));
   }
 
+  // Uploads the draft's photo (if any) exactly as a post does —
+  // shrunk before upload (lib/images): a raw multi-MB photo/poster
+  // as one storage POST is the upload most likely to die on a weak
+  // connection. Preparation never blocks — undecodable files pass
+  // through as the original bytes. Shared by Post and Schedule: a
+  // scheduled chirp's photo is stored at write time and simply
+  // referenced when the chirp lands.
+  async function uploadDraftImage(): Promise<
+    { imageUrl: string | null } | { error: string }
+  > {
+    if (!imageFile) return { imageUrl: null };
+    const chosen: File = imageFile;
+    const prepared = await prepareImageForUpload(chosen);
+    if ("error" in prepared) return { error: prepared.error };
+    const supabase = createClient();
+    const path = `${myAccountId}/chirp-${Date.now()}.${prepared.image.extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from("chirp-images")
+      .upload(path, prepared.image.blob, {
+        contentType: prepared.image.contentType,
+        upsert: false,
+      });
+    if (uploadError) {
+      console.error("[chirp] photo upload failed", uploadError);
+      return { error: describeUploadError(uploadError) };
+    }
+    return {
+      imageUrl: supabase.storage.from("chirp-images").getPublicUrl(path).data
+        .publicUrl,
+    };
+  }
+
   async function onPost(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (posting) return;
@@ -68,38 +122,16 @@ export default function ChirpFeed({
     if (!body && !imageFile) return;
     setPosting(true);
     setError(null);
+    setNotice(null);
 
-    let imageUrl: string | null = null;
-    if (imageFile) {
-      const chosen: File = imageFile;
-      // Shrink before upload (lib/images): a raw multi-MB photo/poster
-      // as one storage POST is the upload most likely to die on a weak
-      // connection. Preparation never blocks a post — undecodable
-      // files pass through as the original bytes.
-      const prepared = await prepareImageForUpload(chosen);
-      if ("error" in prepared) {
-        setPosting(false);
-        setError(prepared.error);
-        return;
-      }
-      const supabase = createClient();
-      const path = `${myAccountId}/chirp-${Date.now()}.${prepared.image.extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from("chirp-images")
-        .upload(path, prepared.image.blob, {
-          contentType: prepared.image.contentType,
-          upsert: false,
-        });
-      if (uploadError) {
-        console.error("[chirp] photo upload failed", uploadError);
-        setPosting(false);
-        setError(describeUploadError(uploadError));
-        return;
-      }
-      imageUrl = supabase.storage.from("chirp-images").getPublicUrl(path).data.publicUrl;
+    const uploaded = await uploadDraftImage();
+    if ("error" in uploaded) {
+      setPosting(false);
+      setError(uploaded.error);
+      return;
     }
 
-    const result = await createChirpAction(body, imageUrl);
+    const result = await createChirpAction(body, uploaded.imageUrl);
     setPosting(false);
     if (result.error) {
       setError(result.error);
@@ -109,6 +141,64 @@ export default function ChirpFeed({
     pickImage(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     void refresh();
+  }
+
+  // Schedule the current draft: same upload path as posting, then
+  // the row waits in scheduled_chirps for the database's pg_cron
+  // poster. The confirmation line states the exact local time it
+  // will land.
+  async function onSchedule(): Promise<void> {
+    if (scheduling || posting) return;
+    const body = draft.trim();
+    if (!body && !imageFile) return;
+    if (!scheduleAt) {
+      setError("Pick a date and time first.");
+      return;
+    }
+    const when = new Date(scheduleAt);
+    if (Number.isNaN(when.getTime()) || when.getTime() < Date.now() + 60_000) {
+      setError("Pick a time at least a minute from now.");
+      return;
+    }
+    setScheduling(true);
+    setError(null);
+    setNotice(null);
+
+    const uploaded = await uploadDraftImage();
+    if ("error" in uploaded) {
+      setScheduling(false);
+      setError(uploaded.error);
+      return;
+    }
+
+    const result = await scheduleChirpAction(
+      body,
+      uploaded.imageUrl,
+      when.toISOString(),
+    );
+    setScheduling(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDraft("");
+    pickImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setScheduleOpen(false);
+    setScheduleAt("");
+    setNotice(
+      `Scheduled — this chirp will post on ${when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.`,
+    );
+    setScheduled(await listMyScheduledChirpsAction());
+  }
+
+  async function onCancelScheduled(id: string): Promise<void> {
+    const result = await cancelScheduledChirpAction(id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setScheduled((prev) => prev.filter((row) => row.id !== id));
   }
 
   async function onLike(chirp: ChirpView): Promise<void> {
@@ -190,14 +280,74 @@ export default function ChirpFeed({
             Refresh
           </button>
           <button
+            type="button"
+            onClick={() => setScheduleOpen((open) => !open)}
+            className="rounded-full border border-neutral-700 px-4 py-2 text-xs text-neutral-300 transition hover:bg-neutral-900"
+          >
+            Schedule
+          </button>
+          <button
             type="submit"
-            disabled={posting || (!draft.trim() && !imageFile)}
+            disabled={posting || scheduling || (!draft.trim() && !imageFile)}
             className="ml-auto rounded-full px-5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
             style={{ backgroundColor: accent }}
           >
             {posting ? "Posting…" : "Chirp"}
           </button>
         </div>
+        {scheduleOpen ? (
+          <div className="flex flex-col gap-2 rounded-2xl border border-neutral-800 bg-black p-3">
+            <label className="text-xs text-neutral-400">
+              Post this chirp at
+              <input
+                type="datetime-local"
+                value={scheduleAt}
+                onChange={(event) => setScheduleAt(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-white [color-scheme:dark] focus:border-neutral-500 focus:outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void onSchedule()}
+              disabled={
+                scheduling || (!draft.trim() && !imageFile) || !scheduleAt
+              }
+              className="self-start rounded-full px-5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+              style={{ backgroundColor: accent }}
+            >
+              {scheduling ? "Scheduling…" : "Schedule chirp"}
+            </button>
+            <p className="text-xs leading-relaxed text-neutral-500">
+              It posts on its own at that time — you don&apos;t need to be
+              online.
+            </p>
+          </div>
+        ) : null}
+        {notice ? <p className="text-sm text-emerald-400">{notice}</p> : null}
+        {scheduled.length > 0 ? (
+          <ul className="flex flex-col gap-2 border-t border-neutral-800 pt-3">
+            {scheduled.map((row) => (
+              <li key={row.id} className="flex items-center gap-3 text-sm">
+                <span className="min-w-0 flex-1 truncate text-neutral-300">
+                  {row.body ?? "Photo chirp"}
+                </span>
+                <span className="shrink-0 text-xs text-neutral-500">
+                  {new Date(row.scheduledFor).toLocaleString([], {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void onCancelScheduled(row.id)}
+                  className="shrink-0 rounded-full border border-neutral-700 px-3 py-1 text-xs text-neutral-300 transition hover:bg-neutral-900"
+                >
+                  Cancel
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </form>
 
       {error ? (

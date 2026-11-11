@@ -475,6 +475,29 @@ create table public.push_subscriptions (
 create index push_subscriptions_account_id_idx
   on public.push_subscriptions (account_id);
 
+-- ── Scheduled chirps (migration 0014) ───────────────────────────────
+-- A chirp written now, posted later by pg_cron (see the
+-- post_due_scheduled_chirps function + cron job at the end of this
+-- file's migration-0014 mirror note in supabase/migration-0014.sql).
+
+create table public.scheduled_chirps (
+  id              uuid primary key default gen_random_uuid(),
+  account_id      uuid not null references public.accounts (id) on delete cascade,
+  body            text,
+  image_url       text,
+  scheduled_for   timestamptz not null,
+  status          text not null default 'pending'
+                  check (status in ('pending', 'posted', 'cancelled')),
+  posted_chirp_id uuid references public.chirps (id) on delete set null,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index scheduled_chirps_due_idx
+  on public.scheduled_chirps (status, scheduled_for);
+create index scheduled_chirps_account_idx
+  on public.scheduled_chirps (account_id);
+
 -- ── updated_at triggers ────────────────────────────────────────────────────
 
 create trigger accounts_set_updated_at      before update on public.accounts
@@ -498,6 +521,8 @@ create trigger devreq_set_updated_at        before update on public.developer_re
 create trigger fling_profiles_set_updated_at before update on public.fling_profiles
   for each row execute function public.set_updated_at();
 create trigger push_subscriptions_set_updated_at before update on public.push_subscriptions
+  for each row execute function public.set_updated_at();
+create trigger scheduled_chirps_set_updated_at before update on public.scheduled_chirps
   for each row execute function public.set_updated_at();
 
 -- ── Public profile view ────────────────────────────────────────────────────
@@ -552,6 +577,7 @@ alter table public.reports           enable row level security;
 alter table public.developer_requests enable row level security;
 alter table public.fling_profiles    enable row level security;
 alter table public.push_subscriptions enable row level security;
+alter table public.scheduled_chirps enable row level security;
 
 -- accounts: read/update self; admins read all. INSERT happens via the
 -- sign-up server action (service role) so uniqueness + verification
@@ -716,6 +742,16 @@ create policy chirps_update_own on public.chirps for update
 create policy chirps_delete_own on public.chirps for delete
   using (author_id = public.current_account_id() or public.is_admin());
 
+-- scheduled_chirps: strictly private — I see and manage only my own
+-- queue; the pg_cron poster function bypasses RLS as its owner.
+create policy scheduled_chirps_select_own on public.scheduled_chirps for select
+  to authenticated using (account_id = public.current_account_id());
+create policy scheduled_chirps_insert_own on public.scheduled_chirps for insert
+  to authenticated with check (account_id = public.current_account_id());
+create policy scheduled_chirps_update_own on public.scheduled_chirps for update
+  to authenticated using (account_id = public.current_account_id())
+  with check (account_id = public.current_account_id());
+
 create policy chirp_comments_select on public.chirp_comments for select
   to authenticated using (true);
 create policy chirp_comments_insert_own on public.chirp_comments for insert
@@ -805,3 +841,41 @@ create policy fling_profiles_update_own on public.fling_profiles for update
 -- owner-scoped write (folder = account id); id-cards = owner upload +
 -- admin read only. See README.md.
 -- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── Scheduled-chirp poster (migration 0014) ─────────────────────────
+-- pg_cron job 'post-due-scheduled-chirps' runs this every minute
+-- ('* * * * *'); the cron.schedule call itself lives in
+-- supabase/migration-0014.sql (it is a one-shot registration, not
+-- schema). Security definer so it can post for any account.
+create or replace function public.post_due_scheduled_chirps()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+  new_id uuid;
+  posted_count int := 0;
+begin
+  for r in
+    select * from public.scheduled_chirps
+    where status = 'pending' and scheduled_for <= now()
+    order by scheduled_for asc
+    limit 100
+  loop
+    begin
+      insert into public.chirps (author_id, body, image_url)
+      values (r.account_id, r.body, r.image_url)
+      returning id into new_id;
+      update public.scheduled_chirps
+      set status = 'posted', posted_chirp_id = new_id
+      where id = r.id;
+      posted_count := posted_count + 1;
+    exception when others then
+      null;
+    end;
+  end loop;
+  return posted_count;
+end;
+$$;

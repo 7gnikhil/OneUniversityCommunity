@@ -180,3 +180,88 @@ export async function getWeatherAction(): Promise<WeatherView | null> {
   const region = await resolveRegionForAccount(ctx.supabase, ctx.account);
   return getWeatherCached(region);
 }
+
+// ── Scheduled chirps (migration 0014) ───────────────────────────────
+// Write a chirp now, post it later: the row waits in scheduled_chirps
+// and the database's own pg_cron job copies it into chirps when the
+// time comes (post_due_scheduled_chirps). All three actions run on
+// the SESSION client — RLS confines every row to its author.
+
+export interface ScheduledChirpView {
+  id: string;
+  body: string | null;
+  imageUrl: string | null;
+  scheduledFor: string;
+}
+
+export async function scheduleChirpAction(
+  body: string,
+  imageUrl: string | null,
+  scheduledForIso: string,
+): Promise<{ error: string | null }> {
+  const ctx = await requireCtx();
+  if (!ctx) return { error: "Please sign in again." };
+  const text = body.trim().slice(0, 500);
+  if (!text && !imageUrl) {
+    return { error: "Write something or attach a photo first." };
+  }
+  const when = new Date(scheduledForIso);
+  if (Number.isNaN(when.getTime())) {
+    return { error: "Pick a valid date and time." };
+  }
+  if (when.getTime() < Date.now() + 60_000) {
+    return { error: "Pick a time at least a minute from now." };
+  }
+  if (when.getTime() > Date.now() + 365 * 24 * 60 * 60 * 1000) {
+    return { error: "That's too far ahead — schedule within a year." };
+  }
+  const { error } = await ctx.supabase.from("scheduled_chirps").insert({
+    account_id: ctx.account.id,
+    body: text || null,
+    image_url: imageUrl,
+    scheduled_for: when.toISOString(),
+  });
+  if (error) {
+    return { error: "That chirp didn't schedule — please try again." };
+  }
+  return { error: null };
+}
+
+export async function listMyScheduledChirpsAction(): Promise<
+  ScheduledChirpView[]
+> {
+  const ctx = await requireCtx();
+  if (!ctx) return [];
+  const { data } = await ctx.supabase
+    .from("scheduled_chirps")
+    .select("id, body, image_url, scheduled_for")
+    .eq("status", "pending")
+    .order("scheduled_for", { ascending: true });
+  return (
+    (data ?? []) as {
+      id: string;
+      body: string | null;
+      image_url: string | null;
+      scheduled_for: string;
+    }[]
+  ).map((row) => ({
+    id: row.id,
+    body: row.body,
+    imageUrl: row.image_url,
+    scheduledFor: row.scheduled_for,
+  }));
+}
+
+export async function cancelScheduledChirpAction(
+  scheduledId: string,
+): Promise<{ error: string | null }> {
+  const ctx = await requireCtx();
+  if (!ctx) return { error: "Please sign in again." };
+  const { error } = await ctx.supabase
+    .from("scheduled_chirps")
+    .update({ status: "cancelled" })
+    .eq("id", scheduledId)
+    .eq("status", "pending");
+  if (error) return { error: "Couldn't cancel that one — please try again." };
+  return { error: null };
+}

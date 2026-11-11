@@ -2423,3 +2423,33 @@ page "OneUco Engagement Features Research" recommendation #3.
   /manifest.webmanifest and /icon.png; /profile 9.8 kB).
 - Migration 0013 applied via Supabase dashboard; VAPID env set via
   Vercel dashboard (both verified by the dashboard task report).
+
+---
+
+## Scheduled chirps (2026-11-11)
+
+Owner's ask: in Chirp, schedule a message and it chirps itself at
+that date/time.
+
+### What shipped
+- **Migration 0014**: scheduled_chirps table (own-row RLS —
+  select/insert/update, no delete; cancel is a status update) +
+  post_due_scheduled_chirps() (security definer, per-row exception
+  swallow, 100/run cap) + pg_cron job 'post-due-scheduled-chirps'
+  every minute. The poster runs INSIDE Postgres — no app server,
+  external cron or signed-in user needs to be awake. Schema mirrored
+  in supabase/schema.sql (function included; the cron.schedule call
+  stays in the migration as a one-shot registration).
+- **Actions** (app/chirp/actions.ts, session client): schedule
+  (same 500-char/text-or-photo rules as posting; time must be >1 min
+  ahead, <1 year out), list my pending (soonest first), cancel
+  (pending only).
+- **Composer** (ChirpFeed): image upload extracted to
+  uploadDraftImage() shared by Post and Schedule — a scheduled
+  chirp's photo uploads at write time and is referenced when it
+  lands. New "Schedule" toggle in the composer button row opens a
+  datetime-local panel ("Post this chirp at" + "Schedule chirp");
+  confirmation line states the exact local landing time; my pending
+  queue renders under the composer with per-row Cancel. Everything
+  lives INSIDE the <form>, so the /chirp hub's composer-only mount
+  shows it too (globals.css scope hides only non-form children).
