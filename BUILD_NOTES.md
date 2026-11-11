@@ -2522,3 +2522,26 @@ dial home.
 - **DialShell**: bottom-padding exemption moved from "/" to
   "/home" (the dial page pads its own viewport-height main);
   /home lights no bottom-bar tab, correctly.
+
+---
+
+## Pirate helm page-transition loader (2026-11-11)
+
+Owner's call: the loading symbol is a pirate ship's helm rocking
+left-right like steering, shown whenever the user switches pages.
+(There was no navigation loading UI at all before — no loading.tsx,
+no spinners anywhere; pages just hung on the old screen.)
+
+### What shipped
+- **components/PirateHelmLoader.tsx**: the dial's own Pirate Helm
+  wheel skin redrawn as one self-contained SVG — timber rim, brass
+  band, eight spokes, eight protruding handles with brass tips,
+  brass hub cap — in the skin's exact palette.
+- **globals.css**: @keyframes helm-rock (0 → +17° → 0 → −17° → 0,
+  2.4s ease-in-out infinite, slight translateY settle) on a
+  .helm-rock class; prefers-reduced-motion slows it to 6s instead
+  of freezing it.
+- **app/loading.tsx**: Next's route-transition fallback — renders
+  inside the shell (bottom bar stays mounted) on every navigation
+  that makes the next page fetch; helm + a small "Steering…"
+  caption. Covers all routes (no segment has its own loading file).
