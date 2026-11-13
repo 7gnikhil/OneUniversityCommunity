@@ -2813,3 +2813,26 @@ was right. The function now finds the index by matching the
 pathname against each stop's href (with the /inbox → Homies
 alias preserved), so reordering the tabs can never desync the
 highlight again.
+
+---
+
+## Fling first screen — Tinder/Bumble warmth (2026-11-13)
+
+Owner: "the first open interface is black, make it like tinder
+bumble… make it wonderful… should attract users". The deck was
+photo-forward already; what read as "black" was everything around
+it — flat black page, grey outline buttons, grey card borders.
+- Page: warm ambient glow behind the first screen (Fling rose +
+  amber shoulder, blurred, page-scoped).
+- Card: taller (68dvh, 440–560px), rounder (28px), soft ring +
+  rose-tinted shadow instead of the grey border; sharper photo
+  rendition (512); bigger bold name; chips are glass (white/10,
+  blur) like the dating apps; profiles without a photo get a
+  rose-gradient initial tile instead of flat grey.
+- Buttons, the Tinder signature: ✕ is a big white circle with a
+  rose ✕, ♥ is a rose→orange gradient circle with a warm glow
+  shadow; both grow/press with scale feedback. Shuffle is a
+  small glass pill between them.
+- LIKE/PASS drag stamps: chunkier, rotated, glass-backed.
+- "You're all caught up" card and its Start again button get
+  the same gradient treatment. No logic changed anywhere.

@@ -136,7 +136,20 @@ export default async function SwipePage() {
   }
 
   return (
-    <main data-section="swipe" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
+    <main data-section="swipe" className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 overflow-x-clip p-6">
+      {/* Warm ambient glow (Tinder/Bumble energy, owner's call
+          2026-11-13: the first screen "is black… should attract
+          users") — Fling's own rose with an amber shoulder, behind
+          everything, so the home page opens warm instead of flat
+          black. Page-scoped: other sections keep their calm. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-28 left-1/2 h-80 w-[140%] -translate-x-1/2 rounded-full bg-rose-600/20 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-24 top-48 h-56 w-56 rounded-full bg-amber-500/10 blur-3xl"
+      />
       {/* Home top bar — the Reddit/X pattern (owner's call,
           2026-11-13): brand on the left, search + my avatar on the
           right, sticky as the page scrolls. Fling IS the home page,

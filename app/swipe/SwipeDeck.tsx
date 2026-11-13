@@ -228,9 +228,9 @@ export default function SwipeDeck({
 
       {current ? (
         <>
-          <div className="relative h-[480px] w-full max-w-sm select-none">
+          <div className="relative h-[68dvh] max-h-[560px] min-h-[440px] w-full max-w-sm select-none">
             {nextCard ? (
-              <div className="absolute inset-0 scale-95 overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 opacity-60">
+              <div className="absolute inset-0 scale-95 overflow-hidden rounded-[28px] bg-rose-950 shadow-2xl shadow-black/60 ring-1 ring-white/10 opacity-70">
                 <CardFace
                   candidate={nextCard}
                   rating={ratings[nextCard.profile.accountId]}
@@ -243,7 +243,7 @@ export default function SwipeDeck({
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
-              className="absolute inset-0 cursor-grab overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 active:cursor-grabbing"
+              className="absolute inset-0 cursor-grab overflow-hidden rounded-[28px] bg-neutral-900 shadow-2xl shadow-rose-950/40 ring-1 ring-white/15 active:cursor-grabbing"
               style={{
                 transform: cardTransform,
                 transition: dragging ? "none" : "transform 0.22s ease",
@@ -266,31 +266,31 @@ export default function SwipeDeck({
                 View Fling profile
               </Link>
               {dragX > 24 || flyDir === 1 ? (
-                <span className="absolute left-4 top-4 rounded-lg border-2 border-emerald-400 px-2 py-0.5 text-sm font-bold uppercase tracking-widest text-emerald-400">
+                <span className="absolute left-4 top-16 -rotate-12 rounded-lg border-[3px] border-emerald-400 bg-black/30 px-2.5 py-1 text-base font-black uppercase tracking-widest text-emerald-400 backdrop-blur-sm">
                   Like
                 </span>
               ) : null}
               {dragX < -24 || flyDir === -1 ? (
-                <span className="absolute right-4 top-4 rounded-lg border-2 border-rose-400 px-2 py-0.5 text-sm font-bold uppercase tracking-widest text-rose-400">
+                <span className="absolute right-4 top-16 rotate-12 rounded-lg border-[3px] border-rose-400 bg-black/30 px-2.5 py-1 text-base font-black uppercase tracking-widest text-rose-400 backdrop-blur-sm">
                   Pass
                 </span>
               ) : null}
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-5">
             <button
               type="button"
               onClick={() => void commit("pass")}
               aria-label="Pass"
-              className="flex h-14 w-14 items-center justify-center rounded-full border border-neutral-700 text-2xl text-rose-400 transition hover:bg-neutral-900"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-3xl font-light text-rose-500 shadow-xl shadow-black/50 transition hover:scale-105 active:scale-95"
             >
               ✕
             </button>
             <button
               type="button"
               onClick={onShuffle}
-              className="rounded-full border border-neutral-700 px-4 py-2 text-sm text-neutral-300 transition hover:bg-neutral-900"
+              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-neutral-200 backdrop-blur transition hover:bg-white/10 active:scale-95"
             >
               Shuffle
             </button>
@@ -298,8 +298,11 @@ export default function SwipeDeck({
               type="button"
               onClick={() => void commit("like")}
               aria-label="Like"
-              className="flex h-14 w-14 items-center justify-center rounded-full text-2xl text-white transition hover:opacity-90"
-              style={{ backgroundColor: accent }}
+              className="flex h-16 w-16 items-center justify-center rounded-full text-3xl text-white shadow-[0_10px_35px_rgba(244,63,94,0.45)] transition hover:scale-105 hover:opacity-95 active:scale-95"
+              style={{
+                backgroundImage:
+                  "linear-gradient(135deg, #f43f5e 0%, #f97316 100%)",
+              }}
             >
               ♥
             </button>
@@ -312,7 +315,7 @@ export default function SwipeDeck({
           ) : null}
         </>
       ) : (
-        <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 px-6 py-10 text-center">
+        <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-[28px] border border-rose-400/20 bg-neutral-950 px-6 py-10 text-center shadow-[0_20px_60px_rgba(244,63,94,0.15)]">
           <p className="text-lg font-semibold">You&apos;re all caught up</p>
           <p className="text-sm leading-relaxed text-neutral-400">
             You&apos;ve seen everyone for now. Your matches are safe — start
@@ -322,7 +325,11 @@ export default function SwipeDeck({
             type="button"
             disabled={resetting}
             onClick={() => void onStartAgain()}
-            className="rounded-full bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_35px_rgba(244,63,94,0.4)] transition hover:opacity-95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              backgroundImage:
+                "linear-gradient(135deg, #f43f5e 0%, #f97316 100%)",
+            }}
           >
             {resetting ? "Resetting…" : "Start again"}
           </button>
@@ -348,7 +355,7 @@ function CardFace({
       {photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={sizedPhotoUrl(photo, 256) ?? photo}
+          src={sizedPhotoUrl(photo, 512) ?? photo}
           alt={displayName}
           className="h-full w-full object-cover"
           draggable={false}
@@ -360,26 +367,32 @@ function CardFace({
           }}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-neutral-800 text-6xl font-semibold text-neutral-500">
+        <div
+          className="flex h-full w-full items-center justify-center text-7xl font-bold text-white/90"
+          style={{
+            backgroundImage:
+              "linear-gradient(160deg, #f43f5e 0%, #9d174d 55%, #451a34 100%)",
+          }}
+        >
           {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
         </div>
       )}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-5 pt-16">
-        <p className="text-xl font-semibold">{displayName}</p>
-        <p className="text-sm text-neutral-400">@{profile.username}</p>
+        <p className="text-2xl font-bold tracking-tight">{displayName}</p>
+        <p className="text-sm text-neutral-300">@{profile.username}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {rating ? (
-            <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+            <span className="rounded-full border border-amber-300/40 bg-amber-400/15 px-2.5 py-0.5 text-xs font-semibold text-amber-200 backdrop-blur-sm">
               ★ {rating.rating.toFixed(1)}
             </span>
           ) : null}
           {profile.branch ? (
-            <span className="rounded-full border border-neutral-600 px-2.5 py-0.5 text-xs text-neutral-200">
+            <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs text-white backdrop-blur-sm">
               {profile.branch}
             </span>
           ) : null}
           {candidate.intention ? (
-            <span className="rounded-full border border-neutral-700 px-2.5 py-0.5 text-xs capitalize text-neutral-400">
+            <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs capitalize text-neutral-200 backdrop-blur-sm">
               {candidate.intention.replace("_", " ")}
             </span>
           ) : null}
