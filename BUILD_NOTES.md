@@ -2742,3 +2742,19 @@ Owner's morning corrections, all in one batch:
   lib/nav-stops reordered to Fling, Chirp, Tea, Homies, Profile.
   Fling was already the default landing page; it is now also the
   first tab.
+
+---
+
+## Public landing page at / (2026-11-13)
+
+The root no longer bounces strangers to /login. Signed-out
+visitors get a public landing page: what OneUco is, the five
+sections (in tab order, each in its stop colour), why students
+switch (cross-college, no college-email gate, all-in-one,
+private by default), three steps in, Join/Log in CTAs, Privacy/
+Terms footer. Middleware lets / through signed-out; signed-in
+users still land on Fling exactly as before (middleware rule +
+page-level redirect). Copy covers only what the app does today;
+no screenshots (descriptions instead of faked UI). Agreed order
+with the owner on 2026-11-13: landing page first, then Maya
+Jwalam auto-moderation.

@@ -101,8 +101,14 @@ export async function middleware(request: NextRequest) {
   ];
 
   if (!user) {
-    if (PUBLIC_AUTH_PAGES.includes(pathname)) return response;
-    return redirect("/login", pathname === "/" ? undefined : pathname);
+    // The root is the public landing page (2026-11-13): a signed-out
+    // visitor should learn what OneUco is before being asked to sign
+    // in — app/page.tsx renders it; signed-in users never see it
+    // (the landing rule below sends them to /swipe first).
+    if (pathname === "/" || PUBLIC_AUTH_PAGES.includes(pathname)) {
+      return response;
+    }
+    return redirect("/login", pathname);
   }
 
   // Signed in. Resolve the app account (null = row not created/linked yet,
