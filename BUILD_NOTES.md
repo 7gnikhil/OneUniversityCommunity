@@ -3017,3 +3017,22 @@ their profile, where any visitor can play it and ♥ it
 (components/ProfileCovers, lib/covers.ts, migration 0017 —
 profile_covers + cover_likes + the public `covers` bucket;
 fail-soft everywhere until 0017 is applied in the SQL editor).
+
+## Karaoke service — Demucs + Whisper (2026-11-14)
+
+Owner's call: real karaoke, not lyrics-only. karaoke-service/ is
+a standalone FastAPI service (extends his MusicMitra
+demucs_server.py): POST a song → Demucs htdemucs splits stems →
+instrumental (no vocals) for singing over, vocals stem →
+faster-whisper large-v3-turbo → synced lyric lines. Job-based
+(client polls), results cached on disk per song id forever —
+first run is slow on CPU, every later play is instant. Plumbing
+verified locally in KARAOKE_STUB mode end to end (health, job,
+poll, instrumental file serve); the model path follows his own
+working Demucs code. Ships with a Spaces-ready Dockerfile +
+README.deploy.md. OneUco side: /api/radio?type=karaoke proxies
+start/status via KARAOKE_SERVICE_URL (Vercel env — unset =
+graceful "unavailable", LRCLIB karaoke keeps working); the
+karaoke panel gains "Sing with the instrumental" + an in-panel
+recorder that posts the cover straight to the profile. Poster:
+~/workspace/your_files/oneuco-karaoke-poster.png.

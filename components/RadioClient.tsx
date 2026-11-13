@@ -9,6 +9,8 @@ import {
 } from "react";
 import { useRadio, type RadioTrack } from "@/components/RadioPlayer";
 import { createChirpAction } from "@/app/chirp/actions";
+import { createClient } from "@/lib/supabase/client";
+import { createCoverAction } from "@/app/profile/covers-actions";
 
 // Music Mitra (2026-11-14 — the owner's MusicMitra app merged
 // into OneUco, replacing the Radio v1 page): a full music app in
@@ -102,7 +104,11 @@ async function downloadTrack(track: RadioTrack): Promise<void> {
   }
 }
 
-export default function RadioClient() {
+export default function RadioClient({
+  myAccountId,
+}: {
+  myAccountId: string;
+}) {
   const radio = useRadio();
   const [mode, setMode] = useState<SearchMode>("songs");
   const [query, setQuery] = useState<string>("");
@@ -385,6 +391,7 @@ export default function RadioClient() {
       <NowPlaying
         favoriteIds={favoriteIds}
         onToggleFavorite={toggleFavorite}
+        myAccountId={myAccountId}
       />
 
       {collection ? (
@@ -767,14 +774,16 @@ interface LyricLine {
 function NowPlaying({
   favoriteIds,
   onToggleFavorite,
+  myAccountId,
 }: {
   favoriteIds: Set<string>;
   onToggleFavorite: (track: RadioTrack) => void;
+  myAccountId: string;
 }) {
   const radio = useRadio();
   const current = radio.current;
   const [karaokeOpen, setKaraokeOpen] = useState<boolean>(false);
-  const [lyrics, setLyrics] = useState<{
+  const [lrclib, setLrclib] = useState<{
     trackId: string;
     lines: LyricLine[];
     synced: boolean;
@@ -782,28 +791,43 @@ function NowPlaying({
   const [lyricsLoading, setLyricsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const activeLineRef = useRef<HTMLParagraphElement | null>(null);
+  // Karaoke service (Demucs + Whisper) job state, keyed by the
+  // BASE track id — playing the instrumental swaps the current
+  // track to a ":karaoke" variant of the same song.
+  const [job, setJob] = useState<{
+    forId: string;
+    status: string;
+    instrumentalUrl: string | null;
+    lines: LyricLine[];
+  } | null>(null);
+  const originalRef = useRef<RadioTrack | null>(null);
 
-  const trackId = current?.id ?? null;
+  const baseId = current?.id.replace(/:karaoke$/, "") ?? null;
+  const isKaraokeTrack = current?.id.endsWith(":karaoke") ?? false;
+
   useEffect(() => {
-    if (!karaokeOpen || !current || lyrics?.trackId === current.id) return;
+    if (!karaokeOpen || !current || !baseId || lrclib?.trackId === baseId) {
+      return;
+    }
     let cancelled = false;
     setLyricsLoading(true);
     const artist = current.artists.split(",")[0]?.trim() ?? "";
+    const title = current.title.replace(/ \(Karaoke\)$/, "");
     fetch(
-      `/api/radio?type=lyrics&track=${encodeURIComponent(current.title)}&artist=${encodeURIComponent(artist)}`,
+      `/api/radio?type=lyrics&track=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`,
     )
       .then((res) => res.json())
       .then((json: { lines?: LyricLine[]; synced?: boolean }) => {
         if (cancelled) return;
-        setLyrics({
-          trackId: current.id,
+        setLrclib({
+          trackId: baseId,
           lines: json.lines ?? [],
           synced: Boolean(json.synced),
         });
       })
       .catch(() => {
         if (!cancelled) {
-          setLyrics({ trackId: current.id, lines: [], synced: false });
+          setLrclib({ trackId: baseId, lines: [], synced: false });
         }
       })
       .finally(() => {
@@ -813,10 +837,97 @@ function NowPlaying({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [karaokeOpen, trackId]);
+  }, [karaokeOpen, baseId]);
+
+  // Kick the karaoke-service job when the panel opens for a song.
+  useEffect(() => {
+    if (!karaokeOpen || !current || !baseId || isKaraokeTrack) return;
+    if (job?.forId === baseId) return;
+    let cancelled = false;
+    const query =
+      `id=${encodeURIComponent(baseId)}` +
+      `&audio=${encodeURIComponent(current.streamUrl)}` +
+      `&title=${encodeURIComponent(current.title)}` +
+      `&artist=${encodeURIComponent(current.artists)}`;
+    fetch(`/api/radio?type=karaoke&action=start&${query}`)
+      .then((res) => res.json())
+      .then(
+        (json: {
+          status?: string;
+          instrumental_url?: string;
+          lines?: LyricLine[];
+        }) => {
+          if (cancelled) return;
+          setJob({
+            forId: baseId,
+            status: json.status ?? "unavailable",
+            instrumentalUrl: json.instrumental_url ?? null,
+            lines: json.lines ?? [],
+          });
+        },
+      )
+      .catch(() => {
+        if (!cancelled) {
+          setJob({
+            forId: baseId,
+            status: "unavailable",
+            instrumentalUrl: null,
+            lines: [],
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [karaokeOpen, baseId]);
+
+  // Poll while the service prepares the song.
+  useEffect(() => {
+    if (!karaokeOpen || !baseId || job?.forId !== baseId) return;
+    if (job.status !== "processing") return;
+    const timer = setInterval(() => {
+      fetch(
+        `/api/radio?type=karaoke&action=status&id=${encodeURIComponent(baseId)}`,
+      )
+        .then((res) => res.json())
+        .then(
+          (json: {
+            status?: string;
+            instrumental_url?: string;
+            lines?: LyricLine[];
+          }) => {
+            setJob((prev) =>
+              prev && prev.forId === baseId
+                ? {
+                    forId: baseId,
+                    status: json.status ?? prev.status,
+                    instrumentalUrl:
+                      json.instrumental_url ?? prev.instrumentalUrl,
+                    lines: json.lines ?? prev.lines,
+                  }
+                : prev,
+            );
+          },
+        )
+        .catch(() => undefined);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [karaokeOpen, baseId, job]);
+
+  // Lyrics on screen: LRCLIB wins; the service's Whisper lines
+  // fill the gap when LRCLIB has nothing for the song.
+  const lyrics =
+    lrclib && baseId && lrclib.trackId === baseId && lrclib.lines.length > 0
+      ? lrclib
+      : job && baseId && job.forId === baseId && job.lines.length > 0
+        ? { trackId: baseId, lines: job.lines, synced: true }
+        : lrclib && baseId && lrclib.trackId === baseId
+          ? lrclib
+          : null;
 
   const activeIndex =
-    lyrics && current && lyrics.trackId === current.id && lyrics.synced
+    lyrics && current && lyrics.synced
       ? lyrics.lines.reduce(
           (acc, line, index) =>
             line.t <= radio.currentTime + 0.25 ? index : acc,
@@ -832,6 +943,24 @@ function NowPlaying({
       });
     }
   }, [activeIndex]);
+
+  function singWithInstrumental(): void {
+    if (!current || !job?.instrumentalUrl) return;
+    originalRef.current = current;
+    const karaokeTrack: RadioTrack = {
+      ...current,
+      id: `${current.id}:karaoke`,
+      title: `${current.title} (Karaoke)`,
+      streamUrl: job.instrumentalUrl,
+    };
+    radio.playTrack(karaokeTrack, [karaokeTrack]);
+  }
+
+  function backToOriginal(): void {
+    if (originalRef.current) {
+      radio.playTrack(originalRef.current, [originalRef.current]);
+    }
+  }
 
   if (!current) return null;
   const isFavorite = favoriteIds.has(current.id);
@@ -970,10 +1099,11 @@ function NowPlaying({
             <p className="py-4 text-center text-sm text-neutral-500">
               Finding the lyrics…
             </p>
-          ) : !lyrics || lyrics.trackId !== current.id || lyrics.lines.length === 0 ? (
+          ) : !lyrics || lyrics.lines.length === 0 ? (
             <p className="py-4 text-center text-sm text-neutral-400">
-              Lyrics aren&apos;t available for this one yet — hum the
-              tune, we won&apos;t judge.
+              {job?.status === "processing"
+                ? "Lyrics aren't in the library for this one — our model is writing them from the singer's voice right now. They'll appear here when ready."
+                : "Lyrics aren't available for this one yet — hum the tune, we won't judge."}
             </p>
           ) : (
             <>
@@ -999,14 +1129,186 @@ function NowPlaying({
               <p className="text-center text-[11px] text-neutral-600">
                 {lyrics.synced
                   ? "Synced lyrics — sing along 🎤"
-                  : "Lyrics (unsynced)"}{" "}
-                · Your turn: record your own cover from your profile
-                and let the campus hear it.
+                  : "Lyrics (unsynced)"}
               </p>
             </>
           )}
+
+          {/* The Demucs instrumental zone */}
+          {job && job.forId === baseId ? (
+            job.status === "processing" ? (
+              <p className="pt-1 text-center text-xs leading-relaxed text-neutral-400">
+                🎧 Preparing your instrumental — the AI is removing
+                the vocals. First time for a song takes a few minutes;
+                after that it&apos;s instant for everyone.
+              </p>
+            ) : job.status === "ready" && job.instrumentalUrl ? (
+              isKaraokeTrack ? (
+                <div className="flex flex-col items-center gap-2 pt-1">
+                  <p className="text-center text-xs font-medium text-amber-400">
+                    You&apos;re singing over the instrumental 🎤
+                  </p>
+                  <button
+                    type="button"
+                    onClick={backToOriginal}
+                    className="rounded-full border border-neutral-700 px-4 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500"
+                  >
+                    ↩ Back to the original
+                  </button>
+                  <KaraokeRecorder
+                    myAccountId={myAccountId}
+                    songTitle={current.title.replace(/ \(Karaoke\)$/, "")}
+                    songArtist={current.artists}
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={singWithInstrumental}
+                  className="mt-1 rounded-full bg-amber-500 px-5 py-2 text-sm font-semibold text-black transition hover:bg-amber-400"
+                >
+                  🎤 Sing with the instrumental
+                </button>
+              )
+            ) : job.status === "failed" ? (
+              <p className="pt-1 text-center text-xs text-neutral-500">
+                The instrumental couldn&apos;t be prepared this time —
+                lyrics karaoke still works.
+              </p>
+            ) : null
+          ) : null}
         </div>
       ) : null}
     </section>
+  );
+}
+
+// Record a cover without leaving the karaoke: the instrumental
+// keeps playing through the shell player while the mic captures
+// the voice; publishing uploads to the `covers` bucket and writes
+// the profile_covers row (same path as the profile studio).
+function KaraokeRecorder({
+  myAccountId,
+  songTitle,
+  songArtist,
+}: {
+  myAccountId: string;
+  songTitle: string;
+  songArtist: string;
+}) {
+  const [recording, setRecording] = useState<boolean>(false);
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<boolean>(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  async function start(): Promise<void> {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecording(false);
+        const recorded = new Blob(chunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        setBlob(recorded);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(URL.createObjectURL(recorded));
+      };
+      setMessage(null);
+      recorder.start();
+      setRecording(true);
+    } catch {
+      setMessage("Mic access was blocked — allow the microphone to record.");
+    }
+  }
+
+  async function publish(): Promise<void> {
+    if (!blob) return;
+    setPublishing(true);
+    try {
+      const supabase = createClient();
+      const ext = blob.type.includes("mp4")
+        ? "m4a"
+        : blob.type.includes("ogg")
+          ? "ogg"
+          : "webm";
+      const path = `${myAccountId}/cover-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("covers")
+        .upload(path, blob, { contentType: blob.type || "audio/webm" });
+      if (uploadError) throw uploadError;
+      const audioUrl = supabase.storage
+        .from("covers")
+        .getPublicUrl(path).data.publicUrl;
+      const result = await createCoverAction({
+        title: `${songTitle} — my karaoke cover`,
+        songTitle,
+        songArtist,
+        audioUrl,
+        durationSeconds: null,
+      });
+      if (result.error) throw new Error(result.error);
+      setMessage("Posted to your profile 🎉 — it's under My covers.");
+      setBlob(null);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "Couldn't post that cover.",
+      );
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  return (
+    <div className="flex w-full flex-col items-center gap-2 border-t border-white/5 pt-3">
+      {recording ? (
+        <button
+          type="button"
+          onClick={() => recorderRef.current?.stop()}
+          className="rounded-full bg-rose-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-rose-400"
+        >
+          ⏹ Stop recording
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void start()}
+          className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200"
+        >
+          🎙 Record my cover
+        </button>
+      )}
+      {previewUrl ? (
+        <>
+          <audio src={previewUrl} controls className="w-full" preload="metadata" />
+          <button
+            type="button"
+            disabled={publishing}
+            onClick={() => void publish()}
+            className="rounded-full bg-amber-500 px-5 py-2 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:opacity-50"
+          >
+            {publishing ? "Posting…" : "Post to my profile"}
+          </button>
+        </>
+      ) : null}
+      {message ? (
+        <p className="text-center text-xs font-medium text-emerald-400">
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }

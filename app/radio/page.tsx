@@ -58,7 +58,7 @@ export default async function RadioPage() {
         </p>
       </div>
 
-      <RadioClient />
+      <RadioClient myAccountId={account.id} />
     </main>
   );
 }

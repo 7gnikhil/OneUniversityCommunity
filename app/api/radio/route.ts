@@ -269,6 +269,44 @@ export async function GET(req: Request) {
       return NextResponse.json({ tracks, total: tracks.length });
     }
 
+    if (type === "karaoke") {
+      // The Music Mitra karaoke service (karaoke-service/ in this
+      // repo — Demucs instrumental + Whisper lyrics, cached per
+      // song). Unconfigured until KARAOKE_SERVICE_URL is set in
+      // Vercel; the client then keeps the LRCLIB-only karaoke.
+      const service = (process.env.KARAOKE_SERVICE_URL ?? "").replace(
+        /\/$/,
+        "",
+      );
+      if (!service) return NextResponse.json({ status: "unavailable" });
+      const songId = (params.get("id") ?? "").trim();
+      if (!songId) return NextResponse.json({ status: "unavailable" });
+      const action = params.get("action") ?? "status";
+      try {
+        if (action === "start") {
+          const res = await fetch(`${service}/karaoke`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              song_id: songId,
+              audio_url: params.get("audio") ?? "",
+              title: params.get("title") ?? "",
+              artist: params.get("artist") ?? "",
+            }),
+            cache: "no-store",
+          });
+          return NextResponse.json(await res.json());
+        }
+        const res = await fetch(
+          `${service}/karaoke/${encodeURIComponent(songId)}`,
+          { cache: "no-store" },
+        );
+        return NextResponse.json(await res.json());
+      } catch {
+        return NextResponse.json({ status: "unavailable" });
+      }
+    }
+
     return NextResponse.json({ error: "Unknown type." }, { status: 400 });
   } catch {
     return NextResponse.json(
