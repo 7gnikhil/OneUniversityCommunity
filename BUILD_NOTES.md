@@ -2717,3 +2717,28 @@ with its like/swipe counts. No ratings table exists.
   admin things went off"). The admin AREA never went anywhere —
   /admin is untouched — and the door now sits on the Profile
   page, owner-email only, same rule as the gate itself.
+
+---
+
+## Polls removed; Fling rating goes weekly; new tab order (2026-11-12)
+
+Owner's morning corrections, all in one batch:
+- **"Why questions everywhere — remove the poll of the day."**
+  The polls are REMOVED from Fling and Chirp entirely. DailyPoll,
+  lib/daily-polls, lib/daily-poll-data and the vote action are
+  inert stubs. The daily_poll_votes table (migration 0015) stays
+  in the database, unused — dropping it is a separate call.
+  Trending on Chirp is untouched and stays.
+- **"Add students rating per week in Fling."** The Fling rating
+  now runs on a WEEKLY window (last 7 days): the ★ chip on deck
+  cards and Fling profiles is the weekly score (the profile page
+  falls back to all-time in a swipe-less week), Profile → Fling
+  data shows weekly + all-time, and Fling gains a **Top this
+  week** board — top 5 real students by likes received in the
+  last 7 days (developer and *@oneuco.local seed accounts
+  excluded), each with their ♥ count and ★ rating.
+- **Tab order**: "default should be fling then it should be at
+  first then chirp then tea then homies then profile" — STOPS in
+  lib/nav-stops reordered to Fling, Chirp, Tea, Homies, Profile.
+  Fling was already the default landing page; it is now also the
+  first tab.

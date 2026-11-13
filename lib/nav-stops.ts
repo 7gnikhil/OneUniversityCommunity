@@ -114,24 +114,6 @@ export interface DialStopDef {
 // stop size). Each glyph is render-tested at ~36px and ~22px.
 export const STOPS: DialStopDef[] = [
   {
-    label: "Tea",
-    href: "/servers",
-    accentVar: "var(--stop-servers)",
-    ring: "double",
-    // A big cup with the tea sloshing out over its left rim: the
-    // pour wave down the outside, one fat filled drop mid-fall, and
-    // the puddle wave it lands in.
-    iconPaths: [
-      "M7.5 8.5h11l-1 9a2.8 2.8 0 0 1-2.8 2.5h-3.4A2.8 2.8 0 0 1 8.5 17.5l-1-9z",
-      "M18.2 11h1a2.6 2.6 0 0 1 0 5.2h-1.3",
-      "M7.8 8.3c-2 .2-3 1.5-2.9 3.1.1 1.5.2 2.7-.4 4.1",
-      "M1.8 21.4c1.7-1 3.5-1 5.2 0",
-    ],
-    iconFills: [
-      "M3.1 15.4c.9 1.3 1.5 2.2 1.5 3a1.5 1.5 0 1 1-3 0c0-.8.6-1.7 1.5-3z",
-    ],
-  },
-  {
     label: "Fling",
     href: "/swipe",
     accentVar: "var(--stop-swipe)",
@@ -151,6 +133,46 @@ export const STOPS: DialStopDef[] = [
     ],
     iconFills: [
       "M12 12.7a1.3 1.3 0 1 0 0 2.6a1.3 1.3 0 1 0 0-2.6z",
+    ],
+  },
+  {
+    label: "Chirp",
+    href: "/chirp",
+    accentVar: "var(--stop-chirp)",
+    ring: "ticks",
+    // A swift in a glide, nothing else (owner, 2026-11-10: first a
+    // singing bird at a mic, then "a hummingbird, just", then "or a
+    // swift" — both birds were drawn and render-tested at 36/22px;
+    // the swift's crescent read cleanly at 22px, the hummingbird
+    // fused twice, so the swift shipped): two long scythe wings as
+    // closed crescent leaves, one solid teardrop body, short forked
+    // tail.
+    iconPaths: [
+      "M11.7 11C8.4 7.8 5.4 6 2.2 5.6c1.2 3.4 3.7 6.1 7 7.7 1.2.6 2.6-.6 2.5-2.3z",
+      "M12.3 11c3.3-3.2 6.3-5 9.5-5.4-1.2 3.4-3.7 6.1-7 7.7-1.2.6-2.6-.6-2.5-2.3z",
+      "M11.3 16.7L9.5 20.2",
+      "M12.7 16.7l1.8 3.5",
+    ],
+    iconFills: [
+      "M12 10.2c1.3 0 2.1 1 2.1 2.3 0 1.9-.9 3.6-2.1 4.6-1.2-1-2.1-2.7-2.1-4.6 0-1.3.8-2.3 2.1-2.3z",
+    ],
+  },
+  {
+    label: "Tea",
+    href: "/servers",
+    accentVar: "var(--stop-servers)",
+    ring: "double",
+    // A big cup with the tea sloshing out over its left rim: the
+    // pour wave down the outside, one fat filled drop mid-fall, and
+    // the puddle wave it lands in.
+    iconPaths: [
+      "M7.5 8.5h11l-1 9a2.8 2.8 0 0 1-2.8 2.5h-3.4A2.8 2.8 0 0 1 8.5 17.5l-1-9z",
+      "M18.2 11h1a2.6 2.6 0 0 1 0 5.2h-1.3",
+      "M7.8 8.3c-2 .2-3 1.5-2.9 3.1.1 1.5.2 2.7-.4 4.1",
+      "M1.8 21.4c1.7-1 3.5-1 5.2 0",
+    ],
+    iconFills: [
+      "M3.1 15.4c.9 1.3 1.5 2.2 1.5 3a1.5 1.5 0 1 1-3 0c0-.8.6-1.7 1.5-3z",
     ],
   },
   {
@@ -175,28 +197,6 @@ export const STOPS: DialStopDef[] = [
     ],
     iconFills: [
       "M8.1 8.9h7.8a.9.9 0 0 1 .9.9v.7a1.6 1.6 0 0 1-1.6 1.6H8.8a1.6 1.6 0 0 1-1.6-1.6v-.7a.9.9 0 0 1 .9-.9z",
-    ],
-  },
-  {
-    label: "Chirp",
-    href: "/chirp",
-    accentVar: "var(--stop-chirp)",
-    ring: "ticks",
-    // A swift in a glide, nothing else (owner, 2026-11-10: first a
-    // singing bird at a mic, then "a hummingbird, just", then "or a
-    // swift" — both birds were drawn and render-tested at 36/22px;
-    // the swift's crescent read cleanly at 22px, the hummingbird
-    // fused twice, so the swift shipped): two long scythe wings as
-    // closed crescent leaves, one solid teardrop body, short forked
-    // tail.
-    iconPaths: [
-      "M11.7 11C8.4 7.8 5.4 6 2.2 5.6c1.2 3.4 3.7 6.1 7 7.7 1.2.6 2.6-.6 2.5-2.3z",
-      "M12.3 11c3.3-3.2 6.3-5 9.5-5.4-1.2 3.4-3.7 6.1-7 7.7-1.2.6-2.6-.6-2.5-2.3z",
-      "M11.3 16.7L9.5 20.2",
-      "M12.7 16.7l1.8 3.5",
-    ],
-    iconFills: [
-      "M12 10.2c1.3 0 2.1 1 2.1 2.3 0 1.9-.9 3.6-2.1 4.6-1.2-1-2.1-2.7-2.1-4.6 0-1.3.8-2.3 2.1-2.3z",
     ],
   },
   {

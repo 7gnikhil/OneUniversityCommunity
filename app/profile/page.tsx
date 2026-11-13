@@ -119,17 +119,18 @@ export default async function ProfilePage() {
   // fling profile until the table lands.
   const flingProfile = await getFlingProfile(supabase, account.id);
 
-  // My Fling rating — derived from likes received (lib/fling-
-  // rating), the same score my deck card shows everyone. Absent
-  // until at least one person has swiped on me.
-  let receivedRating: FlingRating | null = null;
+  // My Fling ratings — derived from likes received (lib/fling-
+  // rating): this week's score (the one my card shows) and the
+  // all-time one. Absent until someone has swiped on me.
+  let weeklyRating: FlingRating | null = null;
+  let allTimeRating: FlingRating | null = null;
   try {
-    receivedRating = await ratingForAccount(
-      createAdminClient(),
-      account.id,
-    );
+    const admin = createAdminClient();
+    weeklyRating = await ratingForAccount(admin, account.id, 7);
+    allTimeRating = await ratingForAccount(admin, account.id);
   } catch {
-    receivedRating = null;
+    weeklyRating = null;
+    allTimeRating = null;
   }
 
   // Queries — my existing developer requests, for the shared form's
@@ -204,19 +205,23 @@ export default async function ProfilePage() {
           collapseOnSubmit={false}
         >
           <div className="mt-4 flex flex-col gap-4">
-            {receivedRating ? (
+            {weeklyRating || allTimeRating ? (
               <p className="text-sm text-neutral-300">
-                Your Fling rating:{" "}
+                Your Fling rating this week:{" "}
                 <span className="font-semibold text-white">
-                  ★ {receivedRating.rating.toFixed(1)}
+                  {weeklyRating
+                    ? `★ ${weeklyRating.rating.toFixed(1)}`
+                    : "no swipes yet"}
                 </span>{" "}
                 <span className="text-neutral-500">
-                  · from {receivedRating.likes} like
-                  {receivedRating.likes === 1 ? "" : "s"} (
-                  {receivedRating.total} swipe
-                  {receivedRating.total === 1 ? "" : "s"} received) — it
-                  rides on your Fling card; more right swipes, higher it
-                  climbs
+                  {weeklyRating
+                    ? `· from ${weeklyRating.likes} like${weeklyRating.likes === 1 ? "" : "s"} (${weeklyRating.total} swipes) `
+                    : ""}
+                  {allTimeRating
+                    ? `· all-time ★ ${allTimeRating.rating.toFixed(1)} from ${allTimeRating.likes} likes`
+                    : ""}
+                  {" "}— it rides on your Fling card; more right swipes
+                  this week, higher it climbs
                 </span>
               </p>
             ) : null}

@@ -7,13 +7,14 @@ import { getDeveloperAccountId } from "@/lib/server/owner";
 import { accentHex } from "@/lib/validation";
 import SwipeDeck from "./SwipeDeck";
 import PageIntro from "@/components/PageIntro";
-import DailyPolls from "@/components/DailyPoll";
+import Avatar from "@/components/Avatar";
 import { quoteOfTheDay } from "@/lib/loading-quotes";
-import { getDailyPollState } from "@/lib/daily-poll-data";
 import { istMidnightUtc } from "@/lib/daily";
 import {
   ratingsForAccounts,
+  weeklyLeaders,
   type FlingRating,
+  type WeeklyLeader,
 } from "@/lib/fling-rating";
 
 // Fling — the app's #1 priority surface (Tinder-style, verified
@@ -73,10 +74,6 @@ export default async function SwipePage() {
   // error page. The quote is pure code; the rest are small reads.
   const quote = quoteOfTheDay();
 
-  // Polls of the day: aggregate counts + my own votes (shared
-  // helper — the Chirp hub shows the same set the same way).
-  const pollEntries = await getDailyPollState(supabase, account.id);
-
   // "New today" pulse: joins, chirps and matches since IST midnight.
   let pulse: { joined: number; chirps: number; matches: number } | null =
     null;
@@ -100,19 +97,31 @@ export default async function SwipePage() {
   }
 
   // Fling ratings for the dealt candidates — DERIVED from likes
-  // received (lib/fling-rating; no ratings table, no manual vote).
-  // One grouped read over the candidates' received swipes.
+  // received THIS WEEK (last 7 days; lib/fling-rating). One
+  // grouped read over the candidates' received swipes.
   let deckRatings: Record<string, FlingRating> = {};
+  let leaders: WeeklyLeader[] = [];
   if (candidates.length > 0) {
     try {
       const admin = createAdminClient();
       deckRatings = await ratingsForAccounts(
         admin,
         candidates.map((row) => row.profile.accountId),
+        7,
       );
     } catch {
       deckRatings = {};
     }
+  }
+  // Top this week — the weekly student board (real students only;
+  // developer + seed accounts excluded inside the helper, the
+  // developer additionally by id here).
+  try {
+    const admin = createAdminClient();
+    const developerId = await getDeveloperAccountId(admin);
+    leaders = await weeklyLeaders(admin, 5, developerId ? [developerId] : []);
+  } catch {
+    leaders = [];
   }
 
   const pulseParts: string[] = [];
@@ -153,15 +162,48 @@ export default async function SwipePage() {
         </p>
       ) : null}
 
-      <DailyPolls
-        entries={pollEntries.map((entry) => ({
-          pollIndex: entry.poll.index,
-          question: entry.poll.question,
-          options: entry.poll.options,
-          counts: entry.counts,
-          myVote: entry.myVote,
-        }))}
-      />
+      {leaders.length > 0 ? (
+        <section className="w-full max-w-sm self-center rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-neutral-500">
+            Top this week
+          </p>
+          <div className="mt-2 flex flex-col gap-2">
+            {leaders.map((leader, i) => {
+              const display = leader.name.trim()
+                ? leader.name
+                : `@${leader.username}`;
+              return (
+                <div key={leader.accountId} className="flex items-center gap-2.5">
+                  <span className="w-4 shrink-0 text-xs font-semibold text-neutral-500">
+                    {i + 1}
+                  </span>
+                  <Avatar
+                    name={display}
+                    photoUrl={leader.photoUrl}
+                    sizeClass="h-7 w-7"
+                    textClass="text-[10px]"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm text-neutral-200">
+                    {display}
+                    {leader.name.trim() ? (
+                      <span className="text-neutral-500">
+                        {" "}
+                        @{leader.username}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-xs text-neutral-400">
+                    ♥ {leader.likes}
+                  </span>
+                  <span className="shrink-0 rounded-full border border-amber-400/50 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                    ★ {leader.rating.toFixed(1)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <SwipeDeck
         // Remount when the dealt deck changes (e.g. after Start Again

@@ -13,8 +13,6 @@ import {
 import { accentHex } from "@/lib/validation";
 import Avatar from "@/components/Avatar";
 import PageIntro from "@/components/PageIntro";
-import DailyPolls from "@/components/DailyPoll";
-import { getDailyPollState } from "@/lib/daily-poll-data";
 import ChirpFeed from "./ChirpFeed";
 
 // Chirp — the hub. Identities are normal here: authors show their
@@ -93,10 +91,6 @@ export default async function ChirpPage() {
     .slice(0, 3);
   const accent = accentHex(myProfile?.accent_color);
 
-  // Poll of the day — the same poll Fling shows, through the same
-  // helper, so a vote cast in either place is the same vote.
-  const pollState = await getDailyPollState(supabase, me.id);
-
   const region = await resolveRegionForAccount(supabase, me);
   const [topNews, weather] = await Promise.all([
     getNewsCached("top", region),
@@ -126,18 +120,6 @@ export default async function ChirpPage() {
           accentHex={accent}
         />
       </div>
-
-      {/* Polls of the day — the same set as Fling's, same votes.
-          Full-width like every other card on the hub. */}
-      <DailyPolls
-        entries={pollState.map((entry) => ({
-          pollIndex: entry.poll.index,
-          question: entry.poll.question,
-          options: entry.poll.options,
-          counts: entry.counts,
-          myVote: entry.myVote,
-        }))}
-      />
 
       {trendingChirps.length > 0 ? (
         <TrendingCard chirps={trendingChirps} />

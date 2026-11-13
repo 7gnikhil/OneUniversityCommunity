@@ -120,12 +120,18 @@ export default async function FlingProfilePage({
 
   const fling = await getFlingProfile(supabase, profile.accountId);
 
-  // Their Fling rating — derived from likes received
-  // (lib/fling-rating), computed server-side. Fail-soft.
+  // Their Fling rating — derived from likes received THIS WEEK
+  // (lib/fling-rating), computed server-side; falls back to the
+  // all-time score in a week with no swipes on them. Fail-soft.
   let theirRating: FlingRating | null = null;
+  let theirRatingIsWeekly = true;
   try {
     const admin = createAdminClient();
-    theirRating = await ratingForAccount(admin, profile.accountId);
+    theirRating = await ratingForAccount(admin, profile.accountId, 7);
+    if (!theirRating) {
+      theirRating = await ratingForAccount(admin, profile.accountId);
+      theirRatingIsWeekly = false;
+    }
   } catch {
     theirRating = null;
   }
@@ -179,6 +185,7 @@ export default async function FlingProfilePage({
               <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
                 ★ {theirRating.rating.toFixed(1)} · {theirRating.likes}{" "}
                 like{theirRating.likes === 1 ? "" : "s"}
+                {theirRatingIsWeekly ? " this week" : ""}
               </span>
             ) : null}
             {profile.branch ? (
