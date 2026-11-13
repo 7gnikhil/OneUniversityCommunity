@@ -2799,3 +2799,17 @@ make the fling as home page … make it like reddit and twitter".
   countdown text and the disabled gate all out; the button is
   ready the moment the deck runs out. Server never enforced the
   wait; its comment now records the removal.
+
+---
+
+## Bottom bar active-tab bug — fixed (2026-11-13)
+
+Owner: "if i choose fling it is showing as chirp". Cause:
+BottomBar's activeStopIndex() returned hardcoded positions from
+the PRE-reorder tab order (servers 0, swipe 1, friends 2, chirp
+3, profile 4); after STOPS moved to Fling, Chirp, Tea, Homies,
+Profile, every tab lit its neighbour — only Profile (still last)
+was right. The function now finds the index by matching the
+pathname against each stop's href (with the /inbox → Homies
+alias preserved), so reordering the tabs can never desync the
+highlight again.

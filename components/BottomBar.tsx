@@ -19,18 +19,17 @@ import { STOPS, type DialBadges } from "@/lib/nav-stops";
 // instead of growing a sixth tab.
 
 function activeStopIndex(pathname: string): number {
-  if (pathname === "/servers" || pathname.startsWith("/servers/")) return 0;
-  if (pathname === "/swipe" || pathname.startsWith("/swipe/")) return 1;
-  if (
-    pathname === "/friends" ||
-    pathname.startsWith("/friends/") ||
-    pathname === "/inbox"
-  ) {
-    return 2;
-  }
-  if (pathname === "/chirp" || pathname.startsWith("/chirp/")) return 3;
-  if (pathname === "/profile" || pathname.startsWith("/profile/")) return 4;
-  return -1;
+  // Derived from the STOPS order itself — never hardcode indices
+  // here. (Bug, 2026-11-13: when the tab order changed to Fling,
+  // Chirp, Tea, Homies, Profile, this function's frozen indices
+  // kept pointing at the OLD order, so Fling lit up as Chirp,
+  // Tea as Fling, and so on. Matching by href makes any future
+  // reorder safe.)
+  // /inbox lights the Homies tab (see the header note above).
+  const path = pathname === "/inbox" ? "/friends" : pathname;
+  return STOPS.findIndex(
+    (stop) => path === stop.href || path.startsWith(`${stop.href}/`),
+  );
 }
 
 export default function BottomBar({ badges }: { badges?: DialBadges }) {
