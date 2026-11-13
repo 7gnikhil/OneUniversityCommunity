@@ -3036,3 +3036,18 @@ graceful "unavailable", LRCLIB karaoke keeps working); the
 karaoke panel gains "Sing with the instrumental" + an in-panel
 recorder that posts the cover straight to the profile. Poster:
 ~/workspace/your_files/oneuco-karaoke-poster.png.
+
+## Music source: direct JioSaavn line (2026-11-14 night)
+
+The public wrapper instance (saavn.sumit.co) hit Cloudflare's
+1027 rate limit and the whole music section went dark — the
+shared-instance risk, live. The proxy now calls JioSaavn's
+api.php DIRECTLY (search.getResults / getAlbumResults /
+getPlaylistResults / content.getAlbumDetails /
+playlist.getDetails), decrypting stream URLs in pure JS
+(Node/OpenSSL 3 refuses DES; key/IV and the _96->_320 quality
+swap mirror the open-source wrapper, verified against real
+payloads). Fallback chain per mode: direct -> wrapper -> (songs)
+Audius, so the section degrades instead of dying. This is also
+Step 1 of the self-host plan arriving early: no third-party
+instance sits between OneUco and the catalogue any more.

@@ -170,6 +170,7 @@ export default function RadioClient({
           tracks?: RadioTrack[];
           total?: number;
           error?: string;
+          fallback?: string;
         };
         if (!res.ok) throw new Error(json.error ?? "failed");
         const fresh = json.tracks ?? [];
@@ -185,7 +186,7 @@ export default function RadioClient({
           setAudiusTracks([]);
           if (fresh.length === 0) {
             setError("No songs found for that — try another search.");
-          } else if (fresh.length < 8) {
+          } else if (fresh.length < 8 && !json.fallback) {
             // Thin shelf: bring in the second source.
             try {
               const au = await fetch(
