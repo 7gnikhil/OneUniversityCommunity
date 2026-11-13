@@ -57,14 +57,39 @@ export default async function SwipePage() {
     // card — a card would expose the identity and gallery his masked
     // profile page never unlocks (see lib/social.ts).
     const developerId = await getDeveloperAccountId(admin);
+    const excludeIds = developerId ? [developerId] : [];
     candidates = await listDeckCandidates(
       admin,
       supabase,
       account.id,
       myProfile?.intention ?? null,
       30,
-      developerId ? [developerId] : [],
+      excludeIds,
     );
+    if (candidates.length === 0) {
+      // Never greet the home page with a dead deck (owner's catch,
+      // 2026-11-13: landing on Fling with everyone swiped showed
+      // only a "Start again" button — "we should press start again
+      // to get that, thats not good"). Passes are soft: when no
+      // fresh student is left, quietly recycle my passes — the
+      // exact delete the Start again button does — and deal again.
+      // Likes are never recycled (they may already be matches).
+      // The caught-up card now appears only when there is truly
+      // nobody left to show.
+      await admin
+        .from("swipes")
+        .delete()
+        .eq("swiper_id", account.id)
+        .eq("direction", "pass");
+      candidates = await listDeckCandidates(
+        admin,
+        supabase,
+        account.id,
+        myProfile?.intention ?? null,
+        30,
+        excludeIds,
+      );
+    }
   } catch {
     candidates = [];
   }

@@ -2836,3 +2836,17 @@ it — flat black page, grey outline buttons, grey card borders.
 - LIKE/PASS drag stamps: chunkier, rotated, glass-backed.
 - "You're all caught up" card and its Start again button get
   the same gradient treatment. No logic changed anywhere.
+
+---
+
+## Fling never lands on a dead deck (2026-11-13)
+
+Owner: landing on Fling after swiping everyone showed only the
+"You're all caught up" card — "we should press start again to
+get that [the deck and its buttons], thats not good". With a
+small community the deck empties fast, so the home page greeted
+him with a dead end. Fix in app/swipe/page.tsx: when the fresh
+candidate list is empty, the page silently recycles the user's
+passes (the same service-role delete resetPassesAction does)
+and deals again. Likes are never recycled. The caught-up card
+now shows only when there is genuinely nobody left to deal.
