@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -12,7 +11,7 @@ import {
 import type { DeckCandidate } from "@/lib/social";
 import { sizedPhotoUrl } from "@/lib/images";
 import type { FlingRating } from "@/lib/fling-rating";
-import { recordSwipeAction, resetPassesAction } from "./actions";
+import { recordSwipeAction } from "./actions";
 
 // The swipe deck (client). Cards arrive pre-filtered from the server
 // (public fields only — see lib/social.ts). Interactions: pointer drag
@@ -86,7 +85,6 @@ export default function SwipeDeck({
   /** Likes-derived Fling ratings by account id (lib/fling-rating). */
   ratings?: Record<string, FlingRating>;
 }) {
-  const router = useRouter();
   const [queue, setQueue] = useState<DeckCandidate[]>(candidates);
   const [index, setIndex] = useState<number>(0);
   const [dragX, setDragX] = useState<number>(0);
@@ -95,7 +93,6 @@ export default function SwipeDeck({
   const [matched, setMatched] = useState<{ matchId: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [interacted, setInteracted] = useState<boolean>(false);
-  const [resetting, setResetting] = useState<boolean>(false);
 
   const dragStartX = useRef<number | null>(null);
   const busyRef = useRef<boolean>(false);
@@ -174,19 +171,6 @@ export default function SwipeDeck({
   function onShuffle(): void {
     setInteracted(true);
     setQueue((items) => shuffleTail(items, index + 1));
-  }
-
-  async function onStartAgain(): Promise<void> {
-    setResetting(true);
-    const result = await resetPassesAction();
-    setResetting(false);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    // The server re-deals the deck: passes are forgotten, so those
-    // profiles come back; likes stay consumed and matches stay matched.
-    router.refresh();
   }
 
   const flyOffset = flyDir === 0 ? dragX : flyDir * 640;
@@ -318,21 +302,11 @@ export default function SwipeDeck({
         <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-[28px] border border-rose-400/20 bg-neutral-950 px-6 py-10 text-center shadow-[0_20px_60px_rgba(244,63,94,0.15)]">
           <p className="text-lg font-semibold">You&apos;re all caught up</p>
           <p className="text-sm leading-relaxed text-neutral-400">
-            You&apos;ve seen everyone for now. Your matches are safe — start
-            again to re-see the people you passed on.
+            You&apos;ve seen everyone on OneUco right now — and your
+            matches are safe. People you&apos;ve seen come back around
+            on their own, and new students join every day: they&apos;ll
+            be right here, no button to press.
           </p>
-          <button
-            type="button"
-            disabled={resetting}
-            onClick={() => void onStartAgain()}
-            className="rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_35px_rgba(244,63,94,0.4)] transition hover:opacity-95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-            style={{
-              backgroundImage:
-                "linear-gradient(135deg, #f43f5e 0%, #f97316 100%)",
-            }}
-          >
-            {resetting ? "Resetting…" : "Start again"}
-          </button>
         </div>
       )}
     </div>

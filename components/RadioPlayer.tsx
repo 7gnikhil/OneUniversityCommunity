@@ -196,18 +196,118 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// The app-wide mini player: a slim card fixed just above the
-// bottom tab bar, shown whenever a track is loaded. Artwork,
-// title, prev / play-pause / next, mute and close — everything
-// needed without going back to the Radio page.
+// The app-wide mini player (owner's refinement, 2026-11-14: "make
+// the music bar fade to a movable pop up button at down so it
+// wont disturb when we open other app"). Two shapes:
+//  - the BAR: artwork, title, prev / play / next, mute, close —
+//    shown when a song starts, fading away after a few seconds;
+//  - the BUBBLE it fades into: a small floating button with the
+//    artwork and a progress ring that can be DRAGGED anywhere on
+//    screen (chat-head style). Tap the bubble to bring the bar
+//    back; tap its little badge to play/pause without opening it.
 export function MiniPlayer() {
   const radio = useRadio();
   const { current } = radio;
+  const [expanded, setExpanded] = useState<boolean>(true);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+  } | null>(null);
+
+  // A new song brings the bar up, then it fades to the bubble.
+  const currentId = current?.id ?? null;
+  useEffect(() => {
+    if (!currentId) return;
+    setExpanded(true);
+    const timer = setTimeout(() => setExpanded(false), 5000);
+    return () => clearTimeout(timer);
+  }, [currentId]);
+
   if (!current) return null;
   const progress =
     current.duration > 0
       ? Math.min(100, (radio.currentTime / current.duration) * 100)
       : 0;
+
+  if (!expanded) {
+    const bubblePos = pos ?? {
+      x: typeof window !== "undefined" ? window.innerWidth - 76 : 300,
+      y: typeof window !== "undefined" ? window.innerHeight - 190 : 500,
+    };
+    return (
+      <div
+        className="fixed z-40 touch-none select-none"
+        style={{ left: bubblePos.x, top: bubblePos.y }}
+        onPointerDown={(event) => {
+          dragRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: bubblePos.x,
+            originY: bubblePos.y,
+            moved: false,
+          };
+          (event.target as HTMLElement).setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const drag = dragRef.current;
+          if (!drag) return;
+          const dx = event.clientX - drag.startX;
+          const dy = event.clientY - drag.startY;
+          if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
+          if (drag.moved) {
+            const maxX = window.innerWidth - 64;
+            const maxY = window.innerHeight - 64;
+            setPos({
+              x: Math.min(Math.max(4, drag.originX + dx), maxX),
+              y: Math.min(Math.max(4, drag.originY + dy), maxY),
+            });
+          }
+        }}
+        onPointerUp={() => {
+          const drag = dragRef.current;
+          dragRef.current = null;
+          if (drag && !drag.moved) setExpanded(true);
+        }}
+      >
+        <div
+          className="relative h-14 w-14 rounded-full p-[3px] shadow-2xl shadow-black/60"
+          style={{
+            background: `conic-gradient(#f59e0b ${progress}%, rgba(255,255,255,0.18) ${progress}%)`,
+          }}
+        >
+          {current.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={current.image}
+              alt=""
+              draggable={false}
+              className="h-full w-full rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center rounded-full bg-neutral-800 text-xl">
+              🎵
+            </span>
+          )}
+          <button
+            type="button"
+            aria-label={radio.isPlaying ? "Pause" : "Play"}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              radio.toggle();
+            }}
+            className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[9px] text-black shadow-lg"
+          >
+            {radio.isPlaying ? "❚❚" : "▶"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[4.5rem] z-40 px-3">
@@ -268,6 +368,14 @@ export function MiniPlayer() {
           className="shrink-0 p-1 text-neutral-300 transition hover:text-white"
         >
           {radio.muted ? "🔇" : "🔊"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          aria-label="Minimise player"
+          className="shrink-0 p-1 text-neutral-400 transition hover:text-white"
+        >
+          ⌄
         </button>
         <button
           type="button"

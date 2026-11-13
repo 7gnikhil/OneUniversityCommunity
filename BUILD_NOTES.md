@@ -2957,3 +2957,32 @@ music project: MusicMitra.)
   artwork and the highest stream quality (320kbps).
 - Chirp sidebar gains Radio too (fifth entry, above Start a
   community).
+
+## Dead deck, round 2 — likes recycle too; Start again is GONE (2026-11-14)
+
+The owner screenshotted the caught-up card again minutes after
+the pass-recycle shipped: his test account had LIKED nearly
+everyone and passed on almost nobody, so recycling passes still
+dealt an empty deck. Fix in app/swipe/page.tsx: a second
+recycle round — when passes don't refill the deck, the page
+also forgets my one-sided LIKE swipes (everyone except matched
+partners, whose rows stay). Safe by construction: a match lives
+in the matches table, the deal query excludes matched pairs
+regardless, swipes are unique per pair, and a re-like simply
+re-runs the normal match check. SwipeDeck's "Start again"
+button is REMOVED — the caught-up card (new copy) now appears
+only when there is genuinely nobody dealable left (everyone
+matched/blocked/the developer/no other students), and it
+promises nothing a button must deliver.
+
+## Mini player fades into a movable bubble (2026-11-14)
+
+Owner: "make the music bar fade to a movable pop up button at
+down so it wont disturb when we open other app". The mini
+player now has two shapes: the full bar appears when a song
+starts (or on bubble tap) and fades after 5s into a floating
+BUBBLE — artwork in a progress ring, chat-head style, draggable
+anywhere on screen (pointer capture, viewport-clamped). The
+bubble's corner badge play/pauses without opening the bar; the
+bar also gained a ⌄ minimise button. Playback state is
+untouched — only the chrome changed.

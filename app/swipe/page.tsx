@@ -90,6 +90,51 @@ export default async function SwipePage() {
         excludeIds,
       );
     }
+    if (candidates.length === 0) {
+      // Round 2 of the same fix (owner's screenshot, minutes
+      // later): he had LIKED nearly everyone and passed on almost
+      // nobody, so pass-recycling still left a dead deck — "I
+      // can't get the navigation bar, I should press start again".
+      // One-sided likes are just swipe rows (a match lives in its
+      // own table and the deal query excludes matched pairs
+      // anyway), so recycle them too: everyone who hasn't matched
+      // with me comes back around. Matched partners' like rows
+      // are kept untouched.
+      const { data: matchRows } = await admin
+        .from("matches")
+        .select("account_a, account_b")
+        .or(`account_a.eq.${account.id},account_b.eq.${account.id}`);
+      const matchedPartners = new Set<string>();
+      for (const row of (matchRows ?? []) as Array<{
+        account_a: string;
+        account_b: string;
+      }>) {
+        matchedPartners.add(
+          row.account_a === account.id ? row.account_b : row.account_a,
+        );
+      }
+      let likeDelete = admin
+        .from("swipes")
+        .delete()
+        .eq("swiper_id", account.id)
+        .eq("direction", "like");
+      if (matchedPartners.size > 0) {
+        likeDelete = likeDelete.not(
+          "swipee_id",
+          "in",
+          `(${[...matchedPartners].join(",")})`,
+        );
+      }
+      await likeDelete;
+      candidates = await listDeckCandidates(
+        admin,
+        supabase,
+        account.id,
+        myProfile?.intention ?? null,
+        30,
+        excludeIds,
+      );
+    }
   } catch {
     candidates = [];
   }
