@@ -137,16 +137,44 @@ export default async function SwipePage() {
 
   return (
     <main data-section="swipe" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
-      <div className="flex items-center justify-between">
-        <Link
-          href="/swipe"
-          className="text-sm text-neutral-400 transition hover:text-white"
-        >
-          ← OneUco
+      {/* Home top bar — the Reddit/X pattern (owner's call,
+          2026-11-13): brand on the left, search + my avatar on the
+          right, sticky as the page scrolls. Fling IS the home page,
+          so there is no back arrow here and no section chip — the
+          bottom bar already says where you are. (The "← OneUco"
+          link that pointed at this very page is gone.) */}
+      <div className="sticky top-0 z-40 -mx-6 -mt-6 flex items-center justify-between bg-black/85 px-6 py-3 backdrop-blur">
+        <Link href="/swipe" className="text-lg font-bold tracking-tight">
+          One<span className="text-amber-400">Uco</span>
         </Link>
-        <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
-          Fling
-        </p>
+        <div className="flex items-center gap-1.5">
+          <Link
+            href="/search"
+            aria-label="Search students"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-300 transition hover:bg-neutral-900 hover:text-white"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              className="h-5 w-5"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20.5 20.5L16.7 16.7" />
+            </svg>
+          </Link>
+          <Link href="/profile" aria-label="Your profile" className="shrink-0">
+            <Avatar
+              name={myProfile?.name ?? "You"}
+              photoUrl={myProfile?.photo_url ?? null}
+              sizeClass="h-9 w-9"
+              textClass="text-xs"
+            />
+          </Link>
+        </div>
       </div>
       <PageIntro section="swipe" />
 

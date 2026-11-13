@@ -20,13 +20,13 @@ import { recordSwipeAction, resetPassesAction } from "./actions";
 // consumed once the swipe has been recorded server-side; a mutual like
 // returns matched=true and the match moment takes over the screen.
 //
-// "Start again" after exhaustion sits behind a VISIBLE 30-second
-// countdown (product rule) and then resets only my passes server-side —
-// likes and matches are never undone.
+// "Start again" after exhaustion resets only my passes server-side —
+// likes and matches are never undone. (A 30-second countdown used to
+// gate it; the owner removed the timer on 2026-11-13 — the button is
+// simply there, ready the moment the deck runs out.)
 
 const SWIPE_THRESHOLD_PX = 90;
 const FLY_MS = 220;
-const RESET_WAIT_MS = 30_000;
 
 function playMatchChime(): void {
   // Short two-note "love-birds" chime generated with WebAudio — no audio
@@ -95,8 +95,6 @@ export default function SwipeDeck({
   const [matched, setMatched] = useState<{ matchId: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [interacted, setInteracted] = useState<boolean>(false);
-  const [exhaustedSince, setExhaustedSince] = useState<number | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState<number>(RESET_WAIT_MS / 1000);
   const [resetting, setResetting] = useState<boolean>(false);
 
   const dragStartX = useRef<number | null>(null);
@@ -105,30 +103,6 @@ export default function SwipeDeck({
   const current: DeckCandidate | null = queue[index] ?? null;
   const nextCard: DeckCandidate | null = queue[index + 1] ?? null;
   const exhausted = current === null;
-
-  // Start the visible countdown the moment the deck runs out.
-  useEffect(() => {
-    if (exhausted && exhaustedSince === null) {
-      setExhaustedSince(Date.now());
-    }
-    if (!exhausted && exhaustedSince !== null) {
-      setExhaustedSince(null);
-    }
-  }, [exhausted, exhaustedSince]);
-
-  useEffect(() => {
-    if (exhaustedSince === null) return;
-    const tick = (): void => {
-      const remaining = Math.max(
-        0,
-        Math.ceil((exhaustedSince + RESET_WAIT_MS - Date.now()) / 1000),
-      );
-      setSecondsLeft(remaining);
-    };
-    tick();
-    const timer = window.setInterval(tick, 250);
-    return () => window.clearInterval(timer);
-  }, [exhaustedSince]);
 
   const commit = useCallback(
     async (direction: "like" | "pass"): Promise<void> => {
@@ -344,18 +318,9 @@ export default function SwipeDeck({
             You&apos;ve seen everyone for now. Your matches are safe — start
             again to re-see the people you passed on.
           </p>
-          {secondsLeft > 0 ? (
-            <p className="text-sm text-neutral-500">
-              Start again available in{" "}
-              <span className="font-mono text-neutral-300">
-                {Math.floor(secondsLeft / 60)}:
-                {String(secondsLeft % 60).padStart(2, "0")}
-              </span>
-            </p>
-          ) : null}
           <button
             type="button"
-            disabled={secondsLeft > 0 || resetting}
+            disabled={resetting}
             onClick={() => void onStartAgain()}
             className="rounded-full bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
           >

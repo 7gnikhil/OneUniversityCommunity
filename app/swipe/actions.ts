@@ -125,9 +125,9 @@ export async function recordSwipeAction(
 // people I passed on can reappear. Likes are never undone (a like may
 // already have created a match, and matches are kept by design).
 //
-// The 30-second wait lives in the client (SwipeDeck) as a visible
-// countdown — it is a UX pause against accidental deck resets, not a
-// security boundary (same convention as the login attempt lockout).
+// There is no wait before resetting — the 30-second countdown that
+// used to gate this in the client was removed at the owner's call on
+// 2026-11-13.
 export async function resetPassesAction(): Promise<{
   removed: number;
   error: string | null;

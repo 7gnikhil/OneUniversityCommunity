@@ -2781,3 +2781,21 @@ Second of the owner's two picks (after the landing page).
   re-checks the gate and scopes the delete to the main server).
   Author identity appears on this admin page only — the channel
   itself stays anonymous. Card added on the admin home.
+
+---
+
+## Fling home bar (Reddit/X pattern) + deck timer removed (2026-11-13)
+
+Owner, landing on Fling: "when i land at fling i see the ← …
+make the fling as home page … make it like reddit and twitter".
+- The Fling header's "← OneUco" link pointed at /swipe itself —
+  a back arrow on the home page. Gone, along with the FLING chip.
+  In its place, a sticky home top bar in the Reddit/X pattern:
+  OneUco wordmark left, search button + the student's own avatar
+  (→ Profile) right, blurred black as content scrolls under it.
+  Fling is the home page; the bar now says so.
+- The deck's 30-second "Start again" countdown is REMOVED
+  (owner: "the fling sec remove the timer") — state, interval,
+  countdown text and the disabled gate all out; the button is
+  ready the moment the deck runs out. Server never enforced the
+  wait; its comment now records the removal.
