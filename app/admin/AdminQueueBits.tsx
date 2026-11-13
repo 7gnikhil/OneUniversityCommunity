@@ -5,6 +5,7 @@ import {
   approveCollegeAction,
   createFlairAction,
   deleteFlairAction,
+  deleteJwalamMessageAction,
   rejectCollegeAction,
   setDeveloperRequestStatusAction,
   setReportStatusAction,
@@ -84,6 +85,16 @@ export function ReportButtons({ reportId }: { reportId: string }) {
         action={() => setReportStatusAction(reportId, "dismissed")}
       />
     </span>
+  );
+}
+
+export function JwalamFlagButtons({ messageId }: { messageId: string }) {
+  return (
+    <ActionButton
+      label="Delete message"
+      danger
+      action={() => deleteJwalamMessageAction(messageId)}
+    />
   );
 }
 

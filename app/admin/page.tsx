@@ -200,6 +200,12 @@ export default async function AdminPage() {
       href: "/admin/reports",
       waiting: stats.openReports,
     },
+    {
+      title: "Jwalam auto-moderation",
+      body: "The anonymous channel's filter refuses abuse, threats and scam shapes at post time. This sweep re-scores recent messages — review the borderline ones and delete with one tap.",
+      href: "/admin/moderation",
+      waiting: null,
+    },
   ];
 
   return (

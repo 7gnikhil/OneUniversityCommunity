@@ -23,6 +23,7 @@ import {
   type ServerRow,
 } from "@/lib/servers";
 import { deliverInboxItem } from "@/lib/inbox";
+import { moderateText, JWALAM_POSTS_PER_MINUTE } from "@/lib/moderation";
 import {
   getPresenceMap,
   getPrivacyMap,
@@ -254,6 +255,40 @@ export async function sendServerMessageAction(
     return { error: "Write a message or attach a photo first.", messageId: null };
   }
 
+  // Maya Jwalam auto-moderation (2026-11-13, lib/moderation): the
+  // anonymous channel is the one place abuse carries no name, so
+  // it is the one place with a post-time filter. Clear-cut abuse,
+  // threats and scam shapes are refused (the poster is never told
+  // what tripped it); a flood limit stops one account filling the
+  // channel. Borderline posts still land — the admin sweep at
+  // /admin/moderation re-scores recent messages for a human.
+  if (server.is_main_channel) {
+    if (text) {
+      const verdict = moderateText(text);
+      if (verdict.action === "block") {
+        return {
+          error:
+            "That message can't be posted in Maya Jwalam — it breaks the community rules. If this is a mistake, rephrase it and try again.",
+          messageId: null,
+        };
+      }
+    }
+    const minuteAgo = new Date(Date.now() - 60_000).toISOString();
+    const { count } = await ctx.admin
+      .from("server_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("server_id", serverId)
+      .eq("author_id", ctx.account.id)
+      .gte("created_at", minuteAgo);
+    if ((count ?? 0) >= JWALAM_POSTS_PER_MINUTE) {
+      return {
+        error:
+          "You're posting very fast — wait a minute before posting again in Maya Jwalam.",
+        messageId: null,
+      };
+    }
+  }
+
   let resolvedChannelId: string | null = channelId;
   if (!server.is_main_channel) {
     if (!resolvedChannelId) {
@@ -307,6 +342,15 @@ export async function editServerMessageAction(
   }
   const text = body.trim().slice(0, MAX_BODY_CHARS);
   if (!text) return { error: "A message can't be empty — delete it instead." };
+  // Edits get the same Jwalam filter as posts — otherwise the
+  // filter is one edit away from useless.
+  const editServer = await getServerById(ctx.admin, message.server_id);
+  if (editServer?.is_main_channel && moderateText(text).action === "block") {
+    return {
+      error:
+        "That edit can't be saved in Maya Jwalam — it breaks the community rules.",
+    };
+  }
   const { error } = await ctx.admin
     .from("server_messages")
     .update({ body: text })

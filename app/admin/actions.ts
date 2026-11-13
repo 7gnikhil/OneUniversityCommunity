@@ -213,3 +213,28 @@ export async function setReportStatusAction(
   revalidatePath("/admin/reports");
   return { error: null };
 }
+
+// ── Jwalam auto-moderation sweep ───────────────────────────────────────────
+// The delete behind /admin/moderation: removes one message from the
+// main (anonymous) channel. Scoped to the main server on purpose —
+// this is not a general message-delete (Tea owners have their own).
+export async function deleteJwalamMessageAction(
+  messageId: string,
+): Promise<AdminActionResult> {
+  const ctx = await requireAdmin();
+  if (!ctx) return { error: "Admins only." };
+  const { data: mainServer } = await ctx.admin
+    .from("servers")
+    .select("id")
+    .eq("is_main_channel", true)
+    .maybeSingle();
+  if (!mainServer) return { error: "Maya Jwalam was not found." };
+  const { error } = await ctx.admin
+    .from("server_messages")
+    .delete()
+    .eq("id", messageId)
+    .eq("server_id", (mainServer as { id: string }).id);
+  if (error) return { error: "Couldn't delete that message." };
+  revalidatePath("/admin/moderation");
+  return { error: null };
+}

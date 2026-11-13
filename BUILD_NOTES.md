@@ -2758,3 +2758,26 @@ page-level redirect). Copy covers only what the app does today;
 no screenshots (descriptions instead of faked UI). Agreed order
 with the owner on 2026-11-13: landing page first, then Maya
 Jwalam auto-moderation.
+
+---
+
+## Maya Jwalam auto-moderation (2026-11-13)
+
+Second of the owner's two picks (after the landing page).
+- lib/moderation.ts: server-side tripwire filter — severe abuse
+  (EN + Hindi/Telugu transliterations), threat phrases, the scam
+  shape (link/phone + money pitch), phone-number and character-
+  flood flags. Evasion handling: leetspeak folding, letter-run
+  collapse, squashed-copy matching for spaced spellings. Links
+  and phone numbers alone stay legal (students share notes).
+- Post-time enforcement in sendServerMessageAction, Jwalam only
+  (is_main_channel): block verdicts are refused with a generic
+  community-rules message (never naming the trigger); a flood
+  limit (5 posts/min/account) sits beside it. Edits in Jwalam go
+  through the same filter.
+- Admin sweep at /admin/moderation: live re-score of the last
+  150 Jwalam messages (nothing stored), would-blocks first, each
+  flag with reason chips and a one-tap delete (admin action
+  re-checks the gate and scopes the delete to the main server).
+  Author identity appears on this admin page only — the channel
+  itself stays anonymous. Card added on the admin home.
