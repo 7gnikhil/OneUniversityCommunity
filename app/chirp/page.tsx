@@ -13,6 +13,7 @@ import {
 import { accentHex } from "@/lib/validation";
 import Avatar from "@/components/Avatar";
 import PageIntro from "@/components/PageIntro";
+import ChirpSidebar from "@/components/ChirpSidebar";
 import ChirpFeed from "./ChirpFeed";
 
 // Chirp — the hub. Identities are normal here: authors show their
@@ -98,7 +99,7 @@ export default async function ChirpPage() {
   ]);
 
   return (
-    <main data-section="chirp" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
+    <main data-section="chirp" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6 lg:max-w-4xl">
       <div className="flex items-center justify-between">
         <Link href="/swipe" className="text-sm text-neutral-400 transition hover:text-white">
           ← OneUco
@@ -108,6 +109,15 @@ export default async function ChirpPage() {
         </p>
       </div>
 
+      {/* Sidebar layout (2026-11-13, the Reddit pattern): Explore,
+          Popular (news) and Start a community sit beside the hub on
+          wide screens and in a slide-over drawer on phones — see
+          components/ChirpSidebar. The hub's own cards stay in the
+          content column, unchanged. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <ChirpSidebar />
+
+        <div className="flex min-w-0 flex-col gap-5">
       <PageIntro section="chirp" />
 
       {/* The composer, mounted composer-only (see the header
@@ -128,6 +138,8 @@ export default async function ChirpPage() {
       <LiveNewsCard topItem={topNews[0] ?? null} weather={weather} />
 
       <CampusTweetsCard chirps={previewChirps} />
+        </div>
+      </div>
     </main>
   );
 }

@@ -2850,3 +2850,34 @@ candidate list is empty, the page silently recycles the user's
 passes (the same service-role delete resetPassesAction does)
 and deals again. Likes are never recycled. The caught-up card
 now shows only when there is genuinely nobody left to deal.
+
+---
+
+## Chirp sidebar — Explore / Popular / Start a community (2026-11-13)
+
+Owner: "in chirp change the interface, keep a side bar in that —
+keep explore, popular (in this will have news thing) and start
+a community (clicking directs to tea area, then we can make
+community)". components/ChirpSidebar.tsx, the Reddit pattern:
+- Explore → /chirp/campus (the full all-college feed).
+- Popular → /chirp/news (the news lives there, as he mapped it).
+- Start a community → /servers (Tea, where communities are made).
+Wide screens: the hub widens (lg:max-w-4xl) and the sidebar is
+a sticky card in a 250px left column. Phones have no room for a
+standing sidebar, so the same list rides in a slide-over drawer
+opened by an "Explore, Popular & more" bar under the header —
+one list, two shells. The hub's composer/Trending/news/tweets
+cards are untouched in the content column.
+
+## Campus communities inside Campus Tweets (2026-11-13)
+
+Same conversation, the owner's follow-on: "in campus tweets
+users can create their own campus communities in chirp and chat
+there". /chirp/campus now carries a Campus communities section
+above the feed: the student communities (Tea servers via
+listServersForUser, main channel excluded, up to 6) with member
+counts and joined state — each row opens that community's chat;
+the ＋ Create button and the "see all" line go to Tea, where
+communities are made (the flow the sidebar already promised).
+Nothing new was built underneath: discovery + entry live in
+Chirp, the communities and their chats stay Tea's.
