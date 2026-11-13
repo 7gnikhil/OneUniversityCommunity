@@ -8,7 +8,7 @@ import { accentHex } from "@/lib/validation";
 import SwipeDeck from "./SwipeDeck";
 import PageIntro from "@/components/PageIntro";
 import Avatar from "@/components/Avatar";
-import { quoteOfTheDay } from "@/lib/loading-quotes";
+import { randomQuote } from "@/lib/loading-quotes";
 import { istMidnightUtc } from "@/lib/daily";
 import {
   ratingsForAccounts,
@@ -97,7 +97,7 @@ export default async function SwipePage() {
   // ── Starting-page features (2026-11-11) ─────────────────────────
   // All fail-soft: any failure renders the deck alone, never an
   // error page. The quote is pure code; the rest are small reads.
-  const quote = quoteOfTheDay();
+  const quote = randomQuote();
 
   // "New today" pulse: joins, chirps and matches since IST midnight.
   let pulse: { joined: number; chirps: number; matches: number } | null =
@@ -216,7 +216,7 @@ export default async function SwipePage() {
       </div>
       <PageIntro section="swipe" />
 
-      {/* Quote of the day — the loader's quote, on the front page. */}
+      {/* Quote — the loader's quotes, a fresh one per page load. */}
       <p className="text-center text-[13px] italic leading-relaxed text-neutral-400">
         &ldquo;{quote}&rdquo;
       </p>

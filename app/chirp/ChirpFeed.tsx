@@ -28,10 +28,14 @@ export default function ChirpFeed({
   initialChirps,
   myAccountId,
   accentHex: accent,
+  myName,
+  myPhotoUrl,
 }: {
   initialChirps: ChirpView[];
   myAccountId: string;
   accentHex: string;
+  myName?: string;
+  myPhotoUrl?: string | null;
 }) {
   const [chirps, setChirps] = useState<ChirpView[]>(initialChirps);
   const [draft, setDraft] = useState<string>("");
@@ -367,6 +371,8 @@ export default function ChirpFeed({
               key={chirp.id}
               chirp={chirp}
               accent={accent}
+              myName={myName}
+              myPhotoUrl={myPhotoUrl}
               onLike={() => void onLike(chirp)}
               onDelete={() => void onDelete(chirp)}
               onCommentPosted={() => void refresh()}
@@ -378,15 +384,39 @@ export default function ChirpFeed({
   );
 }
 
+// Compact relative time for comment rows ("just now", "5m", "3h",
+// "2d", then a date) — the YouTube comments idiom.
+function commentTimeAgo(iso: string): string {
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(iso).getTime()) / 1000),
+  );
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(iso).toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 function ChirpCard({
   chirp,
   accent,
+  myName,
+  myPhotoUrl,
   onLike,
   onDelete,
   onCommentPosted,
 }: {
   chirp: ChirpView;
   accent: string;
+  myName?: string;
+  myPhotoUrl?: string | null;
   onLike: () => void;
   onDelete: () => void;
   onCommentPosted: () => void;
@@ -486,54 +516,88 @@ function ChirpCard({
           </div>
 
           {commentsOpen ? (
-            <div className="mt-3 flex flex-col gap-2 border-t border-neutral-900 pt-3">
-              {comments.length === 0 ? (
-                <p className="text-xs text-neutral-500">No comments yet.</p>
-              ) : (
-                comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-[10px] font-semibold text-neutral-400">
-                      {comment.author?.developer
-                        ? "D"
-                        : (comment.author?.name ?? "?").charAt(0).toUpperCase()}
-                    </span>
-                    <p className="min-w-0 text-xs leading-relaxed text-neutral-300">
-                      <span className="font-medium text-white">
-                        {comment.author?.name ?? "A student"}
-                      </span>{" "}
-                      <span className="text-neutral-500">
-                        {comment.author && !comment.author.developer
-                          ? `@${comment.author.username}`
-                          : ""}
-                      </span>
-                      <br />
-                      {comment.body}
-                    </p>
-                  </div>
-                ))
-              )}
-              <form onSubmit={(event) => void onComment(event)} className="flex gap-2">
-                <input
-                  value={commentDraft}
-                  onChange={(event) => setCommentDraft(event.target.value)}
-                  placeholder="Add a comment…"
-                  maxLength={500}
-                  className="min-w-0 flex-1 rounded-full border border-neutral-800 bg-black px-3 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+            <div className="mt-3 flex flex-col gap-3 border-t border-neutral-900 pt-3">
+              {/* YouTube-style comments (owner's ask, 2026-11-13):
+                  count heading, my avatar + comment box FIRST,
+                  then the thread — avatar, name, time, body. */}
+              <p className="text-xs font-semibold text-neutral-300">
+                {chirp.commentCount} Comment{chirp.commentCount === 1 ? "" : "s"}
+              </p>
+              <form onSubmit={(event) => void onComment(event)} className="flex gap-2.5">
+                <Avatar
+                  name={myName ?? "?"}
+                  photoUrl={myPhotoUrl ?? null}
+                  sizeClass="h-8 w-8"
+                  textClass="text-xs"
                 />
-                <button
-                  type="submit"
-                  disabled={commentBusy || !commentDraft.trim()}
-                  className="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-40"
-                  style={{ backgroundColor: accent }}
-                >
-                  {commentBusy ? "…" : "Reply"}
-                </button>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <input
+                    value={commentDraft}
+                    onChange={(event) => setCommentDraft(event.target.value)}
+                    placeholder="Add a comment…"
+                    maxLength={500}
+                    className="w-full border-b border-neutral-800 bg-transparent pb-1.5 text-sm text-white placeholder:text-neutral-500 focus:border-neutral-400 focus:outline-none"
+                  />
+                  {commentDraft.trim() ? (
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCommentDraft("")}
+                        className="rounded-full px-3 py-1.5 text-xs font-medium text-neutral-300 transition hover:bg-white/5"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={commentBusy}
+                        className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-white transition disabled:opacity-40"
+                        style={{ backgroundColor: accent }}
+                      >
+                        {commentBusy ? "…" : "Comment"}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </form>
               {commentError ? (
                 <p className="text-xs text-red-400" role="alert">
                   {commentError}
                 </p>
               ) : null}
+              {comments.length === 0 ? (
+                <p className="text-xs text-neutral-500">
+                  No comments yet — start the chat.
+                </p>
+              ) : (
+                comments.map((comment) => (
+                  <div key={comment.id} className="flex gap-2.5">
+                    <Avatar
+                      name={comment.author?.name ?? "?"}
+                      photoUrl={comment.author?.photoUrl ?? null}
+                      developer={comment.author?.developer}
+                      sizeClass="h-8 w-8"
+                      textClass="text-xs"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs">
+                        <span className="font-medium text-white">
+                          {comment.author?.developer
+                            ? comment.author.name
+                            : comment.author && !comment.author.developer
+                              ? `@${comment.author.username}`
+                              : (comment.author?.name ?? "A student")}
+                        </span>{" "}
+                        <span className="text-neutral-500">
+                          {commentTimeAgo(comment.createdAt)}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-200">
+                        {comment.body}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           ) : null}
         </div>

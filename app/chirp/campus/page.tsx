@@ -123,6 +123,8 @@ export default async function ChirpCampusPage() {
         initialChirps={chirps}
         myAccountId={me.id}
         accentHex={accent}
+        myName={myProfile?.name}
+        myPhotoUrl={myProfile?.photo_url}
       />
     </main>
   );

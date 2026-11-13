@@ -2881,3 +2881,46 @@ the ＋ Create button and the "see all" line go to Tea, where
 communities are made (the flow the sidebar already promised).
 Nothing new was built underneath: discovery + entry live in
 Chirp, the communities and their chats stay Tea's.
+
+---
+
+## Quotes change on every page change (2026-11-13)
+
+Owner: "the quote of days change them every change of the page".
+quoteOfTheDay (deterministic by IST day) is replaced by
+randomQuote() in lib/loading-quotes.ts — a fresh random line on
+every render. Both call sites render per navigation (the
+loading screen and the Fling page), so every page change now
+brings a new quote. The loader's "Quote of the day" eyebrow is
+now just "Quote".
+
+## Chirp reshuffle: main page is Explore, news only in Popular (2026-11-13)
+
+Owner, minutes after the sidebar shipped: "remove the news
+thing in the main chirp page and keep that in the popular page
+inside it and keep main page as explore". Done: the Live News
+doorway card is OFF /chirp (and its news/weather fetches with
+it — the RSS cost leaves the hub); Live News now lives only
+inside Popular (/chirp/news). The main Chirp page IS Explore:
+composer + the FULL feed inline (ChirpFeed mounted whole with
+the latest 30) + the Trending card; the Campus Tweets doorway
+card is gone too — Campus Tweets keeps its own page, now headed
+by Campus communities. Sidebar Explore now points at /chirp
+(exact-match active state); Popular and Start a community
+unchanged.
+
+## Campus Tweets joins the sidebar; comments go YouTube-style (2026-11-13)
+
+Owner: "add a page in the side bar as campus tweets — in this
+page we can create a separate campus tweets, posting photo and
+chat on them, the form should be like yt comments". Sidebar now
+has four entries: Explore, Popular, Campus Tweets, Start a
+community. The Campus Tweets page was already its own posting
+home (composer with photo upload + the feed, communities on
+top) — the missing piece was the comment FORM, now rebuilt in
+ChirpFeed YouTube-style everywhere comments appear: count
+heading, my avatar + underlined "Add a comment…" box first
+(Cancel/Comment appear once typing), then the thread as avatar
++ @handle + relative time + body. ChirpFeed learned optional
+myName/myPhotoUrl props (both feed pages pass the profile) for
+the composer avatar.

@@ -11,8 +11,11 @@ import { useState } from "react";
 // list rides in a slide-over drawer opened by the Menu bar under
 // the page header. One list, two shells, no duplicated links.
 //
-//   Explore           → /chirp/campus (the full all-college feed)
+//   Explore           → /chirp        (the main page IS Explore —
+//                                      composer + the full feed)
 //   Popular           → /chirp/news   (the news thing lives there)
+//   Campus Tweets     → /chirp/campus (its own page: posts with
+//                                      photos, communities on top)
 //   Start a community → /servers      (Tea — communities are made
 //                                      and run there)
 
@@ -25,9 +28,9 @@ interface NavItem {
 
 const ITEMS: NavItem[] = [
   {
-    href: "/chirp/campus",
+    href: "/chirp",
     label: "Explore",
-    sub: "Chirps from every college",
+    sub: "The all-college feed",
     icon: (
       <>
         <circle cx="12" cy="12" r="9" />
@@ -43,6 +46,16 @@ const ITEMS: NavItem[] = [
       <>
         <path d="M3 17l6-6 4 4 8-8" />
         <path d="M15 7h6v6" />
+      </>
+    ),
+  },
+  {
+    href: "/chirp/campus",
+    label: "Campus Tweets",
+    sub: "Post photos & chat on posts",
+    icon: (
+      <>
+        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
       </>
     ),
   },
@@ -64,8 +77,12 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-1" aria-label="Chirp sections">
       {ITEMS.map((item) => {
+        // Explore is the hub itself: exact match only, or it would
+        // light up on every /chirp/* page. The rest match by prefix.
         const isActive =
-          pathname === item.href || pathname.startsWith(`${item.href}/`);
+          item.href === "/chirp"
+            ? pathname === "/chirp"
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}

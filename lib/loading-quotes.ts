@@ -1,11 +1,13 @@
-// Quote of the day for the loading screen (owner's ask, 2026-11-11:
-// "while loading add a day quote of love, relationship that all
-// stuffs — college — friendship"). Original lines written for
+// Quotes for the loading screen and the Fling page (owner's ask,
+// 2026-11-11: "while loading add a day quote of love, relationship
+// that all stuffs — college — friendship"; changed 2026-11-13:
+// "change them every change of the page" — the pick is now a
+// fresh random one on every render, so each page load and each
+// navigation shows a different line). Original lines written for
 // OneUco, in rotation across the four themes; no attributions —
-// none are borrowed quotes. The pick is deterministic by IST day
-// number, so everyone sees the same quote all day and it turns
-// over at India midnight — no database, no fetch, works in the
-// server-rendered app/loading.tsx.
+// none are borrowed quotes. No database, no fetch: both call sites
+// (app/loading.tsx, app/swipe/page.tsx) render per navigation, so
+// a random pick at render time is exactly "new quote, new page".
 
 const QUOTES: string[] = [
   // Love
@@ -44,10 +46,6 @@ const QUOTES: string[] = [
   "Side by side or miles apart, real friends stay in the same story.",
 ];
 
-export function quoteOfTheDay(now: Date = new Date()): string {
-  // IST day boundary (UTC+5:30): the quote turns over at India
-  // midnight, not UTC midnight.
-  const istMs = now.getTime() + (5 * 60 + 30) * 60_000;
-  const day = Math.floor(istMs / 86_400_000);
-  return QUOTES[day % QUOTES.length];
+export function randomQuote(): string {
+  return QUOTES[Math.floor(Math.random() * QUOTES.length)];
 }
