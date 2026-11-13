@@ -2986,3 +2986,34 @@ anywhere on screen (pointer capture, viewport-clamped). The
 bubble's corner badge play/pauses without opening the bar; the
 bar also gained a ⌄ minimise button. Playback state is
 untouched — only the chrome changed.
+
+---
+
+## MUSIC MITRA — the big merge (2026-11-14)
+
+The owner merged his MusicMitra app into OneUco wholesale: the
+Radio feature is renamed Music Mitra (tab wears the short
+"Mitra"; the page, sidebar, mini player and lock screen carry
+the full name) and rebuilt as a complete music app.
+
+Search honesty work first (owner: "i cant find every song"):
+live tests showed JioSaavn HAS the songs (tens of thousands per
+query) but ranks remixes/covers above originals and lacks some
+western originals entirely (Imagine Dragons' Believer exists
+only as covers — a licensing gap no free full-song API fills).
+Mitigations shipped: the proxy RE-RANKS every page by play
+count; Albums/Playlists tabs surface songs search buries; an
+Audius shelf (independent artists, full streams, free API)
+appears when a search runs thin; Load more walks the whole
+catalogue (the old 24-song cap is gone).
+
+Features: Songs/Albums/Playlists search, collection pages with
+Play All, ♥ Liked songs + Recently played (localStorage),
+KARAOKE with LRCLIB synced lyrics (active line lit, auto-
+scrolling), Post to Chirp (song + artwork into the feed),
+Download, system Share — and PROFILE COVERS: students record
+(mic, over the playing song) or upload their own singing onto
+their profile, where any visitor can play it and ♥ it
+(components/ProfileCovers, lib/covers.ts, migration 0017 —
+profile_covers + cover_likes + the public `covers` bucket;
+fail-soft everywhere until 0017 is applied in the SQL editor).

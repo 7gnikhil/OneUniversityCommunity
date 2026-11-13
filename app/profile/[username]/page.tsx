@@ -8,6 +8,8 @@ import { getFollowState, type FollowState } from "@/lib/follows";
 import { INTENTIONS, normalisePortfolio, type Portfolio } from "@/lib/preferences";
 import type { FollowUiState } from "@/app/follow/actions";
 import FollowButton from "@/components/FollowButton";
+import { listCoversForProfile } from "@/lib/covers";
+import ProfileCovers from "@/components/ProfileCovers";
 import { accentHex, normaliseUsername } from "@/lib/validation";
 import { isOwnerEmail } from "@/lib/server/owner";
 
@@ -104,6 +106,19 @@ export default async function PublicProfilePage({
     ? publicProfile.name
     : `@${publicProfile.username}`;
 
+  // Covers (Music Mitra, migration 0017): a public showcase —
+  // visible to any signed-in visitor, NOT behind the follow gate
+  // (owner's ask: anyone who sees the profile can listen). Never
+  // on the developer's masked profile. Fail-soft null pre-setup.
+  let covers: Awaited<ReturnType<typeof listCoversForProfile>> = null;
+  if (account && !isDeveloperProfile) {
+    covers = await listCoversForProfile(
+      supabase,
+      publicProfile.accountId,
+      account.id,
+    );
+  }
+
   // Detail fields — read ONLY for friends (see header note).
   let gallery: string[] = [];
   let portfolio: Portfolio | null = null;
@@ -194,6 +209,15 @@ export default async function PublicProfilePage({
           ) : null}
         </div>
       )}
+
+      {covers && covers.length > 0 ? (
+        <ProfileCovers
+          initialCovers={covers}
+          canManage={false}
+          myAccountId={null}
+          profileName={displayName}
+        />
+      ) : null}
 
       {canSeeDetails ? (
         <>

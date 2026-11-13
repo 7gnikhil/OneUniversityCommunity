@@ -63,8 +63,8 @@ const ITEMS: NavItem[] = [
   },
   {
     href: "/radio",
-    label: "Radio",
-    sub: "Free music — plays in the background",
+    label: "Music Mitra",
+    sub: "Free music + karaoke, in the background",
     icon: (
       <>
         <path d="M9 18V6l10-2v11" />

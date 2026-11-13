@@ -29,6 +29,11 @@ export interface RadioTrack {
   image: string | null;
   duration: number;
   streamUrl: string;
+  /** Upstream play count (0 when the source doesn't publish one). */
+  plays: number;
+  /** Canonical song page (JioSaavn / Audius) for sharing. */
+  songUrl: string | null;
+  source: "jiosaavn" | "audius";
 }
 
 interface RadioContextValue {
@@ -66,6 +71,18 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setQueue(list.length > 0 ? list : [track]);
     setCurrent(track);
     setCurrentTime(0);
+    // Recently played (Music Mitra home shelf) — on-device only.
+    try {
+      const raw = window.localStorage.getItem("mm:recents");
+      const prev = (raw ? JSON.parse(raw) : []) as RadioTrack[];
+      const next = [
+        track,
+        ...prev.filter((item) => item.id !== track.id),
+      ].slice(0, 20);
+      window.localStorage.setItem("mm:recents", JSON.stringify(next));
+    } catch {
+      // Private mode / storage off — recents just don't persist.
+    }
   }, []);
 
   const step = useCallback(
@@ -145,7 +162,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: current.title,
       artist: current.artists,
-      album: "OneUco Radio",
+      album: "Music Mitra · OneUco",
       artwork: current.image
         ? [{ src: current.image, sizes: "500x500", type: "image/jpeg" }]
         : [],
@@ -334,7 +351,7 @@ export function MiniPlayer() {
             {current.title}
           </span>
           <span className="truncate text-xs text-neutral-400">
-            {current.artists} · Radio
+            {current.artists} · Music Mitra
           </span>
         </span>
         <button

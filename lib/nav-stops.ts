@@ -200,15 +200,19 @@ export const STOPS: DialStopDef[] = [
     ],
   },
   {
-    label: "Radio",
+    label: "Mitra",
     href: "/radio",
     accentVar: "var(--stop-radio)",
     ring: "thick",
-    // The radio (owner's call, 2026-11-13: Radio takes Profile's
-    // tab — "already profile is in top corner so no need"; the
-    // profile itself still lives at /profile, one tap on the
-    // avatar in the Fling home bar). A boombox in the same bold
-    // hand: antenna, box, speaker with a filled hub, tuner lines.
+    // The music tab (owner's calls, 2026-11-13/14: first "Radio"
+    // taking Profile's tab — "already profile is in top corner so
+    // no need" — then merged with his MusicMitra app and renamed
+    // for it; the tab wears the short "Mitra" because the bar's
+    // five columns can't fit two words, the page itself carries
+    // the full "Music Mitra" name. The profile still lives at
+    // /profile via the top-corner avatar.) A boombox in the same
+    // bold hand: antenna, box, speaker with a filled hub, tuner
+    // lines.
     iconPaths: [
       "M5.5 10.5L17.5 4",
       "M3.5 10.5h17v8.5a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19v-8.5z",

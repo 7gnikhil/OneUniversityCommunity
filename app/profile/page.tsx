@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
+import { listCoversForProfile } from "@/lib/covers";
+import ProfileCovers from "@/components/ProfileCovers";
 import { isOwnerEmail } from "@/lib/server/owner";
 import {
   ratingForAccount,
@@ -81,6 +83,10 @@ export default async function ProfilePage() {
   }
 
   const profile = await getProfileByAccountId(supabase, account.id);
+
+  // My covers (Music Mitra, migration 0017) — fail-soft null until
+  // the migration lands; the section then shows its setup note.
+  const myCovers = await listCoversForProfile(supabase, account.id, account.id);
 
   const portfolio = profile
     ? normalisePortfolio(profile.portfolio)
@@ -306,6 +312,14 @@ export default async function ProfilePage() {
             />
           </div>
         </AnimatedDropdown>
+
+        {/* ── 7 · My covers — Music Mitra karaoke recordings ────── */}
+        <ProfileCovers
+          initialCovers={myCovers}
+          canManage
+          myAccountId={account.id}
+          profileName={profile?.name ?? "You"}
+        />
       </div>
     </main>
   );
