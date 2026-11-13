@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
+import { MiniPlayer, RadioProvider } from "@/components/RadioPlayer";
 import type { DialBadges } from "@/lib/nav-stops";
 
 // Navigation shell (owner's calls, 2026-11-11). A bottom tab bar
@@ -52,9 +53,10 @@ export default function DialShell({
   }
 
   return (
-    <>
+    <RadioProvider>
       <div className="pb-24">{children}</div>
+      <MiniPlayer />
       <BottomBar badges={badges} />
-    </>
+    </RadioProvider>
   );
 }

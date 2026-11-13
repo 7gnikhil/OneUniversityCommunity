@@ -200,15 +200,23 @@ export const STOPS: DialStopDef[] = [
     ],
   },
   {
-    label: "Profile",
-    href: "/profile",
-    accentVar: "var(--stop-profile)",
+    label: "Radio",
+    href: "/radio",
+    accentVar: "var(--stop-radio)",
     ring: "thick",
-    // The person, redrawn in the same bold hand: big round head,
-    // one generous shoulder arc.
+    // The radio (owner's call, 2026-11-13: Radio takes Profile's
+    // tab — "already profile is in top corner so no need"; the
+    // profile itself still lives at /profile, one tap on the
+    // avatar in the Fling home bar). A boombox in the same bold
+    // hand: antenna, box, speaker with a filled hub, tuner lines.
     iconPaths: [
-      "M12 11.2a3.3 3.3 0 1 0 0-6.6a3.3 3.3 0 1 0 0 6.6z",
-      "M5.2 20.2c.9-3.8 3.6-5.7 6.8-5.7s5.9 1.9 6.8 5.7",
+      "M5.5 10.5L17.5 4",
+      "M3.5 10.5h17v8.5a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19v-8.5z",
+      "M8.2 13a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8z",
+      "M13.8 13.2h5.4M13.8 16.8h5.4",
+    ],
+    iconFills: [
+      "M8.2 14.6a.85.85 0 1 0 0 1.7.85.85 0 1 0 0-1.7z",
     ],
   },
 ];

@@ -2924,3 +2924,36 @@ heading, my avatar + underlined "Add a comment…" box first
 + @handle + relative time + body. ChirpFeed learned optional
 myName/myPhotoUrl props (both feed pages pass the profile) for
 the composer avatar.
+
+---
+
+## RADIO — a bottom tab, background playback (2026-11-13)
+
+Owner's burst: a Radio feature in Chirp — listen to music in
+the app, freely, via the JioSaavn unofficial API (saavn.sumit.co,
+verified live); mute while using the app; keep listening with
+the phone locked; "add a separate navigation feature down as
+radio"; "remove the profile — already profile is in top corner
+so no need"; "in place of profile place radio". (His earlier
+music project: MusicMitra.)
+
+- STOPS: Profile's tab is now RADIO (/radio, boombox glyph,
+  --stop-radio amber). Tabs: Fling · Chirp · Tea · Homies ·
+  Radio. /profile lives on — reached by the top-corner avatar
+  (Fling home bar) and every avatar/name link in the app.
+- Playback lives in the SHELL, not the page: components/
+  RadioPlayer.tsx is a context provider mounted by DialShell
+  around every shelled screen, owning one <audio> element — so
+  music survives navigation across the whole app. Media Session
+  metadata + transport handlers give lock-screen controls and
+  true background play. MiniPlayer (artwork, prev/play/next,
+  mute, close, progress hairline) sits above the bottom bar
+  app-wide whenever a track is loaded.
+- /radio page: search + mood chips (Trending/Telugu/Hindi/
+  English/Punjabi/Tamil) + track list + a Now Playing card with
+  seek. Playing a row queues the visible list.
+- /api/radio: signed-in-only proxy to the unofficial API —
+  normalises tracks, decodes HTML entities, picks the 500px
+  artwork and the highest stream quality (320kbps).
+- Chirp sidebar gains Radio too (fifth entry, above Start a
+  community).
