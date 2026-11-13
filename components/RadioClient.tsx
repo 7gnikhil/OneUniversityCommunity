@@ -570,10 +570,6 @@ export default function RadioClient() {
         </>
       )}
 
-      <p className="text-center text-[11px] leading-relaxed text-neutral-600">
-        Music via the JioSaavn unofficial API + Audius · Lyrics by
-        LRCLIB · Free to listen in OneUco
-      </p>
     </div>
   );
 }
