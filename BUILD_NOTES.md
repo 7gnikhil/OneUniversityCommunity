@@ -3051,3 +3051,30 @@ payloads). Fallback chain per mode: direct -> wrapper -> (songs)
 Audius, so the section degrades instead of dying. This is also
 Step 1 of the self-host plan arriving early: no third-party
 instance sits between OneUco and the catalogue any more.
+
+---
+
+## College picker — full Hyderabad / Telangana / AP list (2026-11-17)
+
+Owner: "Add Hyderabad and Telangana Andhra Pradesh colleges list
+in app, user can direct choose — I need all colleges."
+
+539 colleges now ship IN the app: lib/colleges-data.json +
+lib/colleges.ts (203 in Hyderabad/Secunderabad, 287 Telangana,
+252 Andhra Pradesh; universities, engineering, degree, pharmacy,
+medical, management, polytechnic, law). The /verify profile step
+replaces the plain <select> with a SEARCHABLE picker: type to
+filter (name or city), region chips (All / Hyderabad / Telangana /
+Andhra Pradesh), tap to select, selected-college card with Change.
+Hyderabad surfaces first when the search is empty. The DB registry
+rows merge over the built-in list (same normalised name = DB row
+wins), and "My college isn't listed — add it" still works.
+
+A built-in pick submits collegeCode as "listed:<slug>";
+completeProfileAction resolves it via ensureListedCollegeRegistered
+— the first pick inserts the college into college_codes as
+APPROVED (curated list), later picks reuse the row; if that write
+ever fails, signup still completes with the name and no code.
+Migration 0018 pre-seeds all 539 rows into college_codes
+(status approved, ON CONFLICT DO NOTHING) — a pre-seed, not a
+gate; the picker works before it is run.

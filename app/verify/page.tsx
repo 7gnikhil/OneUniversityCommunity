@@ -137,8 +137,9 @@ async function ProfileCompletionSection({
         <h2 className="text-lg font-medium">Complete your profile</h2>
         <p className="mt-1 text-sm leading-relaxed text-neutral-400">
           OneUco is open to students of any college or university. No
-          documents needed — just tell us where you study. Pick or add your
-          college, add your branch and graduation year, and you&apos;re in
+          documents needed — just tell us where you study. Every college in
+          Hyderabad, Telangana &amp; Andhra Pradesh is listed below — pick
+          yours, add your branch and graduation year, and you&apos;re in
           straight away. These details stay private.
         </p>
         <p className="mx-auto mt-3 w-fit rounded-full border border-neutral-800 px-4 py-1.5 text-xs text-neutral-400">

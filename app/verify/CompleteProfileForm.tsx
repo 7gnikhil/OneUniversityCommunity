@@ -1,12 +1,19 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
   addCollegeAction,
   completeProfileAction,
   type FormState,
 } from "./actions";
 import type { CollegeCodeRow } from "@/lib/profile";
+import {
+  LISTED_COLLEGES,
+  LISTED_COLLEGE_COUNT,
+  LISTED_PREFIX,
+  type ListedCollege,
+} from "@/lib/colleges";
+import { normaliseCollegeName } from "@/lib/validation";
 
 const INITIAL_STATE: FormState = { error: null };
 
@@ -17,10 +24,24 @@ export interface CompleteProfileInitial {
   gradYear: string;
 }
 
+type RegionFilter = "All" | "Hyderabad" | "Telangana" | "Andhra Pradesh";
+
+interface PickerOption {
+  /** Form value submitted as collegeCode. */
+  value: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  type: string | null;
+  pending: boolean;
+}
+
 // Step 2 on /verify: self-declared study details. The student picks a
-// college / university from the open registry, adds their own if it is not
-// listed, or simply types it. No documents are uploaded and nothing is
-// checked — saving writes the private account fields and lets them in.
+// college / university from the built-in Hyderabad + Telangana + Andhra
+// Pradesh list (539 colleges, searchable) or the open DB registry, adds
+// their own if it is not listed, or simply types it. No documents are
+// uploaded and nothing is checked — saving writes the private account
+// fields and lets them in.
 export default function CompleteProfileForm({
   collegeCodes,
   initial,
@@ -37,6 +58,12 @@ export default function CompleteProfileForm({
   const [collegeCode, setCollegeCode] = useState<string>(initial.collegeCode);
   const [collegeName, setCollegeName] = useState<string>(initial.collegeName);
 
+  const [query, setQuery] = useState<string>("");
+  const [region, setRegion] = useState<RegionFilter>("All");
+  const [pickerOpen, setPickerOpen] = useState<boolean>(
+    initial.collegeCode === "" && initial.collegeName === "",
+  );
+
   const [newCollegeName, setNewCollegeName] = useState<string>("");
   const [newCollegeCity, setNewCollegeCity] = useState<string>("");
   const [addingCollege, setAddingCollege] = useState<boolean>(false);
@@ -44,6 +71,91 @@ export default function CompleteProfileForm({
   const [addCollegeMessage, setAddCollegeMessage] = useState<string | null>(
     null,
   );
+
+  // DB registry rows + the built-in TS/AP list, de-duplicated by
+  // normalised name (a DB row wins — it carries the real registry code).
+  const options = useMemo<PickerOption[]>(() => {
+    const byName = new Map<string, PickerOption>();
+    for (const college of LISTED_COLLEGES as ListedCollege[]) {
+      byName.set(normaliseCollegeName(college.name), {
+        value: `${LISTED_PREFIX}${college.slug}`,
+        name: college.name,
+        city: college.city,
+        state: college.state,
+        type: college.type,
+        pending: false,
+      });
+    }
+    for (const row of colleges) {
+      byName.set(normaliseCollegeName(row.college_name), {
+        value: row.code,
+        name: row.college_name,
+        city: row.city,
+        state: null,
+        type: null,
+        pending: row.status === "pending",
+      });
+    }
+    return [...byName.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [colleges]);
+
+  const selectedOption = useMemo<PickerOption | null>(() => {
+    if (!collegeCode) return null;
+    return options.find((option) => option.value === collegeCode) ?? null;
+  }, [options, collegeCode]);
+
+  const results = useMemo<PickerOption[]>(() => {
+    const q = normaliseCollegeName(query);
+    const filtered = options.filter((option) => {
+      if (region === "Hyderabad") {
+        const city = (option.city ?? "").toLowerCase();
+        if (city !== "hyderabad" && city !== "secunderabad") return false;
+      } else if (region !== "All") {
+        if (option.state && option.state !== region) return false;
+        if (!option.state && region === "Andhra Pradesh") return false;
+      }
+      if (!q) return true;
+      const haystack = normaliseCollegeName(
+        `${option.name} ${option.city ?? ""}`,
+      );
+      return q
+        .split(" ")
+        .filter(Boolean)
+        .every((word) => haystack.includes(word));
+    });
+    // With no query, surface Hyderabad first — most students start there.
+    if (!q) {
+      const hyd = filtered.filter((option) =>
+        ["hyderabad", "secunderabad"].includes(
+          (option.city ?? "").toLowerCase(),
+        ),
+      );
+      const rest = filtered.filter(
+        (option) =>
+          !["hyderabad", "secunderabad"].includes(
+            (option.city ?? "").toLowerCase(),
+          ),
+      );
+      return [...hyd, ...rest];
+    }
+    return filtered;
+  }, [options, query, region]);
+
+  const visibleResults = results.slice(0, 80);
+
+  function pickCollege(option: PickerOption): void {
+    setCollegeCode(option.value);
+    setCollegeName(option.name);
+    setPickerOpen(false);
+    setQuery("");
+  }
+
+  function clearSelection(): void {
+    setCollegeCode("");
+    setPickerOpen(true);
+  }
 
   async function handleAddCollege(): Promise<void> {
     const nameForAction: string = newCollegeName;
@@ -86,6 +198,7 @@ export default function CompleteProfileForm({
     });
     setCollegeCode(college.code);
     setCollegeName(college.college_name);
+    setPickerOpen(false);
     setNewCollegeName("");
     setNewCollegeCity("");
     setAddCollegeMessage(
@@ -99,6 +212,12 @@ export default function CompleteProfileForm({
     "w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none";
   const labelClass = "flex flex-col gap-1 text-left";
   const labelTextClass = "text-xs text-neutral-400";
+  const chipClass = (active: boolean) =>
+    `rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+      active
+        ? "border-white bg-white text-black"
+        : "border-neutral-700 text-neutral-300 hover:border-neutral-500"
+    }`;
 
   return (
     <form action={formAction} className="flex w-full flex-col gap-4">
@@ -106,29 +225,101 @@ export default function CompleteProfileForm({
         disabled={pending}
         className="flex w-full flex-col gap-4 border-0 p-0"
       >
-        <label className={labelClass}>
-          <span className={labelTextClass}>College / university</span>
-          <select
-            name="collegeCode"
-            value={collegeCode}
-            onChange={(event) => {
-              const code = event.target.value;
-              setCollegeCode(code);
-              const match = colleges.find((row) => row.code === code);
-              if (match) setCollegeName(match.college_name);
-            }}
-            className={inputClass}
-          >
-            <option value="">Type it below instead</option>
-            {colleges.map((row) => (
-              <option key={row.code} value={row.code}>
-                {row.college_name}
-                {row.city ? ` — ${row.city}` : ""}
-                {row.status === "pending" ? " (pending review)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <input type="hidden" name="collegeCode" value={collegeCode} />
+
+        <div className="flex flex-col gap-2 text-left">
+          <span className={labelTextClass}>
+            College / university — pick yours directly
+          </span>
+          <p className="text-[11px] leading-relaxed text-neutral-500">
+            {LISTED_COLLEGE_COUNT} colleges listed across Hyderabad,
+            Telangana &amp; Andhra Pradesh — universities, engineering,
+            degree, pharmacy, medical and more. Search and tap yours.
+          </p>
+
+          {selectedOption && !pickerOpen ? (
+            <div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-900 bg-emerald-950/40 p-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-white">
+                  {selectedOption.name}
+                </p>
+                <p className="mt-0.5 text-xs text-neutral-400">
+                  {[
+                    selectedOption.city,
+                    selectedOption.state,
+                    selectedOption.type,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  {selectedOption.pending ? " · pending review" : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="shrink-0 rounded-full border border-neutral-700 px-3 py-1.5 text-xs font-medium text-white transition hover:border-neutral-500"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search — try CBIT, Osmania, Vijayawada, Warangal…"
+                aria-label="Search colleges"
+                className={inputClass}
+              />
+              <div className="flex flex-wrap gap-2">
+                {(
+                  ["All", "Hyderabad", "Telangana", "Andhra Pradesh"] as const
+                ).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setRegion(value)}
+                    className={chipClass(region === value)}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <div className="max-h-80 overflow-y-auto rounded-2xl border border-neutral-800">
+                {visibleResults.length === 0 ? (
+                  <p className="p-4 text-xs leading-relaxed text-neutral-500">
+                    No college matches that search. Check the spelling, try
+                    the city name — or add your college below.
+                  </p>
+                ) : (
+                  visibleResults.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => pickCollege(option)}
+                      className="flex w-full flex-col gap-0.5 border-b border-neutral-900 px-4 py-3 text-left transition last:border-b-0 hover:bg-neutral-900"
+                    >
+                      <span className="text-sm text-white">{option.name}</span>
+                      <span className="text-[11px] text-neutral-500">
+                        {[option.city, option.state, option.type]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        {option.pending ? " · pending review" : ""}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+              <p className="text-[11px] text-neutral-500">
+                Showing {visibleResults.length} of {results.length} colleges
+                {results.length > visibleResults.length
+                  ? " — keep typing to narrow it down."
+                  : "."}
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-col gap-2 rounded-2xl border border-neutral-800 p-4 text-left">
           <p className="text-sm font-medium">
@@ -181,13 +372,25 @@ export default function CompleteProfileForm({
             type="text"
             required
             value={collegeName}
-            onChange={(event) => setCollegeName(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setCollegeName(value);
+              // Typing a different name by hand drops the list pick, so a
+              // stale registry code never gets saved against a new name.
+              if (
+                selectedOption &&
+                normaliseCollegeName(value) !==
+                  normaliseCollegeName(selectedOption.name)
+              ) {
+                setCollegeCode("");
+              }
+            }}
             placeholder="e.g. Sample Institute of Technology"
             className={inputClass}
           />
           <span className="text-[11px] text-neutral-500">
-            Picking or adding your college above fills this in; typing the
-            name yourself works too.
+            Picking your college above fills this in; typing the name
+            yourself works too.
           </span>
         </label>
 

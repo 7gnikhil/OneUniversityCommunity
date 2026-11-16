@@ -9,6 +9,10 @@ import {
 } from "@/lib/auth/account";
 import { listCollegeCodes, type CollegeCodeRow } from "@/lib/profile";
 import {
+  listedCollegeFromValue,
+  type ListedCollege,
+} from "@/lib/colleges";
+import {
   collegeCodeCandidates,
   generateOneucoId,
   normaliseCollegeDisplayName,
@@ -286,6 +290,72 @@ export async function addCollegeAction(
   };
 }
 
+// ── Built-in college list ─────────────────────────────────────────────────
+// A pick from the built-in Hyderabad / Telangana / Andhra Pradesh list
+// (lib/colleges.ts) arrives as "listed:<slug>". The registry row may not
+// exist yet (migration 0018 pre-seeds it, but the app must not depend on
+// that), so the first student to pick a listed college registers it —
+// approved, since the list is curated — and later picks reuse the row.
+// Any failure returns null and the caller simply stores the college name
+// with no code: signup must never block on the registry.
+async function ensureListedCollegeRegistered(
+  admin: ReturnType<typeof createAdminClient>,
+  listed: ListedCollege,
+): Promise<CollegeCodeRow | null> {
+  const normalisedName = normaliseCollegeName(listed.name);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error: readError } = await admin
+      .from("college_codes")
+      .select("code, college_name, city, status, added_by")
+      .order("college_name", { ascending: true });
+    if (readError) return null;
+    const rows = (data ?? []) as CollegeCodeRow[];
+    const existing = rows.find(
+      (row) => normaliseCollegeName(row.college_name) === normalisedName,
+    );
+    if (existing) {
+      if (existing.status !== "approved") {
+        await admin
+          .from("college_codes")
+          .update({ status: "approved" })
+          .eq("code", existing.code);
+        return { ...existing, status: "approved" };
+      }
+      return existing;
+    }
+
+    const candidates = collegeCodeCandidates(listed.name, rows);
+    let collided = false;
+    for (const code of candidates) {
+      const { data: inserted, error } = await admin
+        .from("college_codes")
+        .insert({
+          code,
+          college_name: listed.name,
+          city: listed.city,
+          status: "approved",
+          added_by: null,
+        })
+        .select("code, college_name, city, status, added_by")
+        .single();
+      if (!error && inserted) {
+        return inserted as CollegeCodeRow;
+      }
+      const message = error?.message ?? "";
+      if (
+        message.includes("college_codes_pkey") ||
+        message.toLowerCase().includes("duplicate key")
+      ) {
+        collided = true;
+        continue;
+      }
+      return null;
+    }
+    if (!collided) break;
+  }
+  return null;
+}
+
 // ── Self-declared profile completion ──────────────────────────────────────
 // The student declares where they study: college / university, branch and
 // graduation year. There are NO documents and NO checks in this step. The
@@ -338,24 +408,53 @@ export async function completeProfileAction(
     return { error: "Enter your graduation year (for example, 2027)." };
   }
 
-  // A registry code is stored only when it is one this student may select:
-  // an approved college, or their own pending addition. A free-text college
-  // simply stores its name with no code.
-  const collegeCodes = await listCollegeCodes(supabase, accountId);
-  const selectedCollege = selectedCollegeCode
-    ? collegeCodes.find((row) => row.code === selectedCollegeCode) ?? null
-    : null;
-  const collegeName = selectedCollege
-    ? selectedCollege.college_name
-    : typedCollegeName;
-  const collegeCode = selectedCollege ? selectedCollege.code : null;
-
   let admin: ReturnType<typeof createAdminClient>;
   try {
     admin = createAdminClient();
   } catch {
     return { error: NOT_CONFIGURED };
   }
+
+  // A registry code is stored only when it is one this student may select:
+  // an approved college, their own pending addition, or a pick from the
+  // built-in TS/AP list (registered on first use, above). A free-text
+  // college simply stores its name with no code.
+  const listedCollege = listedCollegeFromValue(selectedCollegeCode);
+  let selectedCollege: CollegeCodeRow | null = null;
+  if (listedCollege) {
+    selectedCollege = await ensureListedCollegeRegistered(
+      admin,
+      listedCollege,
+    );
+    if (!selectedCollege) {
+      // Registry write failed — keep the listed name, drop the code.
+      const collegeNameFallback = listedCollege.name;
+      const { error } = await admin
+        .from("accounts")
+        .update({
+          college_name: collegeNameFallback,
+          college_code: null,
+          branch,
+          graduation_year: gradYearRaw,
+          status: "verified",
+        })
+        .eq("id", accountId);
+      if (error) {
+        return { error: "Couldn't save your profile — please try again." };
+      }
+      redirect("/swipe");
+    }
+  } else if (selectedCollegeCode) {
+    const collegeCodes = await listCollegeCodes(supabase, accountId);
+    selectedCollege =
+      collegeCodes.find((row) => row.code === selectedCollegeCode) ?? null;
+  }
+  const collegeName = selectedCollege
+    ? selectedCollege.college_name
+    : listedCollege
+      ? listedCollege.name
+      : typedCollegeName;
+  const collegeCode = selectedCollege ? selectedCollege.code : null;
 
   const { error } = await admin
     .from("accounts")
