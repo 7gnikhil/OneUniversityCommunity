@@ -15,6 +15,10 @@ export interface CoverView {
   songArtist: string | null;
   audioUrl: string;
   durationSeconds: number | null;
+  /** Music Mitra song id for karaoke covers (migration 0020) — the
+   * profile player re-fetches the Demucs instrumental for this song
+   * and plays it in sync under the voice. Null = voice-only cover. */
+  karaokeSongId: string | null;
   createdAt: string;
   likeCount: number;
   likedByMe: boolean;
@@ -28,11 +32,13 @@ interface CoverRow {
   song_artist: string | null;
   audio_url: string;
   duration_seconds: number | null;
+  karaoke_song_id?: string | null;
   created_at: string;
 }
 
 const COVER_COLUMNS =
   "id, title, song_title, song_artist, audio_url, duration_seconds, created_at";
+const COVER_COLUMNS_WITH_KARAOKE = `${COVER_COLUMNS}, karaoke_song_id`;
 
 export async function listCoversForProfile(
   client: SupabaseClient,
@@ -40,12 +46,27 @@ export async function listCoversForProfile(
   viewerAccountId: string,
 ): Promise<CoverView[] | null> {
   try {
-    const { data, error } = await client
+    // Prefer the karaoke-aware column set; if migration 0020 has not
+    // been applied yet the select errors — retry without the column
+    // (covers predate it anyway) instead of hiding every cover.
+    const first = await client
       .from("profile_covers")
-      .select(COVER_COLUMNS)
+      .select(COVER_COLUMNS_WITH_KARAOKE)
       .eq("account_id", profileAccountId)
       .order("created_at", { ascending: false })
       .limit(30);
+    let data: unknown = first.data;
+    let error: unknown = first.error;
+    if (first.error) {
+      const second = await client
+        .from("profile_covers")
+        .select(COVER_COLUMNS)
+        .eq("account_id", profileAccountId)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      data = second.data;
+      error = second.error;
+    }
     if (error) return null;
     const rows = (data ?? []) as CoverRow[];
     if (rows.length === 0) return [];
@@ -74,6 +95,7 @@ export async function listCoversForProfile(
       songArtist: row.song_artist,
       audioUrl: row.audio_url,
       durationSeconds: row.duration_seconds,
+      karaokeSongId: row.karaoke_song_id ?? null,
       createdAt: row.created_at,
       likeCount: counts.get(row.id) ?? 0,
       likedByMe: mine.has(row.id),

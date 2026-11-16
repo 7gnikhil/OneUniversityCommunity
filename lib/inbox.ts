@@ -1,14 +1,15 @@
 // Inbox data layer. The Inbox is a MERGE of:
-//   - public.inbox_items — delivered notices (reveal outcomes, developer
-//     request updates, admin notices, group-invite notices, verification
+//   - public.inbox_items — delivered notices (developer request
+//     updates, admin notices, group-invite notices, verification
 //     outcomes). Rows are written by server actions via the service role.
-//   - public.reveal_requests addressed to me (actionable: accept/decline)
-//     and reveals I granted that are still live (actionable: revoke).
 //   - public.group_invites addressed to me that I haven't joined yet
 //     (actionable: accept/decline).
-// Unread = unread inbox_items + pending reveal requests + pending direct
-// invites. Reveal/invite entries clear by being acted on, not by viewing;
-// inbox_items clear by viewing (the page marks them read after render).
+// Unread = unread inbox_items + pending direct invites. Invite entries
+// clear by being acted on, not by viewing; inbox_items clear by viewing
+// (the page marks them read after render).
+// (The reveal_requests merge was removed on 2026-11-17 with the
+// "show me your profile" feature; RevealRequestRow / REVEAL_COLUMNS
+// remain only for the admin requests page's read-only history.)
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GroupInviteRow, ServerRow } from "@/lib/servers";
@@ -52,34 +53,6 @@ export async function listInboxItems(
     .order("created_at", { ascending: false })
     .limit(limit);
   return (data ?? []) as InboxItemRow[];
-}
-
-// Pending reveal requests addressed to me (I'm the poster).
-export async function listPendingRevealsForPoster(
-  admin: SupabaseClient,
-  myAccountId: string,
-): Promise<RevealRequestRow[]> {
-  const { data } = await admin
-    .from("reveal_requests")
-    .select(REVEAL_COLUMNS)
-    .eq("poster_id", myAccountId)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
-  return (data ?? []) as RevealRequestRow[];
-}
-
-// Reveals I granted (as poster) that are still live — revocable here.
-export async function listGrantedReveals(
-  admin: SupabaseClient,
-  myAccountId: string,
-): Promise<RevealRequestRow[]> {
-  const { data } = await admin
-    .from("reveal_requests")
-    .select(REVEAL_COLUMNS)
-    .eq("poster_id", myAccountId)
-    .eq("status", "accepted")
-    .order("responded_at", { ascending: false });
-  return (data ?? []) as RevealRequestRow[];
 }
 
 export interface PendingInviteEntry {
@@ -141,20 +114,15 @@ export async function getInboxUnreadCount(
   admin: SupabaseClient,
   myAccountId: string,
 ): Promise<number> {
-  const [itemsResult, revealsResult, invites] = await Promise.all([
+  const [itemsResult, invites] = await Promise.all([
     admin
       .from("inbox_items")
       .select("id", { count: "exact", head: true })
       .eq("recipient_id", myAccountId)
       .eq("is_read", false),
-    admin
-      .from("reveal_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("poster_id", myAccountId)
-      .eq("status", "pending"),
     listPendingDirectInvites(admin, myAccountId),
   ]);
-  return (itemsResult.count ?? 0) + (revealsResult.count ?? 0) + invites.length;
+  return (itemsResult.count ?? 0) + invites.length;
 }
 
 // Delivers an inbox notice via the service role (inbox_items has no client

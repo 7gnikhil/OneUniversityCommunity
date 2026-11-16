@@ -18,7 +18,7 @@ export const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "What is Maya Jwalam?",
-    a: "The main channel — every OneUco student, posting anonymously. Nobody there can see your name, @username, OneUco ID or photo, and there's no member list to browse. If someone asks \"show me your profile\" on your post, the request lands in your Inbox: accept to share your public profile with just that person (revocable any time), or decline and stay anonymous.",
+    a: "The main channel — every OneUco student, posting anonymously. Nobody there can see your name, @username, OneUco ID or photo, and there's no member list to browse. Jwalam posts stay anonymous, full stop — if you want to know someone, you'll find their public profile from Chirp, Fling or search, like everyone else.",
   },
   {
     q: "What is Tea?",
@@ -36,13 +36,13 @@ export const FAQS: Array<{ q: string; a: string }> = [
 
 export const RULES: string[] = [
   "Be a real student, and be yourself — one account per person, no impersonation.",
-  "Respect anonymity: never try to identify a Maya Jwalam poster who hasn't revealed themselves to you, and never share someone else's revealed identity onwards.",
-  "No harassment, hate speech, spam or scams — in chats, teas, Chirps or reveal requests. Blocks are absolute: a blocked person stays blocked.",
+  "Respect anonymity: never try to identify a Maya Jwalam poster, and never share someone else's identity onwards.",
+  "No harassment, hate speech, spam or scams — in chats, teas or Chirps. Blocks are absolute: a blocked person stays blocked.",
   "Keep photos and posts appropriate for a student community; anything sexual involving minors is banned outright and reported.",
-  "Admins can remove posts, revoke reveals and suspend accounts that break these rules. Use the ReqToAdmin flair or a report to flag problems.",
+  "Admins can remove posts and suspend accounts that break these rules. Use the ReqToAdmin flair or a report to flag problems.",
 ];
 
 // The About line for the combined About & FAQs section: what OneUco
 // is, in one breath (the FAQ above carries the detail).
 export const ABOUT_ONEUCO =
-  "OneUco is one community for students of every college and university — meet people in Fling, chat in Homies, hang out in Tea, post to Chirp, and stay anonymous in Maya Jwalam unless you choose to reveal yourself.";
+  "OneUco is one community for students of every college and university — meet people in Fling, chat in Homies, hang out in Tea, post to Chirp, and stay anonymous in Maya Jwalam.";

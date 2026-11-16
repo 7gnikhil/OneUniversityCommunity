@@ -3,8 +3,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getAccountByAuthUserId } from "@/lib/auth/account";
 
-// Inbox actions for group invites. (Reveal accept/decline/revoke live in
-// app/servers/reveal-actions.ts next to the Jwalam rules they enforce.)
+// Inbox actions for group invites.
 // Accepting adds me to the server and retires the invite; declining just
 // retires it. Both run on the service role after identity checks —
 // group_invites has no invitee-side write policy by design.

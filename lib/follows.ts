@@ -11,7 +11,12 @@
 // server-action concern, never a client query.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getPublicProfilesByIds, orderedPair } from "@/lib/social";
+import {
+  getPublicProfilesByIds,
+  maskDeveloperProfiles,
+  orderedPair,
+} from "@/lib/social";
+import { getDeveloperAccountId } from "@/lib/server/owner";
 import type { PublicProfile } from "@/lib/types";
 
 export type FollowStatus = "pending" | "accepted" | "declined";
@@ -167,4 +172,79 @@ export async function respondToFollowRequest(
     })
     .eq("id", requestId);
   return !error;
+}
+
+// ── Instagram-style profile graph (2026-11-17) ───────────────────
+// Followers / Following for the profile header + lists, counted on
+// the ACCEPTED follow graph: a follow counts only once the target
+// accepted (the same moment the pair became friends). Pending and
+// declined asks never count. Developer masking applies to the lists
+// exactly as everywhere else (lib/social.maskDeveloperProfiles).
+
+export interface FollowCounts {
+  followers: number;
+  following: number;
+}
+
+export async function getFollowCounts(
+  admin: SupabaseClient,
+  accountId: string,
+): Promise<FollowCounts> {
+  const [followers, following] = await Promise.all([
+    admin
+      .from("follow_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("target_id", accountId)
+      .eq("status", "accepted"),
+    admin
+      .from("follow_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("requester_id", accountId)
+      .eq("status", "accepted"),
+  ]);
+  return {
+    followers: followers.count ?? 0,
+    following: following.count ?? 0,
+  };
+}
+
+async function listFollowSide(
+  admin: SupabaseClient,
+  accountId: string,
+  side: "followers" | "following",
+): Promise<PublicProfile[]> {
+  const column = side === "followers" ? "target_id" : "requester_id";
+  const otherColumn = side === "followers" ? "requester_id" : "target_id";
+  const { data } = await admin
+    .from("follow_requests")
+    .select(FOLLOW_COLUMNS)
+    .eq(column, accountId)
+    .eq("status", "accepted")
+    .order("responded_at", { ascending: false })
+    .limit(200);
+  const rows = (data ?? []) as FollowRequestRow[];
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row[otherColumn]);
+  const raw = await getPublicProfilesByIds(admin, ids);
+  const profiles = maskDeveloperProfiles(
+    raw,
+    await getDeveloperAccountId(admin),
+  );
+  return ids
+    .map((id) => profiles.get(id))
+    .filter((profile): profile is PublicProfile => Boolean(profile));
+}
+
+export async function listFollowers(
+  admin: SupabaseClient,
+  accountId: string,
+): Promise<PublicProfile[]> {
+  return listFollowSide(admin, accountId, "followers");
+}
+
+export async function listFollowing(
+  admin: SupabaseClient,
+  accountId: string,
+): Promise<PublicProfile[]> {
+  return listFollowSide(admin, accountId, "following");
 }

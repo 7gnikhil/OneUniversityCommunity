@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isMusicMitraEnabled } from "@/lib/server/music-settings";
 import type { RadioTrack } from "@/components/RadioPlayer";
 
 // Music Mitra data proxy (2026-11-14 — the Radio feature merged
@@ -401,6 +402,17 @@ function parseLrc(lrc: string): LrcLine[] {
 }
 
 export async function GET(req: Request) {
+  // Music Mitra kill-switch (owner, 2026-11-17): when the admin has
+  // flipped music off in app_settings, every mode of this proxy —
+  // songs, albums, lyrics, karaoke — answers 503 until it is flipped
+  // back. Checked before auth so the pause is total.
+  if (!(await isMusicMitraEnabled())) {
+    return NextResponse.json(
+      { error: "Music Mitra is paused right now." },
+      { status: 503 },
+    );
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

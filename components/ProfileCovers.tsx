@@ -51,23 +51,79 @@ export default function ProfileCovers({
   });
   const [feedback, setFeedback] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Karaoke backing track: a second, hidden audio element that
+  // plays the song's Demucs instrumental in sync under the voice
+  // for covers that remember their song (karaokeSongId). Fetched
+  // lazily from the karaoke service via the radio proxy and cached
+  // per song for the life of this page.
+  const backingRef = useRef<HTMLAudioElement | null>(null);
+  const backingCacheRef = useRef<Map<string, string | null>>(new Map());
 
   function flash(message: string): void {
     setFeedback(message);
     setTimeout(() => setFeedback(null), 2800);
   }
 
+  function stopBacking(): void {
+    const backing = backingRef.current;
+    if (backing) {
+      backing.pause();
+      backing.removeAttribute("src");
+    }
+  }
+
+  async function startBacking(cover: CoverView): Promise<void> {
+    const backing = backingRef.current;
+    const voice = audioRef.current;
+    if (!backing || !voice || !cover.karaokeSongId) return;
+    let url = backingCacheRef.current.get(cover.karaokeSongId);
+    if (url === undefined) {
+      try {
+        const res = await fetch(
+          `/api/radio?type=karaoke&action=status&id=${encodeURIComponent(cover.karaokeSongId)}`,
+        );
+        const json = (await res.json()) as {
+          status?: string;
+          instrumental_url?: string;
+        };
+        url =
+          json.status === "ready" && json.instrumental_url
+            ? json.instrumental_url
+            : null;
+      } catch {
+        url = null;
+      }
+      backingCacheRef.current.set(cover.karaokeSongId, url);
+    }
+    // The student may have switched covers while this fetched.
+    if (!url || audioRef.current !== voice || voice.paused) return;
+    if (backing.getAttribute("src") !== url) backing.src = url;
+    backing.currentTime = voice.currentTime;
+    void backing.play().catch(() => undefined);
+  }
+
   function togglePlay(cover: CoverView): void {
     const audio = audioRef.current;
     if (!audio) return;
     if (activeId === cover.id) {
-      if (audio.paused) void audio.play().catch(() => undefined);
-      else audio.pause();
+      if (audio.paused) {
+        void audio.play().catch(() => undefined);
+        const backing = backingRef.current;
+        if (backing && backing.getAttribute("src")) {
+          backing.currentTime = audio.currentTime;
+          void backing.play().catch(() => undefined);
+        }
+      } else {
+        audio.pause();
+        backingRef.current?.pause();
+      }
       return;
     }
+    stopBacking();
     setActiveId(cover.id);
     audio.src = cover.audioUrl;
     void audio.play().catch(() => undefined);
+    void startBacking(cover);
   }
 
   async function toggleLike(cover: CoverView): Promise<void> {
@@ -94,6 +150,7 @@ export default function ProfileCovers({
     setCovers((prev) => prev.filter((item) => item.id !== cover.id));
     if (activeId === cover.id) {
       audioRef.current?.pause();
+      stopBacking();
       setActiveId(null);
     }
     flash("Cover deleted");
@@ -222,8 +279,14 @@ export default function ProfileCovers({
         ref={audioRef}
         preload="none"
         onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
+        onPause={() => {
+          setIsPlaying(false);
+          backingRef.current?.pause();
+        }}
+        onEnded={() => {
+          setIsPlaying(false);
+          stopBacking();
+        }}
         onTimeUpdate={(event) =>
           setProgress({
             t: event.currentTarget.currentTime,
@@ -231,6 +294,9 @@ export default function ProfileCovers({
           })
         }
       />
+      {/* Karaoke backing (instrumental) — driven by togglePlay /
+          startBacking above; never user-visible. */}
+      <audio ref={backingRef} preload="none" />
 
       {canManage && myAccountId ? (
         <CoverStudio
@@ -400,6 +466,7 @@ function CoverStudio({
         songArtist: songArtist || null,
         audioUrl,
         durationSeconds,
+        karaokeSongId: null,
         createdAt: new Date().toISOString(),
         likeCount: 0,
         likedByMe: false,

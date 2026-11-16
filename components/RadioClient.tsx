@@ -1160,6 +1160,7 @@ function NowPlaying({
                     myAccountId={myAccountId}
                     songTitle={current.title.replace(/ \(Karaoke\)$/, "")}
                     songArtist={current.artists}
+                    karaokeSongId={baseId}
                   />
                 </div>
               ) : (
@@ -1184,26 +1185,45 @@ function NowPlaying({
   );
 }
 
-// Record a cover without leaving the karaoke: the instrumental
-// keeps playing through the shell player while the mic captures
-// the voice; publishing uploads to the `covers` bucket and writes
+// Record a cover without leaving the karaoke (owner's flow,
+// 2026-11-17, mirroring his MusicMitra pipeline): the Demucs
+// instrumental — vocals removed — keeps playing through the shell
+// player while the mic captures ONLY the voice. The cover row
+// remembers the song (karaokeSongId), so the profile player can
+// fetch the same instrumental and play voice + music together,
+// in sync. Publishing uploads to the `covers` bucket and writes
 // the profile_covers row (same path as the profile studio).
 function KaraokeRecorder({
   myAccountId,
   songTitle,
   songArtist,
+  karaokeSongId,
 }: {
   myAccountId: string;
   songTitle: string;
   songArtist: string;
+  karaokeSongId: string | null;
 }) {
   const [recording, setRecording] = useState<boolean>(false);
+  const [elapsed, setElapsed] = useState<number>(0);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<boolean>(false);
   const [message, setMessage] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const startedAtRef = useRef<number>(0);
+  const durationRef = useRef<number | null>(null);
+
+  // Recording clock — the singer watches the take length, and the
+  // final value becomes the cover's duration_seconds.
+  useEffect(() => {
+    if (!recording) return;
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000));
+    }, 500);
+    return () => clearInterval(timer);
+  }, [recording]);
 
   async function start(): Promise<void> {
     try {
@@ -1218,6 +1238,10 @@ function KaraokeRecorder({
       };
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
+        durationRef.current = Math.max(
+          1,
+          Math.round((Date.now() - startedAtRef.current) / 1000),
+        );
         setRecording(false);
         const recorded = new Blob(chunksRef.current, {
           type: recorder.mimeType || "audio/webm",
@@ -1227,6 +1251,9 @@ function KaraokeRecorder({
         setPreviewUrl(URL.createObjectURL(recorded));
       };
       setMessage(null);
+      setBlob(null);
+      startedAtRef.current = Date.now();
+      setElapsed(0);
       recorder.start();
       setRecording(true);
     } catch {
@@ -1257,7 +1284,8 @@ function KaraokeRecorder({
         songTitle,
         songArtist,
         audioUrl,
-        durationSeconds: null,
+        durationSeconds: durationRef.current,
+        karaokeSongId,
       });
       if (result.error) throw new Error(result.error);
       setMessage("Posted to your profile 🎉 — it's under My covers.");
@@ -1275,14 +1303,27 @@ function KaraokeRecorder({
 
   return (
     <div className="flex w-full flex-col items-center gap-2 border-t border-white/5 pt-3">
+      <p className="text-center text-[11px] leading-relaxed text-neutral-500">
+        The instrumental keeps playing while you sing — your voice is
+        what gets recorded, and your profile plays them together.
+        🎧 Earphones give the cleanest take (the mic also hears the
+        speaker).
+      </p>
       {recording ? (
-        <button
-          type="button"
-          onClick={() => recorderRef.current?.stop()}
-          className="rounded-full bg-rose-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-rose-400"
-        >
-          ⏹ Stop recording
-        </button>
+        <>
+          <p className="flex items-center gap-2 text-xs font-semibold text-rose-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+            Recording… {Math.floor(elapsed / 60)}:
+            {String(elapsed % 60).padStart(2, "0")} — sing now 🎤
+          </p>
+          <button
+            type="button"
+            onClick={() => recorderRef.current?.stop()}
+            className="rounded-full bg-rose-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-rose-400"
+          >
+            ⏹ Stop recording
+          </button>
+        </>
       ) : (
         <button
           type="button"

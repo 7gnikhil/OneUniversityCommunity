@@ -28,6 +28,10 @@ export async function createCoverAction(input: {
   songArtist: string | null;
   audioUrl: string;
   durationSeconds: number | null;
+  /** Music Mitra song id when this cover was recorded over a karaoke
+   * instrumental (migration 0020) — lets the profile player sync the
+   * instrumental under the voice. Optional; absent = voice-only. */
+  karaokeSongId?: string | null;
 }): Promise<{ error: string | null }> {
   const ctx = await requireAccount();
   if (!ctx) return { error: "Please sign in again." };
@@ -43,7 +47,11 @@ export async function createCoverAction(input: {
     return { error: "That audio isn't in your uploads — try again." };
   }
 
-  const { error } = await ctx.supabase.from("profile_covers").insert({
+  const karaokeSongId =
+    typeof input.karaokeSongId === "string" && input.karaokeSongId.trim()
+      ? input.karaokeSongId.trim().slice(0, 200)
+      : null;
+  const baseRow = {
     account_id: ctx.account.id,
     title,
     song_title: input.songTitle?.trim().slice(0, 160) || null,
@@ -53,7 +61,24 @@ export async function createCoverAction(input: {
       typeof input.durationSeconds === "number" && input.durationSeconds > 0
         ? Math.round(input.durationSeconds)
         : null,
-  });
+  };
+  // The karaoke_song_id cast: the generated DB types predate
+  // migration 0020, so the typed insert would reject the column —
+  // it exists at runtime once the migration is applied (and the
+  // retry below covers the not-yet-applied case).
+  let { error } = await ctx.supabase
+    .from("profile_covers")
+    .insert(
+      (karaokeSongId
+        ? { ...baseRow, karaoke_song_id: karaokeSongId }
+        : baseRow) as never,
+    );
+  // Fail-soft: if migration 0020 (karaoke_song_id) is not applied yet,
+  // the insert names a missing column — retry voice-only rather than
+  // losing the student's cover.
+  if (error && karaokeSongId && error.message.includes("karaoke_song_id")) {
+    ({ error } = await ctx.supabase.from("profile_covers").insert(baseRow));
+  }
   if (error) {
     return {
       error:

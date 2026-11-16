@@ -5,7 +5,7 @@
 // caller. That is deliberate: the main channel's anonymity rule (member
 // viewers must never receive author identity) cannot be expressed in RLS,
 // which cannot strip columns, and several cross-user reads (blocks in both
-// directions, reveal grants) are invisible to a session client by design.
+// directions) are invisible to a session client by design.
 // Every function therefore re-checks membership / role / visibility in
 // code before returning anything, and the Jwalam projection below is the
 // ONLY shape in which main-channel messages leave the server.
@@ -144,7 +144,7 @@ export async function ensureMainServer(
       type: "public",
       is_main_channel: true,
       description:
-        "The main OneUco channel. Everyone posts anonymously here — names and profiles stay hidden unless a poster accepts a reveal request.",
+        "The main OneUco channel. Everyone posts anonymously here — names and profiles stay hidden, always.",
       created_by: ownerId,
     })
     .select(SERVER_COLUMNS)
@@ -428,15 +428,15 @@ export async function listServerMessages(
 
 // ── Maya Jwalam projection ─────────────────────────────────────────────────
 // The author of a main-channel post reaches a non-admin client ONLY in
-// these shapes: anonymous (the default), mine, an official admin post
-// (badge only — no identity), or revealed (an accepted reveal grant from
-// poster to THIS viewer, public fields only). Admin viewers get the
-// moderation shape with the real public profile + account id.
+// these shapes: anonymous (the default), mine, or an official admin
+// post (badge only — no identity). Admin viewers get the moderation
+// shape with the real public profile + account id. (The old
+// "show me your profile" reveal grants were removed on 2026-11-17 —
+// owner's call: profiles are public anyway, Jwalam stays anonymous.)
 export type JwalamAuthor =
   | { kind: "anonymous" }
   | { kind: "mine" }
   | { kind: "admin-post" }
-  | { kind: "revealed"; profile: PublicProfile }
   | { kind: "moderation"; accountId: string; profile: PublicProfile | null };
 
 export interface JwalamMessageView {
@@ -448,15 +448,6 @@ export interface JwalamMessageView {
   createdAt: string;
   viewCount: number;
   author: JwalamAuthor;
-  // Reveal affordance for this viewer: a pending request already exists,
-  // or asking is currently possible.
-  revealPending: boolean;
-  canRequestReveal: boolean;
-}
-
-interface RevealPairRow {
-  poster_id: string;
-  status: "pending" | "accepted" | "rejected" | "revoked";
 }
 
 export async function recordJwalamViews(
@@ -497,19 +488,13 @@ export async function listJwalamMessages(
   const authorIds = [...new Set(rows.map((row) => row.author_id))];
   const messageIds = rows.map((row) => row.id);
 
-  const [rolesResult, viewsResult, revealsResult, profiles] = await Promise.all([
+  const [rolesResult, viewsResult, profiles] = await Promise.all([
     admin.from("accounts").select("id, role").in("id", authorIds),
     admin.from("server_message_views").select("message_id").in("message_id", messageIds),
-    admin
-      .from("reveal_requests")
-      .select("poster_id, status")
-      .eq("server_id", serverId)
-      .eq("requester_id", viewerId)
-      .in("poster_id", authorIds),
-    // Public profiles are fetched ONLY for authors this viewer is allowed
-    // to identify (admin moderation, or an accepted reveal). For everyone
-    // else the profile is never selected into the DTO at all. (The query
-    // itself runs server-side; the projection below is the boundary.)
+    // Public profiles are fetched ONLY for the admin-moderation
+    // projection. For everyone else the profile is never selected
+    // into the DTO at all. (The query itself runs server-side; the
+    // projection below is the boundary.)
     getPublicProfilesByIds(admin, authorIds),
   ]);
 
@@ -523,20 +508,7 @@ export async function listJwalamMessages(
     viewCounts.set(row.message_id, (viewCounts.get(row.message_id) ?? 0) + 1);
   });
 
-  const revealByPoster = new Map<string, RevealPairRow["status"]>();
-  ((revealsResult.data ?? []) as RevealPairRow[]).forEach((row) => {
-    const current = revealByPoster.get(row.poster_id);
-    // Accepted wins (a live grant), then pending, then the rest.
-    if (row.status === "accepted") revealByPoster.set(row.poster_id, "accepted");
-    else if (row.status === "pending" && current !== "accepted") {
-      revealByPoster.set(row.poster_id, "pending");
-    } else if (!current) {
-      revealByPoster.set(row.poster_id, row.status);
-    }
-  });
-
   return rows.map((row) => {
-    const revealStatus = revealByPoster.get(row.author_id);
     let author: JwalamAuthor;
     if (viewerIsAdmin) {
       author = {
@@ -546,9 +518,6 @@ export async function listJwalamMessages(
       };
     } else if (row.author_id === viewerId) {
       author = { kind: "mine" };
-    } else if (revealStatus === "accepted") {
-      const profile = profiles.get(row.author_id);
-      author = profile ? { kind: "revealed", profile } : { kind: "anonymous" };
     } else if (adminAuthors.has(row.author_id)) {
       author = { kind: "admin-post" };
     } else {
@@ -563,12 +532,6 @@ export async function listJwalamMessages(
       createdAt: row.created_at,
       viewCount: viewCounts.get(row.id) ?? 0,
       author,
-      revealPending: revealStatus === "pending",
-      canRequestReveal:
-        !viewerIsAdmin &&
-        row.author_id !== viewerId &&
-        revealStatus !== "accepted" &&
-        revealStatus !== "pending",
     };
   });
 }

@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getDialData } from "@/lib/dial-badges";
+import { isMusicMitraEnabled } from "@/lib/server/music-settings";
 import DialShell from "@/components/DialShell";
 
 // Server wrapper for the desktop dial shell (components/DialShell):
@@ -39,6 +40,13 @@ export default async function DialShellServer({
   const account = await getMyAccount(supabase);
   if (!account) return <>{children}</>;
 
-  const { badges } = await getDialData(supabase, account.id);
-  return <DialShell badges={badges}>{children}</DialShell>;
+  const [{ badges }, musicEnabled] = await Promise.all([
+    getDialData(supabase, account.id),
+    isMusicMitraEnabled(),
+  ]);
+  return (
+    <DialShell badges={badges} musicOff={!musicEnabled}>
+      {children}
+    </DialShell>
+  );
 }

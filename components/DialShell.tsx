@@ -37,9 +37,12 @@ const HIDDEN_PREFIXES: ReadonlyArray<string> = [
 
 export default function DialShell({
   badges,
+  musicOff,
   children,
 }: {
   badges?: DialBadges;
+  /** Music Mitra kill-switch (server-read, lib/server/music-settings). */
+  musicOff?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
@@ -50,6 +53,18 @@ export default function DialShell({
     )
   ) {
     return <>{children}</>;
+  }
+
+  // Kill-switch ON (music off): no player is mounted at all — any
+  // playing audio ends on the next navigation — and the bar loses
+  // the Mitra tab.
+  if (musicOff) {
+    return (
+      <>
+        <div className="pb-24">{children}</div>
+        <BottomBar badges={badges} musicOff />
+      </>
+    );
   }
 
   return (

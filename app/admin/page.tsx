@@ -7,8 +7,10 @@ import {
 } from "@/lib/auth/account";
 import { getMyAccount, getMySessionUser } from "@/lib/auth/my-account";
 import { getDiwaliMode } from "@/lib/server/diwali-settings";
+import { isMusicMitraEnabled } from "@/lib/server/music-settings";
 import { getOnlineCounts } from "@/lib/presence";
 import DiwaliToggle from "@/components/DiwaliToggle";
+import MusicMitraToggle from "@/components/MusicMitraToggle";
 
 // Admin landing — owner/admin only. Middleware enforces the Admin Pass
 // gate on /admin, and this page re-checks the same gate itself (like the
@@ -126,9 +128,10 @@ export default async function AdminPage() {
   const roleLabel = account?.role === "owner" ? "Owner" : "Admin";
 
   // Independent reads — run them together instead of back to back.
-  const [stats, diwaliMode] = await Promise.all([
+  const [stats, diwaliMode, musicEnabled] = await Promise.all([
     loadStats(),
     getDiwaliMode(),
+    isMusicMitraEnabled(),
   ]);
   const statCards: Array<{
     label: string;
@@ -286,6 +289,8 @@ export default async function AdminPage() {
       </section>
 
       <DiwaliToggle mode={diwaliMode} />
+
+      <MusicMitraToggle enabled={musicEnabled} />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium uppercase tracking-widest text-neutral-500">

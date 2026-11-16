@@ -7,6 +7,7 @@ import { accentHex } from "@/lib/validation";
 import Avatar from "@/components/Avatar";
 import PageIntro from "@/components/PageIntro";
 import ChirpSidebar from "@/components/ChirpSidebar";
+import { isMusicMitraEnabled } from "@/lib/server/music-settings";
 import ChirpFeed from "./ChirpFeed";
 
 // Chirp — the hub, which is EXPLORE (owner's reshuffle,
@@ -95,7 +96,7 @@ export default async function ChirpPage() {
           components/ChirpSidebar. The hub's own cards stay in the
           content column, unchanged. */}
       <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:items-start lg:gap-8">
-        <ChirpSidebar />
+        <ChirpSidebar musicOff={!(await isMusicMitraEnabled())} />
 
         <div className="flex min-w-0 flex-col gap-5">
       {/* EXPLORE (owner's reshuffle, 2026-11-13): the main Chirp

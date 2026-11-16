@@ -86,11 +86,21 @@ const ITEMS: NavItem[] = [
   },
 ];
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function NavList({
+  onNavigate,
+  musicOff,
+}: {
+  onNavigate?: () => void;
+  /** Music Mitra kill-switch: drop the Music Mitra entry. */
+  musicOff?: boolean;
+}) {
   const pathname = usePathname() ?? "";
+  const items = musicOff
+    ? ITEMS.filter((item) => item.href !== "/radio")
+    : ITEMS;
   return (
     <nav className="flex flex-col gap-1" aria-label="Chirp sections">
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         // Explore is the hub itself: exact match only, or it would
         // light up on every /chirp/* page. The rest match by prefix.
         const isActive =
@@ -152,7 +162,12 @@ function SidebarFooter() {
   );
 }
 
-export default function ChirpSidebar() {
+export default function ChirpSidebar({
+  musicOff,
+}: {
+  /** Music Mitra kill-switch (server-read by the Chirp page). */
+  musicOff?: boolean;
+} = {}) {
   const [open, setOpen] = useState<boolean>(false);
 
   return (
@@ -204,7 +219,7 @@ export default function ChirpSidebar() {
                 ✕
               </button>
             </div>
-            <NavList onNavigate={() => setOpen(false)} />
+            <NavList onNavigate={() => setOpen(false)} musicOff={musicOff} />
             <SidebarFooter />
           </div>
         </div>
@@ -215,7 +230,7 @@ export default function ChirpSidebar() {
         <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-neutral-500">
           Chirp
         </p>
-        <NavList />
+        <NavList musicOff={musicOff} />
         <SidebarFooter />
       </aside>
     </>

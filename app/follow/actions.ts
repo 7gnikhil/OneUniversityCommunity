@@ -20,7 +20,7 @@ import { notifyAccount } from "@/lib/push";
 // recordSwipeAction does, so the Friends list and DM gating (both
 // matches-driven) pick the pair up unchanged.
 //
-// Anti-spam, enforced here server-side (mirrors reveal requests):
+// Anti-spam, enforced here server-side:
 //   - one pending ask per (requester, target) pair (UNIQUE + state check);
 //   - a declined ask cannot be re-sent for 7 days;
 //   - a block in either direction refuses new asks.

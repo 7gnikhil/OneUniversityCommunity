@@ -30,6 +30,6 @@ export const PAGE_INTROS: Record<PageIntroSection, string> = {
   profile:
     "This is you on OneUco — your gallery, links and intention stay hidden until someone becomes your friend.",
   inbox:
-    "Requests and invites land here — follows, reveal requests and group invites waiting on you.",
+    "Requests and invites land here — follows and group invites waiting on you.",
   search: "Find any student by their @username or OneUco ID.",
 };

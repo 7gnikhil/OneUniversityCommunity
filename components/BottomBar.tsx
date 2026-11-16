@@ -18,23 +18,36 @@ import { STOPS, type DialBadges } from "@/lib/nav-stops";
 // people business, and it keeps the bar's five-tab shape honest
 // instead of growing a sixth tab.
 
-function activeStopIndex(pathname: string): number {
-  // Derived from the STOPS order itself — never hardcode indices
-  // here. (Bug, 2026-11-13: when the tab order changed to Fling,
-  // Chirp, Tea, Homies, Profile, this function's frozen indices
-  // kept pointing at the OLD order, so Fling lit up as Chirp,
-  // Tea as Fling, and so on. Matching by href makes any future
-  // reorder safe.)
+function activeStopIndex(
+  pathname: string,
+  stops: ReadonlyArray<{ href: string }>,
+): number {
+  // Derived from the rendered stops order itself — never hardcode
+  // indices here. (Bug, 2026-11-13: when the tab order changed to
+  // Fling, Chirp, Tea, Homies, Profile, this function's frozen
+  // indices kept pointing at the OLD order, so Fling lit up as
+  // Chirp, Tea as Fling, and so on. Matching by href makes any
+  // future reorder — or a hidden tab — safe.)
   // /inbox lights the Homies tab (see the header note above).
   const path = pathname === "/inbox" ? "/friends" : pathname;
-  return STOPS.findIndex(
+  return stops.findIndex(
     (stop) => path === stop.href || path.startsWith(`${stop.href}/`),
   );
 }
 
-export default function BottomBar({ badges }: { badges?: DialBadges }) {
+export default function BottomBar({
+  badges,
+  musicOff,
+}: {
+  badges?: DialBadges;
+  /** Music Mitra kill-switch: hide the Mitra tab (bar drops to 4). */
+  musicOff?: boolean;
+}) {
   const pathname = usePathname() ?? "/";
-  const active = activeStopIndex(pathname);
+  const stops = musicOff
+    ? STOPS.filter((stop) => stop.href !== "/radio")
+    : STOPS;
+  const active = activeStopIndex(pathname, stops);
   const accent = badges?.accentHex ?? "#f5f5f5";
 
   return (
@@ -43,8 +56,13 @@ export default function BottomBar({ badges }: { badges?: DialBadges }) {
       className="fixed inset-x-0 bottom-0 z-50 border-t border-neutral-800 bg-black/90 backdrop-blur"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="mx-auto grid max-w-lg grid-cols-5">
-        {STOPS.map((stop, i) => {
+      <div
+        className="mx-auto grid max-w-lg"
+        style={{
+          gridTemplateColumns: `repeat(${stops.length}, minmax(0, 1fr))`,
+        }}
+      >
+        {stops.map((stop, i) => {
           const isActive = i === active;
           const count = badges?.counts[stop.href] ?? 0;
           return (

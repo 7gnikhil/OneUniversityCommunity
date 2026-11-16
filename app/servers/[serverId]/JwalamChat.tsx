@@ -20,15 +20,14 @@ import {
   sendServerMessageAction,
   togglePinMessageAction,
 } from "../actions";
-import { requestRevealAction } from "../reveal-actions";
-
 // Maya Jwalam — Telegram-style channel view. The messages arriving here
 // are ALREADY identity-stripped by the server projection (lib/servers.ts
 // listJwalamMessages): anonymous posts carry no name, username, ID, photo
 // or branch, and this component could not render them if it wanted to.
-// Only three identity shapes exist: "Admin" official posts (badge only),
-// posts a poster revealed to ME (accepted reveal grant), and — for the
-// owner/admin moderation view — identified posts marked as moderation.
+// Only two identity shapes exist: "Admin" official posts (badge only),
+// and — for the owner/admin moderation view — identified posts marked
+// as moderation. (The "show me your profile" reveal flow was removed
+// on 2026-11-17: profiles are public anyway; Jwalam stays anonymous.)
 
 const POLL_MS = 5_000;
 
@@ -86,7 +85,6 @@ export default function JwalamChat({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [sending, setSending] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [requestedIds, setRequestedIds] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -216,17 +214,6 @@ export default function JwalamChat({
     void refresh();
   }
 
-  async function onReveal(messageId: string): Promise<void> {
-    setError(null);
-    const result = await requestRevealAction(messageId);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    setRequestedIds((prev) => new Set(prev).add(messageId));
-    setNotice("Request sent — it's in their Inbox now.");
-  }
-
   async function onDelete(messageId: string): Promise<void> {
     const result = await deleteServerMessageAction(messageId);
     if (result.error) {
@@ -336,8 +323,6 @@ export default function JwalamChat({
                   flair={row.flairId ? (flairById.get(row.flairId) ?? null) : null}
                   accent={accent}
                   isAppAdmin={isAppAdmin}
-                  revealRequested={requestedIds.has(row.id)}
-                  onReveal={() => void onReveal(row.id)}
                   onDelete={() => void onDelete(row.id)}
                   onPin={() => void onPin(row.id)}
                 />
@@ -413,8 +398,6 @@ function JwalamBubble({
   flair,
   accent,
   isAppAdmin,
-  revealRequested,
-  onReveal,
   onDelete,
   onPin,
 }: {
@@ -422,8 +405,6 @@ function JwalamBubble({
   flair: FlairRow | null;
   accent: string;
   isAppAdmin: boolean;
-  revealRequested: boolean;
-  onReveal: () => void;
   onDelete: () => void;
   onPin: () => void;
 }) {
@@ -433,13 +414,11 @@ function JwalamBubble({
   });
   const author = row.author;
   const mine = author.kind === "mine";
-  const showRevealButton =
-    row.canRequestReveal || row.revealPending || revealRequested;
 
   return (
     <div id={`jw-${row.id}`} className={`flex gap-2 ${mine ? "flex-row-reverse" : ""}`}>
-      {/* Avatar: real photo ONLY for revealed/moderation identities. */}
-      {author.kind === "revealed" || author.kind === "moderation" ? (
+      {/* Avatar: real photo ONLY for the moderation identity. */}
+      {author.kind === "moderation" ? (
         author.profile?.photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -469,14 +448,6 @@ function JwalamBubble({
         {/* Identity line — only the shapes the projection allows. */}
         {author.kind === "admin-post" ? (
           <p className="mb-0.5 text-[11px] font-semibold text-amber-300">Admin</p>
-        ) : null}
-        {author.kind === "revealed" && author.profile ? (
-          <Link
-            href={`/profile/${author.profile.username}`}
-            className="mb-0.5 block text-[11px] font-semibold text-sky-300 transition hover:underline"
-          >
-            {author.profile.name} · @{author.profile.username}
-          </Link>
         ) : null}
         {author.kind === "moderation" ? (
           <p className="mb-0.5 text-[11px] font-semibold text-red-300">
@@ -517,17 +488,8 @@ function JwalamBubble({
           <span aria-label={`${row.viewCount} views`}>👁 {row.viewCount}</span>
         </p>
 
-        {showRevealButton || mine || isAppAdmin ? (
+        {mine || isAppAdmin ? (
           <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-neutral-400">
-            {showRevealButton ? (
-              row.revealPending || revealRequested ? (
-                <span className="text-neutral-500">Reveal requested ✓</span>
-              ) : (
-                <button type="button" onClick={onReveal} className="transition hover:text-white">
-                  Show me your profile
-                </button>
-              )
-            ) : null}
             {mine || isAppAdmin ? (
               <button type="button" onClick={onDelete} className="transition hover:text-red-300">
                 Delete

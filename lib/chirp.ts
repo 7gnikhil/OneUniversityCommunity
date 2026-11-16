@@ -103,6 +103,73 @@ export async function listChirps(
   }));
 }
 
+// One author's chirps, newest first — the profile Posts tab
+// (2026-11-17, Instagram-style profile). Same view shape and
+// developer masking as the global feed; `mine` / `likedByMe` are
+// resolved against the VIEWER, not the author.
+export async function listChirpsByAuthor(
+  supabase: SupabaseClient,
+  authorId: string,
+  viewerId: string,
+  limit: number,
+  admin?: SupabaseClient | null,
+): Promise<ChirpView[]> {
+  const { data } = await supabase
+    .from("chirps")
+    .select(CHIRP_COLUMNS)
+    .eq("author_id", authorId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const rows = (data ?? []) as ChirpRow[];
+  if (rows.length === 0) return [];
+
+  const [rawProfiles, likesResult] = await Promise.all([
+    getPublicProfilesByIds(
+      supabase,
+      rows.map((row) => row.author_id),
+    ),
+    supabase
+      .from("chirp_likes")
+      .select("chirp_id")
+      .eq("account_id", viewerId)
+      .in(
+        "chirp_id",
+        rows.map((row) => row.id),
+      ),
+  ]);
+  const liked = new Set(
+    ((likesResult.data ?? []) as Array<{ chirp_id: string }>).map((row) => row.chirp_id),
+  );
+  const profiles = maskDeveloperProfiles(
+    rawProfiles,
+    admin ? await getDeveloperAccountId(admin) : null,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    body: row.body,
+    imageUrl: row.image_url,
+    createdAt: row.created_at,
+    likeCount: row.like_count,
+    commentCount: row.comment_count,
+    viewCount: row.view_count,
+    author: profiles.get(row.author_id) ?? null,
+    mine: row.author_id === viewerId,
+    likedByMe: liked.has(row.id),
+  }));
+}
+
+export async function countChirpsByAuthor(
+  supabase: SupabaseClient,
+  authorId: string,
+): Promise<number> {
+  const { count } = await supabase
+    .from("chirps")
+    .select("id", { count: "exact", head: true })
+    .eq("author_id", authorId);
+  return count ?? 0;
+}
+
 export async function listChirpComments(
   supabase: SupabaseClient,
   chirpId: string,
