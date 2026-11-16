@@ -3,7 +3,11 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getMyAccount } from "@/lib/auth/my-account";
 import { getProfileByAccountId } from "@/lib/profile";
 import { getFollowCounts } from "@/lib/follows";
-import { countChirpsByAuthor, listChirpsByAuthor } from "@/lib/chirp";
+import {
+  countChirpsByAuthor,
+  listChirpsByAuthor,
+  listSavedChirps,
+} from "@/lib/chirp";
 import { listCoversForProfile } from "@/lib/covers";
 import { ratingForAccount } from "@/lib/fling-rating";
 import { INTENTIONS } from "@/lib/preferences";
@@ -68,10 +72,11 @@ export default async function ProfilePage() {
     // Zeroes stand.
   }
 
-  const [posts, postCount, myCovers] = await Promise.all([
+  const [posts, postCount, myCovers, savedPosts] = await Promise.all([
     listChirpsByAuthor(supabase, account.id, account.id, 30).catch(() => []),
     countChirpsByAuthor(supabase, account.id).catch(() => 0),
     listCoversForProfile(supabase, account.id, account.id),
+    listSavedChirps(supabase, account.id, 30).catch(() => []),
   ]);
 
   const intentionLabel =
@@ -173,7 +178,7 @@ export default async function ProfilePage() {
         />
       </div>
 
-      {/* Tabs: Posts · Karaoke. */}
+      {/* Tabs: Posts · Karaoke · Saved. */}
       <ProfileTabs
         tabs={[
           {
@@ -184,6 +189,17 @@ export default async function ProfilePage() {
               <ProfilePosts
                 initialChirps={posts}
                 emptyText="No posts yet — your chirps will appear here as a grid. Post your first one from the Chirp tab."
+              />
+            ),
+          },
+          {
+            id: "saved",
+            label: "Saved posts",
+            icon: <span aria-hidden>🔖</span>,
+            node: (
+              <ProfilePosts
+                initialChirps={savedPosts}
+                emptyText="Nothing saved yet — tap 🔖 Save on any chirp and it lands here, just for you."
               />
             ),
           },

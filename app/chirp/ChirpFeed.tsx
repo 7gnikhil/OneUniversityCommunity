@@ -17,6 +17,7 @@ import {
   listMyScheduledChirpsAction,
   scheduleChirpAction,
   toggleChirpLikeAction,
+  toggleChirpSaveAction,
   type ScheduledChirpView,
 } from "./actions";
 
@@ -30,12 +31,15 @@ export default function ChirpFeed({
   accentHex: accent,
   myName,
   myPhotoUrl,
+  sort = "latest",
 }: {
   initialChirps: ChirpView[];
   myAccountId: string;
   accentHex: string;
   myName?: string;
   myPhotoUrl?: string | null;
+  // Reddit-style feed sort, chosen by the page's ?sort= param.
+  sort?: "latest" | "top";
 }) {
   const [chirps, setChirps] = useState<ChirpView[]>(initialChirps);
   const [draft, setDraft] = useState<string>("");
@@ -64,7 +68,7 @@ export default function ChirpFeed({
   }, []);
 
   async function refresh(): Promise<void> {
-    const fresh = await fetchChirpsAction();
+    const fresh = await fetchChirpsAction(sort);
     if (fresh.length > 0 || chirps.length === 0) setChirps(fresh);
   }
 
@@ -233,6 +237,19 @@ export default function ChirpFeed({
     setChirps((prev) => prev.filter((row) => row.id !== chirp.id));
   }
 
+  async function onSave(chirp: ChirpView): Promise<void> {
+    const result = await toggleChirpSaveAction(chirp.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setChirps((prev) =>
+      prev.map((row) =>
+        row.id === chirp.id ? { ...row, savedByMe: result.saved } : row,
+      ),
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <form
@@ -360,6 +377,31 @@ export default function ChirpFeed({
         </p>
       ) : null}
 
+      {/* Feed sort — Reddit's Latest/Top idiom. Links (not state)
+          so the choice survives refresh and can be shared. */}
+      <div className="flex items-center gap-2">
+        <Link
+          href="/chirp"
+          className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
+            sort === "latest"
+              ? "bg-white text-black"
+              : "border border-neutral-700 text-neutral-300 hover:bg-neutral-900"
+          }`}
+        >
+          Latest
+        </Link>
+        <Link
+          href="/chirp?sort=top"
+          className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
+            sort === "top"
+              ? "bg-white text-black"
+              : "border border-neutral-700 text-neutral-300 hover:bg-neutral-900"
+          }`}
+        >
+          Top
+        </Link>
+      </div>
+
       {chirps.length === 0 ? (
         <p className="py-10 text-center text-sm text-neutral-500">
           No chirps yet — post the first one.
@@ -374,6 +416,7 @@ export default function ChirpFeed({
               myName={myName}
               myPhotoUrl={myPhotoUrl}
               onLike={() => void onLike(chirp)}
+              onSave={() => void onSave(chirp)}
               onDelete={() => void onDelete(chirp)}
               onCommentPosted={() => void refresh()}
             />
@@ -410,6 +453,7 @@ function ChirpCard({
   myName,
   myPhotoUrl,
   onLike,
+  onSave,
   onDelete,
   onCommentPosted,
 }: {
@@ -418,6 +462,7 @@ function ChirpCard({
   myName?: string;
   myPhotoUrl?: string | null;
   onLike: () => void;
+  onSave: () => void;
   onDelete: () => void;
   onCommentPosted: () => void;
 }) {
@@ -506,6 +551,13 @@ function ChirpCard({
             </button>
             <button type="button" onClick={() => void toggleComments()} className="transition hover:text-white">
               💬 {chirp.commentCount}
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              className={`transition hover:text-white ${chirp.savedByMe ? "font-semibold text-amber-300" : ""}`}
+            >
+              🔖 {chirp.savedByMe ? "Saved" : "Save"}
             </button>
             <span aria-label={`${chirp.viewCount} views`}>👁 {chirp.viewCount}</span>
             {chirp.mine ? (

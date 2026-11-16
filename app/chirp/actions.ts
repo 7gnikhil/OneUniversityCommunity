@@ -117,6 +117,43 @@ export async function toggleChirpLikeAction(
   return { error: null, liked: true };
 }
 
+// Instagram-style bookmark toggle (migration 0021). No counter to
+// recount — saves are a private list, not a public metric. Until
+// the migration lands the insert/select errors and the caller gets
+// a plain "still being set up" message.
+export async function toggleChirpSaveAction(
+  chirpId: string,
+): Promise<{ error: string | null; saved: boolean }> {
+  const ctx = await requireCtx();
+  if (!ctx) return { error: "Please sign in again.", saved: false };
+  const { data, error: lookupError } = await ctx.supabase
+    .from("chirp_saves")
+    .select("chirp_id")
+    .eq("chirp_id", chirpId)
+    .eq("account_id", ctx.account.id)
+    .maybeSingle();
+  if (lookupError) {
+    return { error: "Saving is still being set up — try again soon.", saved: false };
+  }
+  if (data) {
+    const { error } = await ctx.supabase
+      .from("chirp_saves")
+      .delete()
+      .eq("chirp_id", chirpId)
+      .eq("account_id", ctx.account.id);
+    if (error) return { error: "Couldn't unsave — please try again.", saved: true };
+    return { error: null, saved: false };
+  }
+  const { error } = await ctx.supabase.from("chirp_saves").insert({
+    chirp_id: chirpId,
+    account_id: ctx.account.id,
+  });
+  if (error) {
+    return { error: "Saving is still being set up — try again soon.", saved: false };
+  }
+  return { error: null, saved: true };
+}
+
 export async function addChirpCommentAction(
   chirpId: string,
   body: string,
@@ -146,10 +183,12 @@ function tryAdmin(): ReturnType<typeof createAdminClient> | null {
   }
 }
 
-export async function fetchChirpsAction(): Promise<ChirpView[]> {
+export async function fetchChirpsAction(
+  sort: "latest" | "top" = "latest",
+): Promise<ChirpView[]> {
   const ctx = await requireCtx();
   if (!ctx) return [];
-  return listChirps(ctx.supabase, ctx.account.id, 50, tryAdmin());
+  return listChirps(ctx.supabase, ctx.account.id, 50, tryAdmin(), sort);
 }
 
 export async function fetchChirpCommentsAction(

@@ -40,6 +40,36 @@ export interface ChirpView {
   author: PublicProfile | null;
   mine: boolean;
   likedByMe: boolean;
+  // Instagram-style bookmark (migration 0021). Fail-soft false
+  // until the migration is applied.
+  savedByMe: boolean;
+}
+
+export type ChirpSort = "latest" | "top";
+
+// Which of these chirps has the viewer bookmarked? Fail-soft:
+// chirp_saves exists only after migration 0021 — any error (or an
+// empty viewer) reads as "nothing saved" rather than breaking the
+// feed.
+async function savedSetForViewer(
+  supabase: SupabaseClient,
+  viewerId: string,
+  chirpIds: string[],
+): Promise<Set<string>> {
+  if (!viewerId || chirpIds.length === 0) return new Set();
+  try {
+    const { data, error } = await supabase
+      .from("chirp_saves")
+      .select("chirp_id")
+      .eq("account_id", viewerId)
+      .in("chirp_id", chirpIds);
+    if (error) return new Set();
+    return new Set(
+      ((data ?? []) as Array<{ chirp_id: string }>).map((row) => row.chirp_id),
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 export interface ChirpCommentView {
@@ -58,16 +88,22 @@ export async function listChirps(
   myAccountId: string,
   limit: number,
   admin?: SupabaseClient | null,
+  sort: ChirpSort = "latest",
 ): Promise<ChirpView[]> {
-  const { data } = await supabase
-    .from("chirps")
-    .select(CHIRP_COLUMNS)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  // Reddit-style sort (2026-11-17): "top" ranks the same table by
+  // its denormalised like_count, newest first inside ties.
+  let query = supabase.from("chirps").select(CHIRP_COLUMNS);
+  query =
+    sort === "top"
+      ? query
+          .order("like_count", { ascending: false })
+          .order("created_at", { ascending: false })
+      : query.order("created_at", { ascending: false });
+  const { data } = await query.limit(limit);
   const rows = (data ?? []) as ChirpRow[];
   if (rows.length === 0) return [];
 
-  const [rawProfiles, likesResult] = await Promise.all([
+  const [rawProfiles, likesResult, saved] = await Promise.all([
     getPublicProfilesByIds(
       supabase,
       rows.map((row) => row.author_id),
@@ -80,6 +116,11 @@ export async function listChirps(
         "chirp_id",
         rows.map((row) => row.id),
       ),
+    savedSetForViewer(
+      supabase,
+      myAccountId,
+      rows.map((row) => row.id),
+    ),
   ]);
   const liked = new Set(
     ((likesResult.data ?? []) as Array<{ chirp_id: string }>).map((row) => row.chirp_id),
@@ -100,6 +141,7 @@ export async function listChirps(
     author: profiles.get(row.author_id) ?? null,
     mine: row.author_id === myAccountId,
     likedByMe: liked.has(row.id),
+    savedByMe: saved.has(row.id),
   }));
 }
 
@@ -123,7 +165,7 @@ export async function listChirpsByAuthor(
   const rows = (data ?? []) as ChirpRow[];
   if (rows.length === 0) return [];
 
-  const [rawProfiles, likesResult] = await Promise.all([
+  const [rawProfiles, likesResult, saved] = await Promise.all([
     getPublicProfilesByIds(
       supabase,
       rows.map((row) => row.author_id),
@@ -136,6 +178,11 @@ export async function listChirpsByAuthor(
         "chirp_id",
         rows.map((row) => row.id),
       ),
+    savedSetForViewer(
+      supabase,
+      viewerId,
+      rows.map((row) => row.id),
+    ),
   ]);
   const liked = new Set(
     ((likesResult.data ?? []) as Array<{ chirp_id: string }>).map((row) => row.chirp_id),
@@ -156,7 +203,78 @@ export async function listChirpsByAuthor(
     author: profiles.get(row.author_id) ?? null,
     mine: row.author_id === viewerId,
     likedByMe: liked.has(row.id),
+    savedByMe: saved.has(row.id),
   }));
+}
+
+// My bookmarked chirps, most-recently-saved first — the Saved tab
+// on my own profile (Instagram's Saved, 2026-11-17). Fail-soft []
+// until migration 0021 is applied.
+export async function listSavedChirps(
+  supabase: SupabaseClient,
+  viewerId: string,
+  limit: number,
+  admin?: SupabaseClient | null,
+): Promise<ChirpView[]> {
+  try {
+    const { data: saveData, error } = await supabase
+      .from("chirp_saves")
+      .select("chirp_id, created_at")
+      .eq("account_id", viewerId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return [];
+    const saves = (saveData ?? []) as Array<{ chirp_id: string }>;
+    if (saves.length === 0) return [];
+    const ids = saves.map((row) => row.chirp_id);
+    const { data } = await supabase
+      .from("chirps")
+      .select(CHIRP_COLUMNS)
+      .in("id", ids);
+    const byId = new Map(
+      ((data ?? []) as ChirpRow[]).map((row) => [row.id, row]),
+    );
+    const rows = ids
+      .map((id) => byId.get(id))
+      .filter((row): row is ChirpRow => Boolean(row));
+    if (rows.length === 0) return [];
+
+    const [rawProfiles, likesResult] = await Promise.all([
+      getPublicProfilesByIds(
+        supabase,
+        rows.map((row) => row.author_id),
+      ),
+      supabase
+        .from("chirp_likes")
+        .select("chirp_id")
+        .eq("account_id", viewerId)
+        .in("chirp_id", ids),
+    ]);
+    const liked = new Set(
+      ((likesResult.data ?? []) as Array<{ chirp_id: string }>).map(
+        (row) => row.chirp_id,
+      ),
+    );
+    const profiles = maskDeveloperProfiles(
+      rawProfiles,
+      admin ? await getDeveloperAccountId(admin) : null,
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      body: row.body,
+      imageUrl: row.image_url,
+      createdAt: row.created_at,
+      likeCount: row.like_count,
+      commentCount: row.comment_count,
+      viewCount: row.view_count,
+      author: profiles.get(row.author_id) ?? null,
+      mine: row.author_id === viewerId,
+      likedByMe: liked.has(row.id),
+      savedByMe: true,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function countChirpsByAuthor(

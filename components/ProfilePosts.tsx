@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   deleteChirpAction,
   toggleChirpLikeAction,
+  toggleChirpSaveAction,
 } from "@/app/chirp/actions";
 import type { ChirpView } from "@/lib/chirp";
 
@@ -52,6 +53,16 @@ export default function ProfilePosts({
               likeCount: item.likeCount + (result.liked ? 1 : -1),
             }
           : item,
+      ),
+    );
+  }
+
+  async function toggleSave(chirp: ChirpView): Promise<void> {
+    const result = await toggleChirpSaveAction(chirp.id);
+    if (result.error) return;
+    setChirps((prev) =>
+      prev.map((item) =>
+        item.id === chirp.id ? { ...item, savedByMe: result.saved } : item,
       ),
     );
   }
@@ -111,6 +122,16 @@ export default function ProfilePosts({
               aria-label={open.likedByMe ? "Unlike" : "Like"}
             >
               {open.likedByMe ? "♥" : "♡"} {open.likeCount}
+            </button>
+            <button
+              type="button"
+              onClick={() => void toggleSave(open)}
+              className={`transition ${
+                open.savedByMe ? "text-amber-300" : "text-neutral-400 hover:text-amber-200"
+              }`}
+              aria-label={open.savedByMe ? "Unsave" : "Save"}
+            >
+              🔖 {open.savedByMe ? "Saved" : "Save"}
             </button>
             <Link href="/chirp" className="text-neutral-400 transition hover:text-white">
               💬 {open.commentCount} · Open in Chirp

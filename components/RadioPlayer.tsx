@@ -49,6 +49,10 @@ interface RadioContextValue {
   toggleMute: () => void;
   stop: () => void;
   seek: (seconds: number) => void;
+  // Spotify-style sleep timer (2026-11-17): epoch ms when playback
+  // will pause itself, or null. setSleepTimer(null) cancels.
+  sleepEndsAt: number | null;
+  setSleepTimer: (minutes: number | null) => void;
 }
 
 const RadioContext = createContext<RadioContextValue | null>(null);
@@ -139,6 +143,39 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setCurrentTime(seconds);
   }, []);
 
+  // Sleep timer: one timeout that pauses the shared <audio> when
+  // it fires. Lives in the provider so it survives navigation,
+  // exactly like playback itself.
+  const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null);
+  const sleepTimeoutRef = useRef<number | null>(null);
+  const setSleepTimer = useCallback((minutes: number | null) => {
+    if (sleepTimeoutRef.current !== null) {
+      window.clearTimeout(sleepTimeoutRef.current);
+      sleepTimeoutRef.current = null;
+    }
+    if (minutes === null || minutes <= 0) {
+      setSleepEndsAt(null);
+      return;
+    }
+    setSleepEndsAt(Date.now() + minutes * 60_000);
+    sleepTimeoutRef.current = window.setTimeout(
+      () => {
+        audioRef.current?.pause();
+        setSleepEndsAt(null);
+        sleepTimeoutRef.current = null;
+      },
+      minutes * 60_000,
+    );
+  }, []);
+  useEffect(
+    () => () => {
+      if (sleepTimeoutRef.current !== null) {
+        window.clearTimeout(sleepTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
   // Load + play whenever the track changes.
   useEffect(() => {
     const audio = audioRef.current;
@@ -194,6 +231,8 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     toggleMute,
     stop,
     seek,
+    sleepEndsAt,
+    setSleepTimer,
   };
 
   return (

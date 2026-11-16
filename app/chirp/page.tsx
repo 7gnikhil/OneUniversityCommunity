@@ -27,7 +27,13 @@ import ChirpFeed from "./ChirpFeed";
 //                                     the Campus communities list)
 // View counts are NOT recorded here — /chirp/campus records them,
 // as it always did.
-export default async function ChirpPage() {
+export default async function ChirpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sort?: string }>;
+}) {
+  const { sort: sortParam } = await searchParams;
+  const sort = sortParam === "top" ? ("top" as const) : ("latest" as const);
   const supabase = await createClient();
   const account = await getMyAccount(supabase);
 
@@ -68,7 +74,7 @@ export default async function ChirpPage() {
   // takes the RSS cost off this page.
   const [myProfile, recentChirps] = await Promise.all([
     getProfileByAccountId(supabase, me.id),
-    listChirps(supabase, me.id, 30, admin),
+    listChirps(supabase, me.id, 30, admin, sort),
   ]);
   const trendingChirps = [...recentChirps]
     .filter((chirp) => chirp.likeCount + chirp.commentCount > 0)
@@ -111,6 +117,7 @@ export default async function ChirpPage() {
         accentHex={accent}
         myName={myProfile?.name}
         myPhotoUrl={myProfile?.photo_url}
+        sort={sort}
       />
 
       {trendingChirps.length > 0 ? (

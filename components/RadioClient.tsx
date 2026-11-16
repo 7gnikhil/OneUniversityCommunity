@@ -1061,6 +1061,10 @@ function NowPlaying({
         </button>
       </div>
 
+      {/* Sleep timer (Spotify's small feature, 2026-11-17): music
+          pauses itself — set it and lock the phone. */}
+      <SleepTimerRow />
+
       <div className="flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
@@ -1193,6 +1197,47 @@ function NowPlaying({
 // fetch the same instrumental and play voice + music together,
 // in sync. Publishing uploads to the `covers` bucket and writes
 // the profile_covers row (same path as the profile studio).
+// Sleep timer chips for Now Playing. The countdown re-renders on
+// a 15-second tick while a timer is armed; the actual pause lives
+// in RadioProvider, so this row is pure display + set/cancel.
+function SleepTimerRow() {
+  const radio = useRadio();
+  const [, setTick] = useState<number>(0);
+  const armed = radio.sleepEndsAt !== null;
+  useEffect(() => {
+    if (!armed) return;
+    const id = window.setInterval(() => setTick((value) => value + 1), 15_000);
+    return () => window.clearInterval(id);
+  }, [armed]);
+  const minutesLeft = armed
+    ? Math.max(1, Math.ceil((radio.sleepEndsAt! - Date.now()) / 60_000))
+    : 0;
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+      <span className="text-neutral-500">⏰ Sleep timer</span>
+      {[15, 30, 45, 60].map((minutes) => (
+        <button
+          key={minutes}
+          type="button"
+          onClick={() => radio.setSleepTimer(minutes)}
+          className="rounded-full border border-neutral-700 px-3 py-1 text-neutral-300 transition hover:bg-neutral-900"
+        >
+          {minutes}m
+        </button>
+      ))}
+      {armed ? (
+        <button
+          type="button"
+          onClick={() => radio.setSleepTimer(null)}
+          className="rounded-full bg-amber-500/15 px-3 py-1 font-medium text-amber-300 transition hover:bg-amber-500/25"
+        >
+          Stops in {minutesLeft}m — tap to cancel
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function KaraokeRecorder({
   myAccountId,
   songTitle,

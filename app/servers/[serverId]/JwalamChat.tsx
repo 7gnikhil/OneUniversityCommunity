@@ -415,6 +415,20 @@ function JwalamBubble({
   const author = row.author;
   const mine = author.kind === "mine";
 
+  // Telegram-style copy (2026-11-17): any text post can be copied
+  // straight from the bubble — quotes, confessions, announcements.
+  const [copied, setCopied] = useState<boolean>(false);
+  async function onCopy(): Promise<void> {
+    if (!row.body) return;
+    try {
+      await navigator.clipboard.writeText(row.body);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard unavailable (permissions) — nothing to show.
+    }
+  }
+
   return (
     <div id={`jw-${row.id}`} className={`flex gap-2 ${mine ? "flex-row-reverse" : ""}`}>
       {/* Avatar: real photo ONLY for the moderation identity. */}
@@ -488,8 +502,13 @@ function JwalamBubble({
           <span aria-label={`${row.viewCount} views`}>👁 {row.viewCount}</span>
         </p>
 
-        {mine || isAppAdmin ? (
+        {row.body || mine || isAppAdmin ? (
           <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-neutral-400">
+            {row.body ? (
+              <button type="button" onClick={() => void onCopy()} className="transition hover:text-white">
+                {copied ? "Copied ✓" : "Copy"}
+              </button>
+            ) : null}
             {mine || isAppAdmin ? (
               <button type="button" onClick={onDelete} className="transition hover:text-red-300">
                 Delete
