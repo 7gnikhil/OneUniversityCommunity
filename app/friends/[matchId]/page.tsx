@@ -105,7 +105,7 @@ export default async function ChatPage({
             textClass="text-sm"
           />
           <span className="min-w-0">
-            <span className="block truncate text-sm font-medium">
+            <span className="block truncate text-[15px] font-semibold text-white">
               {otherProfile.name}
             </span>
             <span className="block truncate text-xs text-neutral-500">

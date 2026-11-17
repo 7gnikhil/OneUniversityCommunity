@@ -6,6 +6,8 @@ import { listChirps } from "@/lib/chirp";
 import { listServersForUser, type ServerListEntry } from "@/lib/servers";
 import { accentHex } from "@/lib/validation";
 import PageIntro from "@/components/PageIntro";
+import ChirpSidebar from "@/components/ChirpSidebar";
+import { isMusicMitraEnabled } from "@/lib/server/music-settings";
 import ChirpFeed from "../ChirpFeed";
 
 // Campus Tweets — the full chirp feed on its own page (it used to
@@ -105,7 +107,7 @@ export default async function ChirpCampusPage() {
   }
 
   return (
-    <main data-section="chirp" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
+    <main data-section="chirp" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6 lg:max-w-4xl">
       <div className="flex items-center justify-between">
         <Link href="/chirp" className="text-sm text-neutral-400 transition hover:text-white">
           ← Chirp
@@ -115,17 +117,25 @@ export default async function ChirpCampusPage() {
         </p>
       </div>
 
-      <PageIntro section="chirp-campus" />
+      {/* Same sidebar layout as the hub (owner's fix, 2026-11-17):
+          section switching is one tap from every Chirp page. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <ChirpSidebar musicOff={!(await isMusicMitraEnabled())} />
+        <div className="flex min-w-0 flex-col gap-5">
+          <PageIntro section="chirp-campus" />
 
-      <CampusCommunities entries={communities} />
+          <CampusCommunities entries={communities} />
 
-      <ChirpFeed
-        initialChirps={chirps}
-        myAccountId={me.id}
-        accentHex={accent}
-        myName={myProfile?.name}
-        myPhotoUrl={myProfile?.photo_url}
-      />
+          <ChirpFeed
+            initialChirps={chirps}
+            myAccountId={me.id}
+            accentHex={accent}
+            myName={myProfile?.name}
+            myPhotoUrl={myProfile?.photo_url}
+            showSortTabs={false}
+          />
+        </div>
+      </div>
     </main>
   );
 }

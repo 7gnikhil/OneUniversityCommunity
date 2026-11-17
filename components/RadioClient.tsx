@@ -389,6 +389,42 @@ export default function RadioClient({
         </div>
       ) : null}
 
+      {/* Karaoke entry card — ALWAYS on the page (owner's catch,
+          2026-11-17: karaoke/record/upload were undiscoverable,
+          buried inside Now Playing behind a playing song). */}
+      <section className="flex items-center gap-3 rounded-3xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-transparent p-4">
+        <span className="text-3xl" aria-hidden>
+          🎤
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-white">Karaoke</p>
+          <p className="text-xs leading-relaxed text-neutral-400">
+            Sing over the instrumental, record or upload your cover,
+            post it to your profile.
+          </p>
+        </div>
+        {radio.current ? (
+          <button
+            type="button"
+            onClick={() => {
+              document
+                .getElementById("now-playing")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              window.dispatchEvent(new Event("oneuco:open-karaoke"));
+            }}
+            className="shrink-0 rounded-full bg-amber-500 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-400"
+          >
+            Open karaoke
+          </button>
+        ) : (
+          <span className="shrink-0 rounded-full border border-neutral-700 px-4 py-2 text-center text-[11px] font-medium leading-tight text-neutral-400">
+            Play any song
+            <br />
+            to start
+          </span>
+        )}
+      </section>
+
       <NowPlaying
         favoriteIds={favoriteIds}
         onToggleFavorite={toggleFavorite}
@@ -927,6 +963,59 @@ function NowPlaying({
           ? lrclib
           : null;
 
+  // Lyrics in English (owner's ask, 2026-11-17): a toggle in the
+  // karaoke panel machine-translates the lines (via /api/radio),
+  // keeping the original timing so sync/highlight still works.
+  const [lyricsLang, setLyricsLang] = useState<"original" | "en">("original");
+  const [translated, setTranslated] = useState<{
+    forId: string;
+    texts: string[];
+  } | null>(null);
+  useEffect(() => {
+    if (lyricsLang !== "en" || !lyrics || !baseId) return;
+    if (translated?.forId === baseId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/radio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "translateLyrics",
+            lines: lyrics.lines.map((line) => line.text),
+          }),
+        });
+        const json = (await res.json()) as { lines?: string[] };
+        if (!cancelled && Array.isArray(json.lines)) {
+          setTranslated({ forId: baseId, texts: json.lines });
+        }
+      } catch {
+        // Translation is a garnish — original lyrics stay.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lyricsLang, lyrics, baseId, translated]);
+
+  // The home Karaoke card (and anything else) can ask this panel
+  // to open — discoverability fix, 2026-11-17.
+  useEffect(() => {
+    function openPanel(): void {
+      setKaraokeOpen(true);
+    }
+    window.addEventListener("oneuco:open-karaoke", openPanel);
+    return () => window.removeEventListener("oneuco:open-karaoke", openPanel);
+  }, []);
+
+  const displayLines =
+    lyricsLang === "en" && translated && baseId && translated.forId === baseId
+      ? (lyrics?.lines ?? []).map((line, index) => ({
+          ...line,
+          text: translated.texts[index] ?? line.text,
+        }))
+      : (lyrics?.lines ?? []);
+
   const activeIndex =
     lyrics && current && lyrics.synced
       ? lyrics.lines.reduce(
@@ -975,7 +1064,7 @@ function NowPlaying({
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-3xl border border-amber-500/25 bg-neutral-950 p-4">
+    <section id="now-playing" className="flex flex-col gap-3 scroll-mt-4 rounded-3xl border border-amber-500/25 bg-neutral-950 p-4">
       <div className="flex items-center gap-3">
         {current.image ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -1100,6 +1189,28 @@ function NowPlaying({
 
       {karaokeOpen ? (
         <div className="flex flex-col gap-1.5 rounded-2xl bg-black/60 px-4 py-3">
+          {/* Lyrics language — Original / English (translated). */}
+          <div className="flex items-center justify-center gap-2 pb-1">
+            {(
+              [
+                { id: "original", label: "Original" },
+                { id: "en", label: "🌐 English" },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setLyricsLang(option.id)}
+                className={`rounded-full px-3.5 py-1 text-[11px] font-semibold transition ${
+                  lyricsLang === option.id
+                    ? "bg-amber-500 text-black"
+                    : "border border-neutral-700 text-neutral-300 hover:border-amber-500/60"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           {lyricsLoading ? (
             <p className="py-4 text-center text-sm text-neutral-500">
               Finding the lyrics…
@@ -1113,7 +1224,7 @@ function NowPlaying({
           ) : (
             <>
               <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto scroll-smooth py-1">
-                {lyrics.lines.map((line, index) => {
+                {displayLines.map((line, index) => {
                   const isActive = index === activeIndex;
                   if (!line.text && !isActive) return null;
                   return (
@@ -1182,6 +1293,26 @@ function NowPlaying({
                 lyrics karaoke still works.
               </p>
             ) : null
+          ) : null}
+
+          {/* Record / upload — ALWAYS available in the panel
+              (owner's catch, 2026-11-17: the options were hidden
+              behind the instrumental, which needs the karaoke
+              service). Over the original song the take is
+              voice-only; over the instrumental (above) the
+              profile plays voice + music together. */}
+          {!isKaraokeTrack ? (
+            <div className="flex flex-col items-center gap-1 pt-1">
+              <p className="text-center text-xs font-medium text-neutral-300">
+                🎙 Record or upload your cover
+              </p>
+              <KaraokeRecorder
+                myAccountId={myAccountId}
+                songTitle={current.title.replace(/ \(Karaoke\)$/, "")}
+                songArtist={current.artists}
+                karaokeSongId={null}
+              />
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -1252,10 +1383,12 @@ function KaraokeRecorder({
   const [recording, setRecording] = useState<boolean>(false);
   const [elapsed, setElapsed] = useState<number>(0);
   const [blob, setBlob] = useState<Blob | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<boolean>(false);
   const [message, setMessage] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef<number>(0);
   const durationRef = useRef<number | null>(null);
@@ -1297,6 +1430,7 @@ function KaraokeRecorder({
       };
       setMessage(null);
       setBlob(null);
+      setFileName(null);
       startedAtRef.current = Date.now();
       setElapsed(0);
       recorder.start();
@@ -1306,16 +1440,34 @@ function KaraokeRecorder({
     }
   }
 
+  // Upload an existing recording instead of using the mic
+  // (owner's ask — the option must exist next to Record).
+  function pickFile(file: File | null): void {
+    if (!file) return;
+    if (file.size > 12 * 1024 * 1024) {
+      setMessage("That file is over 12 MB — pick a shorter recording.");
+      return;
+    }
+    setMessage(null);
+    setBlob(file);
+    setFileName(file.name);
+    durationRef.current = null;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(URL.createObjectURL(file));
+  }
+
   async function publish(): Promise<void> {
     if (!blob) return;
     setPublishing(true);
     try {
       const supabase = createClient();
-      const ext = blob.type.includes("mp4")
-        ? "m4a"
-        : blob.type.includes("ogg")
-          ? "ogg"
-          : "webm";
+      const ext = fileName
+        ? (fileName.split(".").pop() ?? "mp3").toLowerCase()
+        : blob.type.includes("mp4")
+          ? "m4a"
+          : blob.type.includes("ogg")
+            ? "ogg"
+            : "webm";
       const path = `${myAccountId}/cover-${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("covers")
@@ -1349,10 +1501,9 @@ function KaraokeRecorder({
   return (
     <div className="flex w-full flex-col items-center gap-2 border-t border-white/5 pt-3">
       <p className="text-center text-[11px] leading-relaxed text-neutral-500">
-        The instrumental keeps playing while you sing — your voice is
-        what gets recorded, and your profile plays them together.
-        🎧 Earphones give the cleanest take (the mic also hears the
-        speaker).
+        {karaokeSongId
+          ? "The instrumental keeps playing while you sing — your voice is what gets recorded, and your profile plays them together. 🎧 Earphones give the cleanest take (the mic also hears the speaker)."
+          : "The song keeps playing while you sing — your voice is what gets recorded. 🎧 Earphones give the cleanest take (the mic also hears the speaker)."}
       </p>
       {recording ? (
         <>
@@ -1370,14 +1521,35 @@ function KaraokeRecorder({
           </button>
         </>
       ) : (
-        <button
-          type="button"
-          onClick={() => void start()}
-          className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200"
-        >
-          🎙 Record my cover
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => void start()}
+            className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200"
+          >
+            🎙 Record my cover
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-full border border-neutral-600 px-5 py-2 text-sm font-semibold text-neutral-100 transition hover:border-neutral-400"
+          >
+            📤 Upload a recording
+          </button>
+        </div>
       )}
+      {fileName && previewUrl ? (
+        <p className="max-w-full truncate text-[11px] text-neutral-500">
+          {fileName}
+        </p>
+      ) : null}
       {previewUrl ? (
         <>
           <audio src={previewUrl} controls className="w-full" preload="metadata" />

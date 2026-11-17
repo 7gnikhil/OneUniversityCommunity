@@ -246,8 +246,13 @@ export default async function ServerPage({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{confirmedServer.name}</p>
+          {/* Discord channel bar (2026-11-17): "# name" + topic line. */}
+          <p className="truncate text-[15px] font-bold text-white">
+            <span className="mr-0.5 text-neutral-500">#</span>
+            {activeChannel?.name ?? confirmedServer.name}
+          </p>
           <p className="truncate text-xs text-neutral-500">
+            {confirmedServer.name} ·{" "}
             {confirmedServer.type === "public"
               ? "Public Tea"
               : confirmedServer.type === "friends_private"
@@ -260,18 +265,23 @@ export default async function ServerPage({
       </header>
 
       {channels.length > 1 ? (
-        <nav className="flex flex-wrap gap-1.5 pt-3">
+        // Discord channel list: full-width # rows, active filled.
+        <nav className="flex flex-col gap-0.5 pt-3">
+          <p className="px-1 pb-1 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+            Text channels
+          </p>
           {channels.map((channelRow) => (
             <Link
               key={channelRow.id}
               href={`/servers/${confirmedServer.id}?channel=${channelRow.id}`}
-              className={`rounded-full px-3 py-1 text-xs transition ${
+              className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[15px] transition ${
                 activeChannel?.id === channelRow.id
-                  ? "bg-white font-medium text-black"
-                  : "border border-neutral-700 text-neutral-300 hover:border-neutral-500"
+                  ? "bg-white/10 font-medium text-white"
+                  : "text-neutral-400 hover:bg-white/5 hover:text-neutral-200"
               }`}
             >
-              # {channelRow.name}
+              <span className="text-lg leading-none text-neutral-500">#</span>
+              {channelRow.name}
             </Link>
           ))}
         </nav>

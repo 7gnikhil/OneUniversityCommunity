@@ -16,6 +16,7 @@ import ProfileTabs from "@/components/ProfileTabs";
 import ProfilePosts from "@/components/ProfilePosts";
 import ProfileCovers from "@/components/ProfileCovers";
 import ShareProfileButton from "@/components/ShareProfileButton";
+import ProfileQr from "@/components/ProfileQr";
 
 // My profile — INSTAGRAM-STYLE (owner's reference screenshots,
 // 2026-11-17): @username + ⚙ on top, avatar beside the stats row
@@ -176,6 +177,7 @@ export default async function ProfilePage() {
           username={account.username}
           path={`/profile/${account.username}`}
         />
+        <ProfileQr username={account.username} />
       </div>
 
       {/* Tabs: Posts · Karaoke · Saved. */}

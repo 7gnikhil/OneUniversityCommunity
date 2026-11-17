@@ -32,14 +32,18 @@ export default function ChirpFeed({
   myName,
   myPhotoUrl,
   sort = "latest",
+  showSortTabs = true,
 }: {
   initialChirps: ChirpView[];
   myAccountId: string;
   accentHex: string;
   myName?: string;
   myPhotoUrl?: string | null;
-  // Reddit-style feed sort, chosen by the page's ?sort= param.
+  // X-style feed sort, chosen by the page's ?sort= param.
   sort?: "latest" | "top";
+  // Campus Tweets mounts the same feed without the hub's tabs
+  // (its Latest/Top choice lives on /chirp).
+  showSortTabs?: boolean;
 }) {
   const [chirps, setChirps] = useState<ChirpView[]>(initialChirps);
   const [draft, setDraft] = useState<string>("");
@@ -251,18 +255,28 @@ export default function ChirpFeed({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col">
+      {/* Composer — X-style (2026-11-17): my avatar beside a
+          borderless "What's happening?!" box, hairline below, the
+          Post pill at the right of the action row. */}
       <form
         onSubmit={(event) => void onPost(event)}
-        className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 p-4"
+        className="flex gap-3 border-b border-neutral-800 pb-4"
       >
+        <Avatar
+          name={myName ?? "?"}
+          photoUrl={myPhotoUrl ?? null}
+          sizeClass="h-10 w-10"
+          textClass="text-sm"
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           rows={3}
           maxLength={500}
-          placeholder="What's happening on campus?"
-          className="w-full resize-none rounded-2xl border border-neutral-800 bg-black px-4 py-3 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+          placeholder="What's happening on campus?!"
+          className="w-full resize-none bg-transparent px-1 py-2 text-base text-white placeholder:text-neutral-500 focus:outline-none"
         />
         {imagePreview ? (
           <div className="relative w-32">
@@ -310,10 +324,10 @@ export default function ChirpFeed({
           <button
             type="submit"
             disabled={posting || scheduling || (!draft.trim() && !imageFile)}
-            className="ml-auto rounded-full px-5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+            className="ml-auto rounded-full px-5 py-2 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
             style={{ backgroundColor: accent }}
           >
-            {posting ? "Posting…" : "Chirp"}
+            {posting ? "Posting…" : "Post"}
           </button>
         </div>
         {scheduleOpen ? (
@@ -369,45 +383,57 @@ export default function ChirpFeed({
             ))}
           </ul>
         ) : null}
+        </div>
       </form>
 
       {error ? (
-        <p className="text-sm text-red-400" role="alert">
+        <p className="mt-4 text-sm text-red-400" role="alert">
           {error}
         </p>
       ) : null}
 
-      {/* Feed sort — Reddit's Latest/Top idiom. Links (not state)
-          so the choice survives refresh and can be shared. */}
-      <div className="flex items-center gap-2">
-        <Link
-          href="/chirp"
-          className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
-            sort === "latest"
-              ? "bg-white text-black"
-              : "border border-neutral-700 text-neutral-300 hover:bg-neutral-900"
-          }`}
-        >
-          Latest
-        </Link>
-        <Link
-          href="/chirp?sort=top"
-          className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
-            sort === "top"
-              ? "bg-white text-black"
-              : "border border-neutral-700 text-neutral-300 hover:bg-neutral-900"
-          }`}
-        >
-          Top
-        </Link>
+      {/* Feed sort — X's timeline tabs (2026-11-17): two halves,
+          the active one bold with an accent underline bar. Links
+          (not state) so the choice survives refresh and sharing. */}
+      {showSortTabs ? (
+      <div className="flex border-b border-neutral-800">
+        {(
+          [
+            { id: "latest", label: "Latest", href: "/chirp" },
+            { id: "top", label: "Top", href: "/chirp?sort=top" },
+          ] as const
+        ).map((tab) => (
+          <Link
+            key={tab.id}
+            href={tab.href}
+            className="relative flex-1 py-3.5 text-center text-sm transition hover:bg-white/[0.03]"
+          >
+            <span
+              className={
+                sort === tab.id
+                  ? "font-bold text-white"
+                  : "font-medium text-neutral-500"
+              }
+            >
+              {tab.label}
+            </span>
+            {sort === tab.id ? (
+              <span
+                className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full"
+                style={{ backgroundColor: accent }}
+              />
+            ) : null}
+          </Link>
+        ))}
       </div>
+      ) : null}
 
       {chirps.length === 0 ? (
         <p className="py-10 text-center text-sm text-neutral-500">
           No chirps yet — post the first one.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col">
           {chirps.map((chirp) => (
             <ChirpCard
               key={chirp.id}
@@ -472,12 +498,18 @@ function ChirpCard({
   const [commentBusy, setCommentBusy] = useState<boolean>(false);
   const [commentError, setCommentError] = useState<string | null>(null);
 
-  const time = new Date(chirp.createdAt).toLocaleString([], {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  // X-style relative time ("3h") for the header line.
+  const time = commentTimeAgo(chirp.createdAt);
+
+  // Double-tap-to-like (Instagram, owner's "yes add" 2026-11-17):
+  // a double tap on the photo likes — never unlikes — with a
+  // heart burst over the image.
+  const [heartBurst, setHeartBurst] = useState<boolean>(false);
+  function onPhotoDoubleTap(): void {
+    if (!chirp.likedByMe) onLike();
+    setHeartBurst(true);
+    window.setTimeout(() => setHeartBurst(false), 650);
+  }
 
   async function toggleComments(): Promise<void> {
     if (!commentsOpen) {
@@ -505,61 +537,90 @@ function ChirpCard({
   }
 
   return (
-    <li className="rounded-3xl border border-neutral-800 bg-neutral-950 p-4">
+    <li className="border-b border-neutral-800 py-4">
       <div className="flex gap-3">
-        <Avatar
-          name={chirp.author?.name ?? "?"}
-          photoUrl={chirp.author?.photoUrl ?? null}
-          developer={chirp.author?.developer}
-          sizeClass="h-10 w-10"
-          textClass="text-sm"
-        />
+        {chirp.author && !chirp.author.developer ? (
+          <Link
+            href={`/profile/${chirp.author.username}`}
+            aria-label={`Open @${chirp.author.username}'s profile`}
+            className="shrink-0 transition hover:opacity-85"
+          >
+            <Avatar
+              name={chirp.author.name}
+              photoUrl={chirp.author.photoUrl}
+              sizeClass="h-10 w-10"
+              textClass="text-sm"
+            />
+          </Link>
+        ) : (
+          <Avatar
+            name={chirp.author?.name ?? "?"}
+            photoUrl={chirp.author?.photoUrl ?? null}
+            developer={chirp.author?.developer}
+            sizeClass="h-10 w-10"
+            textClass="text-sm"
+          />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             {chirp.author?.developer ? (
               // Masked developer projection: plain name, no profile
               // link, no @handle (developer anonymity rule).
-              <span className="text-sm font-medium">{chirp.author.name}</span>
+              <span className="text-[15px] font-bold text-white">{chirp.author.name}</span>
             ) : chirp.author ? (
-              <Link href={`/profile/${chirp.author.username}`} className="text-sm font-medium transition hover:underline">
+              <Link href={`/profile/${chirp.author.username}`} className="text-[15px] font-bold text-white transition hover:underline">
                 {chirp.author.name}
               </Link>
             ) : (
-              <span className="text-sm font-medium text-neutral-400">A student</span>
+              <span className="text-[15px] font-bold text-neutral-400">A student</span>
             )}
             {chirp.author && !chirp.author.developer ? (
-              <span className="text-xs text-neutral-500">@{chirp.author.username}</span>
+              <span className="truncate text-sm text-neutral-500">@{chirp.author.username}</span>
             ) : null}
-            <span className="text-[11px] text-neutral-600">{time}</span>
+            <span className="shrink-0 text-sm text-neutral-500">· {time}</span>
           </div>
           {chirp.body ? (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-100">
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-neutral-100">
               {chirp.body}
             </p>
           ) : null}
           {chirp.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={chirp.imageUrl} alt="Chirp photo" className="mt-2 max-h-72 w-full rounded-2xl object-cover" />
+            <div className="relative mt-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={chirp.imageUrl}
+                alt="Chirp photo"
+                onDoubleClick={onPhotoDoubleTap}
+                className="max-h-80 w-full rounded-2xl border border-neutral-800 object-cover"
+              />
+              {heartBurst ? (
+                <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-7xl text-rose-500 drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]">
+                  ♥
+                </span>
+              ) : null}
+            </div>
           ) : null}
-          <div className="mt-2 flex items-center gap-5 text-xs text-neutral-500">
-            <button
-              type="button"
-              onClick={onLike}
-              className={`transition hover:text-white ${chirp.likedByMe ? "font-semibold text-rose-400" : ""}`}
-            >
-              {chirp.likedByMe ? "♥" : "♡"} {chirp.likeCount}
-            </button>
-            <button type="button" onClick={() => void toggleComments()} className="transition hover:text-white">
+          {/* X action bar: spread edge to edge — reply, like,
+              views, save. */}
+          <div className="mt-3 flex max-w-md items-center justify-between text-[13px] text-neutral-500">
+            <button type="button" onClick={() => void toggleComments()} className="transition hover:text-sky-400">
               💬 {chirp.commentCount}
             </button>
             <button
               type="button"
+              onClick={onLike}
+              className={`transition hover:text-rose-400 ${chirp.likedByMe ? "font-semibold text-rose-500" : ""}`}
+            >
+              {chirp.likedByMe ? "♥" : "♡"} {chirp.likeCount}
+            </button>
+            <span aria-label={`${chirp.viewCount} views`}>👁 {chirp.viewCount}</span>
+            <button
+              type="button"
               onClick={onSave}
-              className={`transition hover:text-white ${chirp.savedByMe ? "font-semibold text-amber-300" : ""}`}
+              className={`transition hover:text-amber-300 ${chirp.savedByMe ? "font-semibold text-amber-300" : ""}`}
             >
               🔖 {chirp.savedByMe ? "Saved" : "Save"}
             </button>
-            <span aria-label={`${chirp.viewCount} views`}>👁 {chirp.viewCount}</span>
             {chirp.mine ? (
               <button type="button" onClick={onDelete} className="transition hover:text-red-300">
                 Delete
@@ -623,22 +684,44 @@ function ChirpCard({
               ) : (
                 comments.map((comment) => (
                   <div key={comment.id} className="flex gap-2.5">
-                    <Avatar
-                      name={comment.author?.name ?? "?"}
-                      photoUrl={comment.author?.photoUrl ?? null}
-                      developer={comment.author?.developer}
-                      sizeClass="h-8 w-8"
-                      textClass="text-xs"
-                    />
+                    {comment.author && !comment.author.developer ? (
+                      <Link
+                        href={`/profile/${comment.author.username}`}
+                        aria-label={`Open @${comment.author.username}'s profile`}
+                        className="shrink-0 transition hover:opacity-85"
+                      >
+                        <Avatar
+                          name={comment.author.name}
+                          photoUrl={comment.author.photoUrl}
+                          sizeClass="h-8 w-8"
+                          textClass="text-xs"
+                        />
+                      </Link>
+                    ) : (
+                      <Avatar
+                        name={comment.author?.name ?? "?"}
+                        photoUrl={comment.author?.photoUrl ?? null}
+                        developer={comment.author?.developer}
+                        sizeClass="h-8 w-8"
+                        textClass="text-xs"
+                      />
+                    )}
                     <div className="min-w-0">
                       <p className="text-xs">
-                        <span className="font-medium text-white">
-                          {comment.author?.developer
-                            ? comment.author.name
-                            : comment.author && !comment.author.developer
-                              ? `@${comment.author.username}`
-                              : (comment.author?.name ?? "A student")}
-                        </span>{" "}
+                        {comment.author?.developer ? (
+                          <span className="font-medium text-white">
+                            {comment.author.name}
+                          </span>
+                        ) : comment.author ? (
+                          <Link
+                            href={`/profile/${comment.author.username}`}
+                            className="font-medium text-white transition hover:underline"
+                          >
+                            @{comment.author.username}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-white">A student</span>
+                        )}{" "}
                         <span className="text-neutral-500">
                           {commentTimeAgo(comment.createdAt)}
                         </span>

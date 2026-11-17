@@ -99,6 +99,47 @@ export default async function FriendsPage() {
 
       <PageIntro section="friends" />
 
+      {/* Online-now rail (Discord, queued feature approved
+          2026-11-17): friends who are online right now, one tap
+          into the chat. Only friends who share their status ever
+          appear — onlineIds is already privacy-shaped. */}
+      {entries.some((entry) => onlineIds.has(entry.other.accountId)) ? (
+        <div className="flex gap-3 overflow-x-auto pb-1 pt-1">
+          {entries
+            .filter((entry) => onlineIds.has(entry.other.accountId))
+            .map((entry) => {
+              const name = entry.other.name.trim()
+                ? entry.other.name
+                : `@${entry.other.username}`;
+              return (
+                <Link
+                  key={entry.matchId}
+                  href={`/friends/${entry.matchId}`}
+                  className="flex w-16 shrink-0 flex-col items-center gap-1.5"
+                >
+                  <span className="relative">
+                    <Avatar
+                      name={name}
+                      photoUrl={entry.other.photoUrl}
+                      alt={name}
+                      letter={name.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
+                      sizeClass="h-14 w-14"
+                      textClass="text-lg"
+                    />
+                    <span
+                      className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-black"
+                      aria-label="Online now"
+                    />
+                  </span>
+                  <span className="w-full truncate text-center text-[11px] text-neutral-300">
+                    {name.split(" ")[0]}
+                  </span>
+                </Link>
+              );
+            })}
+        </div>
+      ) : null}
+
       {entries.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 px-6 py-10 text-center">
           <p className="text-base font-semibold">No matches yet</p>
@@ -136,6 +177,9 @@ function formatTime(iso: string): string {
   if (sameDay) {
     return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
+  // WhatsApp's list voice: "Yesterday", then the date.
+  const yesterday = new Date(Date.now() - 86_400_000);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
   return date.toLocaleDateString([], { day: "numeric", month: "short" });
 }
 
@@ -154,16 +198,20 @@ function DmRow({
   const displayName = other.name.trim() ? other.name : `@${other.username}`;
   const preview = lastMessage
     ? lastMessage.body
-      ? `${lastMessage.fromMe ? "You: " : ""}${lastMessage.body}`
+      ? lastMessage.body
       : lastMessage.fromMe
-        ? "You sent a photo"
-        : "Sent you a photo"
+        ? "📷 Photo"
+        : "📷 Photo"
     : "Say hello 👋";
+  const hasUnread = entry.unreadCount > 0;
   return (
     <li>
+      {/* WhatsApp chat list row (2026-11-17): 48px avatar, name +
+          time on line one (time turns WhatsApp green when unread),
+          tick + preview + green count badge on line two. */}
       <Link
         href={`/friends/${entry.matchId}`}
-        className="flex items-center gap-3 py-3 transition hover:bg-neutral-950"
+        className="flex items-center gap-3 px-1 py-3 transition hover:bg-white/[0.03]"
       >
         <span className="relative shrink-0">
           <Avatar
@@ -183,22 +231,37 @@ function DmRow({
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-sm font-medium">{displayName}</span>
+            <span className="truncate text-[15px] font-medium text-white">{displayName}</span>
             {lastMessage ? (
-              <span className="shrink-0 text-[11px] text-neutral-500">
+              <span
+                className={`shrink-0 text-xs ${
+                  hasUnread ? "font-medium text-emerald-400" : "text-neutral-500"
+                }`}
+              >
                 {formatTime(lastMessage.createdAt)}
               </span>
             ) : null}
           </span>
           <span className="mt-0.5 flex items-center justify-between gap-2">
-            <span className="truncate text-xs text-neutral-500">
-              {preview}
+            <span
+              className={`flex min-w-0 items-center gap-1 truncate text-sm ${
+                hasUnread ? "font-medium text-neutral-200" : "text-neutral-400"
+              }`}
+            >
+              {lastMessage?.fromMe ? (
+                <span
+                  className={`shrink-0 text-[13px] leading-none ${
+                    lastMessage.read ? "text-[#53bdeb]" : "text-neutral-500"
+                  }`}
+                  aria-label={lastMessage.read ? "Read" : lastMessage.delivered ? "Delivered" : "Sent"}
+                >
+                  {lastMessage.delivered || lastMessage.read ? "✓✓" : "✓"}
+                </span>
+              ) : null}
+              <span className="truncate">{preview}</span>
             </span>
-            {entry.unreadCount > 0 ? (
-              <span
-                className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold text-white"
-                style={{ backgroundColor: accent }}
-              >
+            {hasUnread ? (
+              <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-bold text-black">
                 {entry.unreadCount > 99 ? "99+" : entry.unreadCount}
               </span>
             ) : null}

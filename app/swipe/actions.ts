@@ -4,6 +4,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getAccountByAuthUserId, type AccountRow } from "@/lib/auth/account";
 import { orderedPair, type MatchRow } from "@/lib/social";
 import { getNotifyDisplayName, notifyAccount } from "@/lib/push";
+import { deliverInboxItem } from "@/lib/inbox";
 
 export interface SwipeResult {
   matched: boolean;
@@ -27,6 +28,7 @@ const NO_MATCH: SwipeResult = { matched: false, matchId: null, error: null };
 export async function recordSwipeAction(
   candidateId: string,
   direction: "like" | "pass",
+  superLike = false,
 ): Promise<SwipeResult> {
   const supabase = await createClient();
   const {
@@ -65,12 +67,40 @@ export async function recordSwipeAction(
     .limit(1);
   if ((blockData ?? []).length > 0) return NO_MATCH;
 
+  // Super Like (Tinder pattern, 2026-11-17): ONE per day. The
+  // limit check reads through the service role and fails closed
+  // with a friendly message until migration 0022 (is_super) lands.
+  const isSuper = superLike && direction === "like";
+  if (isSuper) {
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const { count, error: countError } = await admin
+      .from("swipes")
+      .select("id", { count: "exact", head: true })
+      .eq("swiper_id", me.id)
+      .eq("is_super", true)
+      .gte("created_at", dayStart.toISOString());
+    if (countError) {
+      return { ...NO_MATCH, error: "Super Likes are still being set up ⭐" };
+    }
+    if ((count ?? 0) >= 1) {
+      return {
+        ...NO_MATCH,
+        error: "You've used today's Super Like — it comes back tomorrow ⭐",
+      };
+    }
+  }
+
   // Record the swipe (unique per pair — a repeat swipe is a no-op).
-  const { error: swipeError } = await supabase.from("swipes").insert({
+  const swipeRow: Record<string, unknown> = {
     swiper_id: me.id,
     swipee_id: candidateId,
     direction,
-  });
+  };
+  if (isSuper) swipeRow.is_super = true;
+  const { error: swipeError } = await supabase
+    .from("swipes")
+    .insert(swipeRow as never);
   if (swipeError && !swipeError.message.includes("swipes_swiper_id_swipee_id_key")) {
     return { ...NO_MATCH, error: "That swipe didn't save — please try again." };
   }
@@ -86,7 +116,29 @@ export async function recordSwipeAction(
     .eq("swipee_id", me.id)
     .eq("direction", "like")
     .maybeSingle();
-  if (!theirSwipe) return NO_MATCH;
+  if (!theirSwipe) {
+    // A Super Like that doesn't (yet) match still lands: push +
+    // an Inbox notice, and the sender's card is badged "Super
+    // liked you" at the top of the receiver's deck.
+    if (isSuper) {
+      const myName = await getNotifyDisplayName(admin, me.id);
+      await notifyAccount(admin, candidateId, {
+        title: "⭐ Super Like",
+        body: `${myName} super liked you on Fling — you're at the top of their deck.`,
+        url: "/swipe",
+        tag: `super-${me.id}`,
+      });
+      await deliverInboxItem(
+        admin,
+        candidateId,
+        "super_like",
+        "⭐ You got a Super Like",
+        `${myName} super liked you on Fling. Open Fling — they'll be right at the top of your deck.`,
+        me.id,
+      );
+    }
+    return NO_MATCH;
+  }
 
   // Mutual like -> match. Stored under the canonical ordered pair so the
   // UNIQUE(account_a, account_b) constraint keeps one row per pair.
@@ -119,6 +171,63 @@ export async function recordSwipeAction(
   });
 
   return { matched: true, matchId: match.id, error: null };
+}
+
+// Rewind (Tinder pattern, 2026-11-17): undo my LAST swipe. A pass
+// or an unmatched like deletes cleanly (a Super Like refunds the
+// day's slot, since the limit counts live rows). A like that
+// already created a MATCH cannot be rewound — matches are kept by
+// design; unmatching is a separate, deliberate act in Homies.
+export async function undoLastSwipeAction(): Promise<{
+  error: string | null;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Please sign in again." };
+
+  const account = await getAccountByAuthUserId(supabase, user.id);
+  if (!account) return { error: "Your account isn't finished yet." };
+  const myId: string = account.id;
+
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: "Rewind isn't fully configured yet." };
+  }
+
+  const { data: lastData } = await admin
+    .from("swipes")
+    .select("id, swipee_id, direction")
+    .eq("swiper_id", myId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const last = (lastData ?? null) as {
+    id: string;
+    swipee_id: string;
+    direction: string;
+  } | null;
+  if (!last) return { error: "Nothing to rewind — that card is gone." };
+
+  if (last.direction === "like") {
+    const pair = orderedPair(myId, last.swipee_id);
+    const { data: matchData } = await admin
+      .from("matches")
+      .select("id")
+      .eq("account_a", pair.account_a)
+      .eq("account_b", pair.account_b)
+      .maybeSingle();
+    if (matchData) {
+      return { error: "That one matched — rewind can't undo a match 💛" };
+    }
+  }
+
+  const { error } = await admin.from("swipes").delete().eq("id", last.id);
+  if (error) return { error: "Couldn't rewind — please try again." };
+  return { error: null };
 }
 
 // "Start again" after the deck is exhausted: forgets ONLY my passes, so

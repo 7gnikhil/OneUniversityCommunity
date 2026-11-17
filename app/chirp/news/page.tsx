@@ -7,6 +7,8 @@ import {
   resolveRegionForAccount,
 } from "@/lib/news";
 import NewsSection from "@/components/NewsSection";
+import ChirpSidebar from "@/components/ChirpSidebar";
+import { isMusicMitraEnabled } from "@/lib/server/music-settings";
 
 // Live News — its own page (it used to be a collapsible block on
 // /chirp; the hub keeps only the teaser card now). Same gate as
@@ -44,7 +46,7 @@ export default async function ChirpNewsPage() {
   ]);
 
   return (
-    <main data-section="chirp" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
+    <main data-section="chirp" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6 lg:max-w-4xl">
       <div className="flex items-center justify-between">
         <Link href="/chirp" className="text-sm text-neutral-400 transition hover:text-white">
           ← Chirp
@@ -54,11 +56,20 @@ export default async function ChirpNewsPage() {
         </p>
       </div>
 
-      <NewsSection
-        initialNews={initialNews}
-        initialWeather={initialWeather}
-        regionLabel={region.label}
-      />
+      {/* Same sidebar layout as the hub (owner's fix, 2026-11-17):
+          the section nav lives on EVERY Chirp page, so switching
+          Explore ↔ Popular ↔ Campus Tweets is one tap from
+          anywhere — no trip back to the hub first. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <ChirpSidebar musicOff={!(await isMusicMitraEnabled())} />
+        <div className="flex min-w-0 flex-col gap-5">
+          <NewsSection
+            initialNews={initialNews}
+            initialWeather={initialWeather}
+            regionLabel={region.label}
+          />
+        </div>
+      </div>
     </main>
   );
 }

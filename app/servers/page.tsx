@@ -84,16 +84,24 @@ export default async function ServersPage() {
         </p>
       ) : null}
 
-      <ul className="flex flex-col gap-2">
-        {entries.map((entry) => (
-          <ServerRow
-            key={entry.server.id}
-            entry={entry}
-            unreadCount={unread[entry.server.id] ?? 0}
-            accent={accent}
-          />
-        ))}
-      </ul>
+      {/* Discord server list (2026-11-17): flat rows under an
+          uppercase category header; unread = white bold name +
+          red count pill, Discord-style. */}
+      <div className="flex flex-col">
+        <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+          Your servers
+        </p>
+        <ul className="flex flex-col gap-0.5">
+          {entries.map((entry) => (
+            <ServerRow
+              key={entry.server.id}
+              entry={entry}
+              unreadCount={unread[entry.server.id] ?? 0}
+              accent={accent}
+            />
+          ))}
+        </ul>
+      </div>
       {entries.length === 0 && adminReady ? (
         <p className="py-6 text-center text-sm text-neutral-500">
           No teas yet — brew the first one below.
@@ -124,7 +132,7 @@ function ServerRow({
     <li>
       <Link
         href={`/servers/${server.id}`}
-        className="flex items-center gap-3 rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3 transition hover:border-neutral-600"
+        className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-white/5"
       >
         {server.icon_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -140,7 +148,13 @@ function ServerRow({
         )}
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">{server.name}</span>
+            <span
+              className={`truncate text-[15px] ${
+                unreadCount > 0 ? "font-bold text-white" : "font-medium text-neutral-200"
+              }`}
+            >
+              {server.name}
+            </span>
             {server.is_main_channel ? (
               <span className="shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-amber-300">
                 Main
@@ -157,10 +171,7 @@ function ServerRow({
           </span>
         </span>
         {unreadCount > 0 ? (
-          <span
-            className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold text-white"
-            style={{ backgroundColor: accent }}
-          >
+          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#f23f43] px-1.5 text-[11px] font-bold text-white">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         ) : null}

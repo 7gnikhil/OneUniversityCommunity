@@ -323,12 +323,29 @@ export default function ChatView({
           </p>
         ) : (
           <>
-            {messages.map((row) => (
-              <Bubble key={row.id} row={row} mine={row.sender_id === myAccountId} accent={accent} />
-            ))}
+            {messages.map((row, index) => {
+              // WhatsApp date divider chips between days.
+              const prev = messages[index - 1];
+              const newDay =
+                !prev ||
+                new Date(prev.created_at).toDateString() !==
+                  new Date(row.created_at).toDateString();
+              return (
+                <div key={row.id} className="flex flex-col gap-2">
+                  {newDay ? (
+                    <div className="flex justify-center py-1">
+                      <span className="rounded-lg bg-neutral-800 px-3 py-1 text-[11px] font-medium text-neutral-300 shadow">
+                        {dayLabel(row.created_at)}
+                      </span>
+                    </div>
+                  ) : null}
+                  <Bubble row={row} mine={row.sender_id === myAccountId} accent={accent} />
+                </div>
+              );
+            })}
             {peerTyping ? (
               <div className="flex justify-start">
-                <div className="flex items-center gap-1 rounded-3xl bg-neutral-900 px-4 py-3">
+                <div className="flex items-center gap-1 rounded-lg rounded-tl-none bg-[#1f2c34] px-4 py-3">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400" />
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400 [animation-delay:150ms]" />
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400 [animation-delay:300ms]" />
@@ -361,6 +378,8 @@ export default function ChatView({
         </p>
       ) : null}
 
+      {/* WhatsApp composer (2026-11-17): one pill bar with the
+          attach button inside, circular green send beside it. */}
       <form onSubmit={(event) => void onSend(event)} className="flex items-end gap-2 pb-2">
         <input
           ref={fileInputRef}
@@ -369,36 +388,52 @@ export default function ChatView({
           className="hidden"
           onChange={(event) => pickImage(event.target.files?.[0] ?? null)}
         />
-        <button
-          type="button"
-          aria-label="Attach a photo"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-neutral-700 text-lg text-neutral-300 transition hover:bg-neutral-900"
-        >
-          +
-        </button>
-        <textarea
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            emitTyping(event.target.value);
-          }}
-          rows={1}
-          maxLength={2000}
-          placeholder={`Message ${otherName}…`}
-          className="max-h-32 min-h-11 flex-1 resize-none rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
-        />
+        <div className="flex min-h-11 flex-1 items-end rounded-3xl bg-[#1f2c34] px-2 py-1">
+          <button
+            type="button"
+            aria-label="Attach a photo"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl text-neutral-400 transition hover:text-white"
+          >
+            +
+          </button>
+          <textarea
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              emitTyping(event.target.value);
+            }}
+            rows={1}
+            maxLength={2000}
+            placeholder="Message"
+            className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] text-white placeholder:text-neutral-500 focus:outline-none"
+          />
+        </div>
         <button
           type="submit"
           disabled={sending || (!draft.trim() && !imageFile)}
-          className="h-11 shrink-0 rounded-full px-5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
-          style={{ backgroundColor: accent }}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-base text-white shadow transition hover:bg-[#06cf9c] disabled:opacity-40"
+          aria-label="Send"
         >
-          {sending ? "…" : "Send"}
+          {sending ? "…" : "➤"}
         </button>
       </form>
     </div>
   );
+}
+
+// WhatsApp date-divider label: Today / Yesterday / full date.
+function dayLabel(iso: string): string {
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(Date.now() - 86_400_000);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString([], {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function Bubble({
@@ -414,25 +449,30 @@ function Bubble({
     hour: "numeric",
     minute: "2-digit",
   });
+  // True WhatsApp dark bubbles (2026-11-17): mine #005c4b with a
+  // squared top-right corner, theirs #1f2c34 squared top-left —
+  // the section accent no longer paints DM bubbles.
+  void accent;
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[78%] rounded-3xl px-4 py-2.5 text-sm leading-relaxed ${
-          mine ? "text-white" : "bg-neutral-900 text-neutral-100"
+        className={`max-w-[80%] px-3 py-2 text-[14.5px] leading-relaxed shadow ${
+          mine
+            ? "rounded-lg rounded-tr-none bg-[#005c4b] text-white"
+            : "rounded-lg rounded-tl-none bg-[#1f2c34] text-neutral-100"
         }`}
-        style={mine ? { backgroundColor: accent } : undefined}
       >
         {row.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={row.image_url}
             alt="Shared photo"
-            className="mb-1 max-h-64 w-full rounded-2xl object-cover"
+            className="mb-1 max-h-64 w-full rounded-lg object-cover"
           />
         ) : null}
         {row.body ? <p className="whitespace-pre-wrap break-words">{row.body}</p> : null}
         <p className="mt-1 flex items-center justify-end gap-1 text-right text-[10px] leading-none">
-          <span className={mine ? "text-white/70" : "text-neutral-500"}>{time}</span>
+          <span className={mine ? "text-white/60" : "text-neutral-500"}>{time}</span>
           {mine ? <Ticks row={row} /> : null}
         </p>
       </div>
@@ -440,29 +480,29 @@ function Bubble({
   );
 }
 
-// WhatsApp-style ticks for my own messages, OneUco colours:
-//   one grey tick  — sent (only created_at so far)
-//   two grey ticks — delivered (their client has the message)
-//   two YELLOW ticks — viewed (they opened the chat)
+// WhatsApp ticks for my own messages, in WhatsApp's own colours:
+//   one grey tick   — sent (only created_at so far)
+//   two grey ticks  — delivered (their client has the message)
+//   two BLUE ticks  — read (they opened the chat), #53bdeb
 // If the other party turned read receipts off, the server strips
-// read_at from what I receive, so the ticks simply never turn yellow.
+// read_at from what I receive, so the ticks simply never turn blue.
 function Ticks({ row }: { row: MessageRow }) {
   if (row.read_at) {
     return (
-      <span className="font-semibold tracking-[-0.2em] text-amber-400" aria-label="Viewed">
+      <span className="font-semibold tracking-[-0.2em] text-[#53bdeb]" aria-label="Read">
         ✓✓
       </span>
     );
   }
   if (row.delivered_at) {
     return (
-      <span className="font-semibold tracking-[-0.2em] text-white/70" aria-label="Delivered">
+      <span className="font-semibold tracking-[-0.2em] text-white/60" aria-label="Delivered">
         ✓✓
       </span>
     );
   }
   return (
-    <span className="font-semibold text-white/70" aria-label="Sent">
+    <span className="font-semibold text-white/60" aria-label="Sent">
       ✓
     </span>
   );

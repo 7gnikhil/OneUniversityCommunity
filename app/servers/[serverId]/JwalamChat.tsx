@@ -353,8 +353,12 @@ export default function JwalamChat({
         </p>
       ) : null}
 
-      {/* Pill composer */}
-      <form onSubmit={(event) => void onSend(event)} className="flex items-end gap-2 pb-2">
+      {/* Discord composer (2026-11-17): rounded bar, circled +
+          attach, blurple send — same idiom as the Tea channels. */}
+      <form
+        onSubmit={(event) => void onSend(event)}
+        className="mb-2 flex items-center gap-2 rounded-lg bg-neutral-800/70 px-3 py-1.5"
+      >
         <input
           ref={fileInputRef}
           type="file"
@@ -362,31 +366,28 @@ export default function JwalamChat({
           className="hidden"
           onChange={(event) => pickImage(event.target.files?.[0] ?? null)}
         />
-        <div className="flex min-h-11 flex-1 items-center rounded-full border border-neutral-800 bg-neutral-950 pl-2 pr-4 focus-within:border-neutral-500">
-          <button
-            type="button"
-            aria-label="Attach a photo"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg text-neutral-400 transition hover:bg-neutral-900 hover:text-white"
-          >
-            +
-          </button>
-          <input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            maxLength={2000}
-            placeholder="Message anonymously…"
-            className="min-w-0 flex-1 bg-transparent px-2 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:outline-none"
-          />
-        </div>
+        <button
+          type="button"
+          aria-label="Attach a photo"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-400 text-base font-bold leading-none text-neutral-900 transition hover:bg-white"
+        >
+          +
+        </button>
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          maxLength={2000}
+          placeholder="Message #maya-jwalam anonymously…"
+          className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none"
+        />
         <button
           type="submit"
           disabled={sending || (!draft.trim() && !imageFile)}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
-          style={{ backgroundColor: accent }}
+          className="shrink-0 rounded-md bg-[#5865F2] px-4 py-1.5 text-sm font-medium text-white transition hover:bg-[#4752c4] disabled:opacity-40"
           aria-label="Send"
         >
-          {sending ? "…" : "➤"}
+          {sending ? "…" : "Send"}
         </button>
       </form>
     </div>
@@ -429,49 +430,59 @@ function JwalamBubble({
     }
   }
 
+  // Discord row layout (2026-11-17): flat full-width rows —
+  // avatar left, name + time header, body under. ANONYMITY IS
+  // UNCHANGED: no profile links here ever (the tap-to-profile
+  // rule's one exception), anonymous stays 👤 "Anonymous", the
+  // real photo/name appears ONLY in the admin moderation shape.
+  // No grouping either — anonymous neighbours can't be told apart,
+  // so every post carries its own header.
   return (
-    <div id={`jw-${row.id}`} className={`flex gap-2 ${mine ? "flex-row-reverse" : ""}`}>
-      {/* Avatar: real photo ONLY for the moderation identity. */}
+    <div
+      id={`jw-${row.id}`}
+      className="-mx-2 flex gap-3 rounded px-2 py-0.5 transition hover:bg-white/[0.03]"
+    >
       {author.kind === "moderation" ? (
         author.profile?.photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={author.profile.photoUrl}
             alt=""
-            className="h-8 w-8 shrink-0 self-end rounded-full object-cover"
+            className="h-10 w-10 shrink-0 rounded-full object-cover"
           />
         ) : (
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center self-end rounded-full bg-neutral-800 text-[11px] font-semibold text-neutral-400">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-sm font-semibold text-neutral-400">
             {(author.profile?.name ?? "?").charAt(0).toUpperCase()}
           </span>
         )
       ) : (
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center self-end rounded-full bg-neutral-800 text-[11px] text-neutral-500">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-base text-neutral-500">
           {author.kind === "admin-post" ? "🛡" : "👤"}
         </span>
       )}
 
-      <div
-        className={`max-w-[78%] px-3.5 py-2 text-sm leading-relaxed ${
-          mine
-            ? "rounded-3xl rounded-br-md text-white"
-            : "rounded-3xl rounded-bl-md bg-neutral-900 text-neutral-100"
-        }`}
-        style={mine ? { backgroundColor: accent } : undefined}
-      >
-        {/* Identity line — only the shapes the projection allows. */}
-        {author.kind === "admin-post" ? (
-          <p className="mb-0.5 text-[11px] font-semibold text-amber-300">Admin</p>
-        ) : null}
-        {author.kind === "moderation" ? (
-          <p className="mb-0.5 text-[11px] font-semibold text-red-300">
-            {author.profile ? `${author.profile.name} · @${author.profile.username}` : "Unknown poster"}
-            <span className="ml-1 font-normal text-red-300/70">(moderation view)</span>
-          </p>
-        ) : null}
-        {!mine && author.kind === "anonymous" ? (
-          <p className="mb-0.5 text-[11px] font-medium text-neutral-500">Anonymous</p>
-        ) : null}
+      <div className="min-w-0 flex-1 text-[15px] leading-relaxed text-neutral-100">
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          {author.kind === "admin-post" ? (
+            <span className="text-[15px] font-semibold text-amber-300">Admin</span>
+          ) : author.kind === "moderation" ? (
+            <span className="text-[15px] font-semibold text-red-300">
+              {author.profile ? `${author.profile.name} · @${author.profile.username}` : "Unknown poster"}
+              <span className="ml-1 text-xs font-normal text-red-300/70">(moderation view)</span>
+            </span>
+          ) : mine ? (
+            <span className="text-[15px] font-semibold" style={{ color: accent }}>
+              You
+            </span>
+          ) : (
+            <span className="text-[15px] font-semibold text-neutral-300">Anonymous</span>
+          )}
+          <span className="text-[11px] text-neutral-500">{time}</span>
+          {row.isPinned ? <span className="text-[11px] text-amber-300">📌 Pinned</span> : null}
+          <span className="text-[11px] text-neutral-500" aria-label={`${row.viewCount} views`}>
+            👁 {row.viewCount}
+          </span>
+        </div>
 
         {flair ? (
           <span
@@ -487,23 +498,13 @@ function JwalamBubble({
           <img
             src={row.imageUrl}
             alt="Shared photo"
-            className="mb-1 max-h-64 w-full rounded-2xl object-cover"
+            className="mb-1 mt-1 max-h-64 rounded-2xl object-cover"
           />
         ) : null}
         {row.body ? <p className="whitespace-pre-wrap break-words">{row.body}</p> : null}
 
-        <p
-          className={`mt-1 flex items-center gap-1.5 text-[10px] ${
-            mine ? "justify-end text-white/70" : "text-neutral-500"
-          }`}
-        >
-          {row.isPinned ? <span>📌</span> : null}
-          <span>{time}</span>
-          <span aria-label={`${row.viewCount} views`}>👁 {row.viewCount}</span>
-        </p>
-
         {row.body || mine || isAppAdmin ? (
-          <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-neutral-400">
+          <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-neutral-500">
             {row.body ? (
               <button type="button" onClick={() => void onCopy()} className="transition hover:text-white">
                 {copied ? "Copied ✓" : "Copy"}

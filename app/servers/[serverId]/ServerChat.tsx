@@ -45,6 +45,38 @@ function formatTyping(names: string[]): string | null {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are typing…`;
 }
 
+// Discord-style grouping (2026-11-17): consecutive messages from
+// the same author within 5 minutes (same day) collapse into one
+// block — avatar + name header only on the first.
+function isGroupedWithPrevious(
+  prev: ServerMessageView | undefined,
+  row: ServerMessageView,
+): boolean {
+  if (!prev) return false;
+  const prevAuthor = prev.author?.accountId ?? null;
+  const author = row.author?.accountId ?? null;
+  if (!prevAuthor || !author || prevAuthor !== author) return false;
+  const prevTime = new Date(prev.createdAt).getTime();
+  const time = new Date(row.createdAt).getTime();
+  if (time - prevTime > 5 * 60_000) return false;
+  return new Date(prev.createdAt).toDateString() === new Date(row.createdAt).toDateString();
+}
+
+// Discord's timestamp voice: "Today at 4:32 PM" / "Yesterday at …"
+// / "14/11/2026 4:32 PM".
+function discordTime(iso: string): string {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const today = new Date();
+  const yesterday = new Date(Date.now() - 86_400_000);
+  if (date.toDateString() === today.toDateString()) return `Today at ${time}`;
+  if (date.toDateString() === yesterday.toDateString()) return `Yesterday at ${time}`;
+  return `${date.toLocaleDateString()} ${time}`;
+}
+
 function mergeMessages(
   prev: ServerMessageView[],
   incoming: ServerMessageView[],
@@ -290,16 +322,17 @@ export default function ServerChat({
         </div>
       ) : null}
 
-      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-2">
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-2">
         {visible.length === 0 ? (
           <p className="py-10 text-center text-sm text-neutral-500">
             {filterFlairId ? "No messages with that flair yet." : "No messages yet — start the conversation."}
           </p>
         ) : (
-          visible.map((row) => (
+          visible.map((row, index) => (
             <MessageItem
               key={row.id}
               row={row}
+              grouped={isGroupedWithPrevious(visible[index - 1], row)}
               flair={row.flairId ? (flairById.get(row.flairId) ?? null) : null}
               flairs={flairs}
               accent={accent}
@@ -351,7 +384,12 @@ export default function ServerChat({
       ) : null}
 
       {canPost ? (
-        <form onSubmit={(event) => void onSend(event)} className="flex items-end gap-2 pb-2">
+        // Discord composer (2026-11-17): one rounded bar, circled +
+        // attach inside-left, blurple send.
+        <form
+          onSubmit={(event) => void onSend(event)}
+          className="mb-2 flex items-end gap-2 rounded-lg bg-neutral-800/70 px-3 py-1.5"
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -363,7 +401,7 @@ export default function ServerChat({
             type="button"
             aria-label="Attach a photo"
             onClick={() => fileInputRef.current?.click()}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-neutral-700 text-lg text-neutral-300 transition hover:bg-neutral-900"
+            className="mb-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-400 text-base font-bold leading-none text-neutral-900 transition hover:bg-white"
           >
             +
           </button>
@@ -376,13 +414,12 @@ export default function ServerChat({
             rows={1}
             maxLength={2000}
             placeholder="Message this Tea…"
-            className="max-h-32 min-h-11 flex-1 resize-none rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+            className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none"
           />
           <button
             type="submit"
             disabled={sending || (!draft.trim() && !imageFile)}
-            className="h-11 shrink-0 rounded-full px-5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
-            style={{ backgroundColor: accent }}
+            className="mb-0.5 shrink-0 rounded-md bg-[#5865F2] px-4 py-1.5 text-sm font-medium text-white transition hover:bg-[#4752c4] disabled:opacity-40"
           >
             {sending ? "…" : "Send"}
           </button>
@@ -430,6 +467,7 @@ function FilterChip({
 
 function MessageItem({
   row,
+  grouped,
   flair,
   flairs,
   accent,
@@ -447,6 +485,7 @@ function MessageItem({
   onPin,
 }: {
   row: ServerMessageView;
+  grouped: boolean;
   flair: FlairRow | null;
   flairs: FlairRow[];
   accent: string;
@@ -463,28 +502,56 @@ function MessageItem({
   onFlair: (flairId: string | null) => void;
   onPin: () => void;
 }) {
-  const time = new Date(row.createdAt).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const time = discordTime(row.createdAt);
   const canEdit = row.mine || isAppAdmin;
   const canDelete = row.mine || isAppAdmin;
+  // Discord layout (2026-11-17): flat grouped rows, hover wash,
+  // 40px avatar (tappable → profile, except the masked developer),
+  // name + "Today at …" header only on the group's first row.
   return (
-    <div className="flex gap-3">
-      <Avatar
-        name={row.author?.name ?? "?"}
-        photoUrl={row.author?.photoUrl ?? null}
-        developer={row.author?.developer}
-        sizeClass="h-9 w-9"
-        textClass="text-xs"
-      />
+    <div
+      className={`group -mx-2 flex gap-3 rounded px-2 py-0.5 transition hover:bg-white/[0.03] ${
+        grouped ? "" : "mt-3 first:mt-0"
+      }`}
+    >
+      {grouped ? (
+        <span className="w-10 shrink-0 pt-1 text-center text-[9px] leading-none text-neutral-600 opacity-0 transition group-hover:opacity-100" aria-hidden>
+          {new Date(row.createdAt).toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </span>
+      ) : row.author && !row.author.developer ? (
+        <Link
+          href={`/profile/${row.author.username}`}
+          aria-label={`Open @${row.author.username} profile`}
+          className="shrink-0"
+        >
+          <Avatar
+            name={row.author.name}
+            photoUrl={row.author.photoUrl}
+            developer={row.author.developer}
+            sizeClass="h-10 w-10"
+            textClass="text-sm"
+          />
+        </Link>
+      ) : (
+        <Avatar
+          name={row.author?.name ?? "?"}
+          photoUrl={row.author?.photoUrl ?? null}
+          developer={row.author?.developer}
+          sizeClass="h-10 w-10"
+          textClass="text-sm"
+        />
+      )}
       <div className="min-w-0 flex-1">
+        {grouped ? null : (
         <div className="flex flex-wrap items-baseline gap-x-2">
           {row.author?.developer ? (
             // Masked developer projection: plain name, no profile link
             // (developer anonymity rule).
             <span
-              className="text-sm font-medium"
+              className="text-[15px] font-semibold"
               style={{ color: accent === "#171717" ? "#fff" : accent }}
             >
               {row.author.name}
@@ -492,15 +559,15 @@ function MessageItem({
           ) : row.author ? (
             <Link
               href={`/profile/${row.author.username}`}
-              className="text-sm font-medium transition hover:underline"
+              className="text-[15px] font-semibold transition hover:underline"
               style={{ color: accent === "#171717" ? "#fff" : accent }}
             >
               {row.author.name}
             </Link>
           ) : (
-            <span className="text-sm font-medium text-neutral-400">A student</span>
+            <span className="text-[15px] font-semibold text-neutral-400">A student</span>
           )}
-          <span className="text-[11px] text-neutral-600">{time}</span>
+          <span className="text-[11px] text-neutral-500">{time}</span>
           {flair ? (
             <span
               className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white"
@@ -511,6 +578,7 @@ function MessageItem({
           ) : null}
           {row.isPinned ? <span className="text-[11px] text-amber-300">📌 Pinned</span> : null}
         </div>
+        )}
 
         {editing ? (
           <div className="mt-1 flex flex-col gap-2">
@@ -549,7 +617,7 @@ function MessageItem({
               />
             ) : null}
             {row.body ? (
-              <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-100">
+              <p className="mt-0.5 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-neutral-100">
                 {row.body}
               </p>
             ) : null}

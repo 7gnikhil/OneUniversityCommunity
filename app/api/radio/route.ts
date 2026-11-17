@@ -600,3 +600,77 @@ export async function GET(req: Request) {
     );
   }
 }
+
+// ── Lyrics translation (POST, 2026-11-17) ────────────────────────
+// The karaoke panel's "🌐 English" option: machine-translate the
+// lyric lines to English, line-for-line, so the synced timing and
+// highlighting survive. Uses the free Google Translate gtx
+// endpoint (no key; same unofficial-API spirit as the rest of
+// Music Mitra, covered by the section's educational notice).
+// Fail-soft: any problem returns the original lines.
+export async function POST(req: Request) {
+  if (!(await isMusicMitraEnabled())) {
+    return NextResponse.json(
+      { error: "Music Mitra is paused right now." },
+      { status: 503 },
+    );
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  }
+
+  let lines: string[] = [];
+  try {
+    const body = (await req.json()) as { type?: string; lines?: unknown };
+    if (body.type !== "translateLyrics" || !Array.isArray(body.lines)) {
+      return NextResponse.json({ error: "Bad request." }, { status: 400 });
+    }
+    lines = body.lines
+      .filter((line): line is string => typeof line === "string")
+      .slice(0, 80);
+  } catch {
+    return NextResponse.json({ error: "Bad request." }, { status: 400 });
+  }
+  if (lines.length === 0) return NextResponse.json({ lines: [] });
+
+  async function gtx(text: string): Promise<string | null> {
+    try {
+      const url =
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=" +
+        encodeURIComponent(text);
+      const res = await fetch(url, {
+        headers: { "User-Agent": BROWSER_UA },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return null;
+      const json = (await res.json()) as unknown;
+      const segments = (json as [Array<[string]>])[0] ?? [];
+      return segments.map((segment) => segment[0]).join("");
+    } catch {
+      return null;
+    }
+  }
+
+  // One joined request first (keeps sentence context); if the
+  // line count drifts, fall back to per-line so alignment holds.
+  const joined = await gtx(lines.join("\n"));
+  if (joined !== null) {
+    const parts = joined.split("\n");
+    if (parts.length === lines.length) {
+      return NextResponse.json({ lines: parts, translated: true });
+    }
+  }
+  const perLine: string[] = [];
+  for (const line of lines) {
+    if (!line.trim()) {
+      perLine.push(line);
+      continue;
+    }
+    perLine.push((await gtx(line)) ?? line);
+  }
+  return NextResponse.json({ lines: perLine, translated: true });
+}

@@ -462,6 +462,9 @@ export interface DmListEntry {
     imageUrl: string | null;
     createdAt: string;
     fromMe: boolean;
+    // WhatsApp-style ticks on the list preview (2026-11-17).
+    delivered: boolean;
+    read: boolean;
   } | null;
   unreadCount: number;
   updatedAt: string;
@@ -513,6 +516,8 @@ export async function listDmEntries(
             imageUrl: last.image_url,
             createdAt: last.created_at,
             fromMe: last.sender_id === myAccountId,
+            delivered: last.delivered_at !== null,
+            read: last.read_at !== null,
           }
         : null,
       unreadCount: unread[match.id] ?? 0,

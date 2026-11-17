@@ -183,6 +183,40 @@ export default async function SwipePage() {
       deckRatings = {};
     }
   }
+  // Super Likes (Tinder pattern, migration 0022): students who
+  // super-liked ME are dealt FIRST and badged on their card.
+  // Fail-soft: no column yet → nobody is badged, order unchanged.
+  let superLikes: Record<string, boolean> = {};
+  if (candidates.length > 0) {
+    try {
+      const admin = createAdminClient();
+      const { data } = await admin
+        .from("swipes")
+        .select("swiper_id")
+        .eq("swipee_id", account.id)
+        .eq("direction", "like")
+        .eq("is_super", true)
+        .in(
+          "swiper_id",
+          candidates.map((row) => row.profile.accountId),
+        );
+      const superIds = new Set(
+        ((data ?? []) as Array<{ swiper_id: string }>).map((row) => row.swiper_id),
+      );
+      if (superIds.size > 0) {
+        superLikes = Object.fromEntries(
+          [...superIds].map((id) => [id, true] as const),
+        );
+        candidates = [
+          ...candidates.filter((row) => superIds.has(row.profile.accountId)),
+          ...candidates.filter((row) => !superIds.has(row.profile.accountId)),
+        ];
+      }
+    } catch {
+      superLikes = {};
+    }
+  }
+
   // Top this week — the weekly student board (real students only;
   // developer + seed accounts excluded inside the helper, the
   // developer additionally by id here).
@@ -324,6 +358,7 @@ export default async function SwipePage() {
         candidates={candidates}
         accentHex={accentHex(myProfile?.accent_color)}
         ratings={deckRatings}
+        superLikes={superLikes}
       />
     </main>
   );

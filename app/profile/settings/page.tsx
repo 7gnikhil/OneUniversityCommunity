@@ -28,6 +28,7 @@ import InterfacePicker from "@/components/InterfacePicker";
 import DialSkinPicker from "@/components/DialSkinPicker";
 import NotificationSettings from "@/components/NotificationSettings";
 import AnimatedDropdown from "@/components/AnimatedDropdown";
+import Avatar from "@/components/Avatar";
 import PageIntro from "@/components/PageIntro";
 import { getTheme } from "@/lib/themes";
 import {
@@ -156,19 +157,43 @@ export default async function ProfilePage() {
     "Seasonal look";
 
   return (
-    <main data-section="profile" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
+    <main data-section="profile" className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 p-6">
+      {/* WhatsApp Settings layout (2026-11-17): plain "Settings"
+          header, then the profile card (big avatar, name, about
+          line), then icon-chip rows for every section. */}
+      <div className="flex items-center gap-3">
         <Link
           href="/profile"
-          className="text-sm text-neutral-400 transition hover:text-white"
+          className="text-lg text-neutral-300 transition hover:text-white"
+          aria-label="Back to profile"
         >
-          ← Profile
+          ←
         </Link>
-        <p className="section-header-chip text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
-          Settings and activity
-        </p>
+        <h1 className="text-xl font-bold text-white">Settings</h1>
       </div>
       <PageIntro section="profile" />
+
+      {/* The WhatsApp profile card — identity at a glance; the
+          editing itself lives in the Profile section below. */}
+      <div className="flex items-center gap-3.5 border-b border-neutral-900 pb-5">
+        <Avatar
+          name={initial.name.trim() ? initial.name : account.username}
+          photoUrl={initial.photoUrl}
+          sizeClass="h-16 w-16"
+          textClass="text-xl"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-lg font-medium text-white">
+            {initial.name.trim() ? initial.name : account.username}
+          </p>
+          <p className="truncate text-sm text-neutral-500">
+            @{account.username} · OneUco ID {account.oneuco_id}
+          </p>
+        </div>
+        <span className="text-xl text-neutral-600" aria-hidden>
+          ›
+        </span>
+      </div>
 
       {/* Owner-only Admin door. This used to live in the /home
           footer; when the home page was removed (2026-11-11) the
@@ -178,23 +203,30 @@ export default async function ProfilePage() {
       {isOwnerEmail(account.email) ? (
         <Link
           href="/admin"
-          className="flex items-center justify-between rounded-3xl border border-neutral-800 bg-neutral-950 px-4 py-3 text-sm transition hover:border-neutral-600"
+          className="flex items-center gap-3 py-1 transition hover:opacity-80"
         >
-          <span className="font-semibold uppercase tracking-[0.2em] text-neutral-100">
-            Admin
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500 text-lg">
+            🛡
           </span>
-          <span className="text-neutral-500">Open the admin area →</span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[15px] font-medium text-white">Admin</span>
+            <span className="text-xs text-neutral-500">Open the admin area</span>
+          </span>
+          <span className="text-xl text-neutral-600" aria-hidden>
+            ›
+          </span>
         </Link>
       ) : null}
 
-      {/* The five sections as animated dropdowns. The wrapper's -mt-6
-          cancels the main gap so each dropdown's own built-in mt-6
-          yields one uniform rhythm (header → intro → bars). */}
-      <div className="-mt-6 flex flex-col">
+      {/* The sections as WhatsApp rows (AnimatedDropdown's icon
+          variant) — same bodies, same forms, new chrome. */}
+      <div className="flex flex-col divide-y divide-neutral-900">
         {/* ── 1 · Profile — personal data (starts OPEN) ───────────── */}
         <AnimatedDropdown
           title="Profile"
           currentLabel="Personal data & privacy"
+          icon="🔑"
+          tint="bg-amber-500"
           defaultOpen
           collapseOnSubmit={false}
         >
@@ -207,6 +239,8 @@ export default async function ProfilePage() {
         <AnimatedDropdown
           title="Fling data"
           currentLabel="Bio, likes & dislikes"
+          icon="♥"
+          tint="bg-rose-500"
           collapseOnSubmit={false}
         >
           <div className="mt-4 flex flex-col gap-4">
@@ -238,6 +272,8 @@ export default async function ProfilePage() {
         <AnimatedDropdown
           title="Display"
           currentLabel={displaySummary}
+          icon="🎨"
+          tint="bg-violet-500"
           collapseOnSubmit={false}
         >
           {/* Interface picker — the full-app look, picked from this list
@@ -259,6 +295,8 @@ export default async function ProfilePage() {
         <AnimatedDropdown
           title="Queries"
           currentLabel="Ask the developer"
+          icon="💬"
+          tint="bg-sky-500"
           collapseOnSubmit={false}
         >
           <div className="mt-4 flex flex-col gap-4">
@@ -273,6 +311,8 @@ export default async function ProfilePage() {
         <AnimatedDropdown
           title="About & FAQs"
           currentLabel="About, FAQs & rules"
+          icon="ℹ️"
+          tint="bg-neutral-500"
           collapseOnSubmit={false}
         >
           <div className="mt-4 flex flex-col gap-4">
@@ -303,6 +343,8 @@ export default async function ProfilePage() {
         <AnimatedDropdown
           title="Notifications & app"
           currentLabel="Matches, messages & requests"
+          icon="🔔"
+          tint="bg-emerald-500"
           collapseOnSubmit={false}
         >
           <div className="mt-4 flex flex-col gap-4">

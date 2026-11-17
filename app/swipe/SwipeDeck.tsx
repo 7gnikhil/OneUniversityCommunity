@@ -11,7 +11,7 @@ import {
 import type { DeckCandidate } from "@/lib/social";
 import { sizedPhotoUrl } from "@/lib/images";
 import type { FlingRating } from "@/lib/fling-rating";
-import { recordSwipeAction } from "./actions";
+import { recordSwipeAction, undoLastSwipeAction } from "./actions";
 
 // The swipe deck (client). Cards arrive pre-filtered from the server
 // (public fields only — see lib/social.ts). Interactions: pointer drag
@@ -79,17 +79,21 @@ export default function SwipeDeck({
   candidates,
   accentHex: accent,
   ratings = {},
+  superLikes = {},
 }: {
   candidates: DeckCandidate[];
   accentHex: string;
   /** Likes-derived Fling ratings by account id (lib/fling-rating). */
   ratings?: Record<string, FlingRating>;
+  /** Account ids who Super Liked me — badged on their card. */
+  superLikes?: Record<string, boolean>;
 }) {
   const [queue, setQueue] = useState<DeckCandidate[]>(candidates);
   const [index, setIndex] = useState<number>(0);
   const [dragX, setDragX] = useState<number>(0);
   const [dragging, setDragging] = useState<boolean>(false);
   const [flyDir, setFlyDir] = useState<-1 | 0 | 1>(0);
+  const [flyKind, setFlyKind] = useState<"like" | "pass" | "super">("like");
   const [matched, setMatched] = useState<{ matchId: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [interacted, setInteracted] = useState<boolean>(false);
@@ -102,14 +106,19 @@ export default function SwipeDeck({
   const exhausted = current === null;
 
   const commit = useCallback(
-    async (direction: "like" | "pass"): Promise<void> => {
+    async (kind: "like" | "pass" | "super"): Promise<void> => {
       const card: DeckCandidate | null = queue[index] ?? null;
       if (!card || busyRef.current) return;
       busyRef.current = true;
       setInteracted(true);
       setError(null);
-      setFlyDir(direction === "like" ? 1 : -1);
-      const result = await recordSwipeAction(card.profile.accountId, direction);
+      setFlyKind(kind);
+      setFlyDir(kind === "pass" ? -1 : 1);
+      const result = await recordSwipeAction(
+        card.profile.accountId,
+        kind === "pass" ? "pass" : "like",
+        kind === "super",
+      );
       window.setTimeout(() => {
         setIndex((value) => value + 1);
         setDragX(0);
@@ -131,12 +140,29 @@ export default function SwipeDeck({
     [index, queue],
   );
 
-  // Arrow keys: ← pass, → like.
+  // Rewind (Tinder): bring back the last card. The server refuses
+  // when that swipe already made a match — its message shows here.
+  async function onRewind(): Promise<void> {
+    if (busyRef.current || index === 0 || matched) return;
+    busyRef.current = true;
+    setError(null);
+    const result = await undoLastSwipeAction();
+    busyRef.current = false;
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setIndex((value) => Math.max(0, value - 1));
+    setDragX(0);
+  }
+
+  // Arrow keys: ← pass, → like, ↑ super like.
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
       if (matched) return;
       if (event.key === "ArrowRight") void commit("like");
       if (event.key === "ArrowLeft") void commit("pass");
+      if (event.key === "ArrowUp") void commit("super");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -218,6 +244,7 @@ export default function SwipeDeck({
                 <CardFace
                   candidate={nextCard}
                   rating={ratings[nextCard.profile.accountId]}
+                  superLiked={Boolean(superLikes[nextCard.profile.accountId])}
                 />
               </div>
             ) : null}
@@ -237,6 +264,7 @@ export default function SwipeDeck({
               <CardFace
                 candidate={current}
                 rating={ratings[current.profile.accountId]}
+                superLiked={Boolean(superLikes[current.profile.accountId])}
               />
               {/* View Fling profile — the one tap target on the card.
                   Its pointerdown is stopped so the tap never starts a
@@ -249,7 +277,11 @@ export default function SwipeDeck({
               >
                 View Fling profile
               </Link>
-              {dragX > 24 || flyDir === 1 ? (
+              {flyDir === 1 && flyKind === "super" ? (
+                <span className="absolute left-1/2 top-16 -translate-x-1/2 rounded-lg border-[3px] border-sky-400 bg-black/30 px-2.5 py-1 text-base font-black uppercase tracking-widest text-sky-400 backdrop-blur-sm">
+                  ★ Super Like
+                </span>
+              ) : dragX > 24 || flyDir === 1 ? (
                 <span className="absolute left-4 top-16 -rotate-12 rounded-lg border-[3px] border-emerald-400 bg-black/30 px-2.5 py-1 text-base font-black uppercase tracking-widest text-emerald-400 backdrop-blur-sm">
                   Like
                 </span>
@@ -262,7 +294,18 @@ export default function SwipeDeck({
             </div>
           </div>
 
-          <div className="flex items-center gap-5">
+          {/* Tinder's action row: Rewind · Pass · Super Like ·
+              Like · Shuffle — small, big, medium, big, small. */}
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => void onRewind()}
+              disabled={index === 0 || Boolean(matched)}
+              aria-label="Rewind — undo last swipe"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-amber-300/40 bg-amber-400/10 text-lg text-amber-300 shadow-lg shadow-black/40 backdrop-blur transition hover:scale-105 hover:bg-amber-400/20 active:scale-95 disabled:opacity-30 disabled:hover:scale-100"
+            >
+              ↩
+            </button>
             <button
               type="button"
               onClick={() => void commit("pass")}
@@ -273,10 +316,15 @@ export default function SwipeDeck({
             </button>
             <button
               type="button"
-              onClick={onShuffle}
-              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-neutral-200 backdrop-blur transition hover:bg-white/10 active:scale-95"
+              onClick={() => void commit("super")}
+              aria-label="Super Like — one a day"
+              className="flex h-12 w-12 items-center justify-center rounded-full text-lg text-white shadow-[0_8px_25px_rgba(56,189,248,0.45)] transition hover:scale-105 hover:opacity-95 active:scale-95"
+              style={{
+                backgroundImage:
+                  "linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)",
+              }}
             >
-              Shuffle
+              ★
             </button>
             <button
               type="button"
@@ -290,11 +338,20 @@ export default function SwipeDeck({
             >
               ♥
             </button>
+            <button
+              type="button"
+              onClick={onShuffle}
+              aria-label="Shuffle the deck"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/5 text-lg text-neutral-200 shadow-lg shadow-black/40 backdrop-blur transition hover:scale-105 hover:bg-white/10 active:scale-95"
+            >
+              ⤨
+            </button>
           </div>
 
           {!interacted ? (
             <p className="hidden text-xs text-neutral-600 sm:block">
-              Tip: drag the card, use the ← → arrow keys, or the buttons.
+              Tip: drag the card, use the ← → arrow keys (↑ = Super Like),
+              or the buttons. ↩ rewinds a mistake.
             </p>
           ) : null}
         </>
@@ -316,9 +373,11 @@ export default function SwipeDeck({
 function CardFace({
   candidate,
   rating,
+  superLiked = false,
 }: {
   candidate: DeckCandidate;
   rating?: FlingRating | null;
+  superLiked?: boolean;
 }) {
   const photo: string | null = candidate.photos[0] ?? null;
   const { profile } = candidate;
@@ -351,8 +410,13 @@ function CardFace({
           {displayName.replace(/^@/, "").charAt(0).toUpperCase() || "?"}
         </div>
       )}
+      {superLiked ? (
+        <span className="absolute left-4 top-16 rounded-full bg-sky-500 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-lg shadow-sky-950/50">
+          ⭐ Super liked you
+        </span>
+      ) : null}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-5 pt-16">
-        <p className="text-2xl font-bold tracking-tight">{displayName}</p>
+        <p className="text-3xl font-bold tracking-tight">{displayName}</p>
         <p className="text-sm text-neutral-300">@{profile.username}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {rating ? (
