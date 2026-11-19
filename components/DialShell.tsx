@@ -1,7 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import AppBadgeSync from "@/components/AppBadgeSync";
 import BottomBar from "@/components/BottomBar";
+import InAppToasts from "@/components/InAppToasts";
 import { MiniPlayer, RadioProvider } from "@/components/RadioPlayer";
 import type { DialBadges } from "@/lib/nav-stops";
 
@@ -62,6 +64,8 @@ export default function DialShell({
     return (
       <>
         <div className="pb-24">{children}</div>
+        <AppBadgeSync />
+        <InAppToasts />
         <BottomBar badges={badges} musicOff />
       </>
     );
@@ -71,6 +75,8 @@ export default function DialShell({
     <RadioProvider>
       <div className="pb-24">{children}</div>
       <MiniPlayer />
+      <AppBadgeSync />
+      <InAppToasts />
       <BottomBar badges={badges} />
     </RadioProvider>
   );

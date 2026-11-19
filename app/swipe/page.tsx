@@ -318,7 +318,12 @@ export default async function SwipePage() {
                 ? leader.name
                 : `@${leader.username}`;
               return (
-                <div key={leader.accountId} className="flex items-center gap-2.5">
+                <Link
+                  key={leader.accountId}
+                  href={`/profile/${leader.username}`}
+                  aria-label={`Open @${leader.username}'s profile`}
+                  className="-mx-1 flex items-center gap-2.5 rounded-xl px-1 py-0.5 transition hover:bg-white/5"
+                >
                   <span className="w-4 shrink-0 text-xs font-semibold text-neutral-500">
                     {i + 1}
                   </span>
@@ -343,7 +348,8 @@ export default async function SwipePage() {
                   <span className="shrink-0 rounded-full border border-amber-400/50 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
                     ★ {leader.rating.toFixed(1)}
                   </span>
-                </div>
+                  <span className="shrink-0 text-sm text-neutral-600">›</span>
+                </Link>
               );
             })}
           </div>

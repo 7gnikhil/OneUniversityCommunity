@@ -29,11 +29,24 @@ self.addEventListener("push", (event) => {
     tag: payload.tag || undefined,
     data: { url: payload.url || "/" },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  const tasks = [self.registration.showNotification(title, options)];
+  // App-icon badge (2026-11-20): a push also marks the installed
+  // app's icon. No count travels in the payload, so this sets the
+  // generic badge; AppBadgeSync replaces it with the exact unread
+  // number the moment the app is opened.
+  if (self.navigator && typeof self.navigator.setAppBadge === "function") {
+    tasks.push(self.navigator.setAppBadge().catch(() => {}));
+  }
+  event.waitUntil(Promise.all(tasks));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  // Opening the app from a notification: clear the generic badge;
+  // AppBadgeSync sets the exact remaining count on load.
+  if (self.navigator && typeof self.navigator.clearAppBadge === "function") {
+    self.navigator.clearAppBadge().catch(() => {});
+  }
   const target =
     (event.notification.data && event.notification.data.url) || "/";
   event.waitUntil(

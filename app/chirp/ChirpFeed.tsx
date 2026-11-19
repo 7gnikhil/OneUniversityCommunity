@@ -76,6 +76,77 @@ export default function ChirpFeed({
     if (fresh.length > 0 || chirps.length === 0) setChirps(fresh);
   }
 
+  // Live feed (2026-11-20, owner's complaint: a chirp posted on
+  // another device/account only appeared after a manual refresh).
+  // Poll every 20s while the tab is visible. Brand-new chirps
+  // merge in automatically when the reader is near the top of a
+  // Latest feed; otherwise they wait behind a "new chirps" pill so
+  // the list never jumps under someone reading. Existing rows are
+  // never overwritten by a poll — likes/saves the reader just made
+  // can't be reverted by a stale server copy.
+  const [pendingNew, setPendingNew] = useState<ChirpView[]>([]);
+  const chirpIdsRef = useRef<Set<string>>(
+    new Set(initialChirps.map((chirp) => chirp.id)),
+  );
+  useEffect(() => {
+    chirpIdsRef.current = new Set(chirps.map((chirp) => chirp.id));
+  }, [chirps]);
+
+  useEffect(() => {
+    let stopped = false;
+    const poll = async (): Promise<void> => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const fresh = await fetchChirpsAction(sort);
+        if (stopped) return;
+        const newOnes = fresh.filter(
+          (chirp) => !chirpIdsRef.current.has(chirp.id),
+        );
+        if (newOnes.length === 0) return;
+        if (sort === "latest" && window.scrollY < 240) {
+          setChirps((current) => [
+            ...newOnes.filter(
+              (chirp) => !current.some((row) => row.id === chirp.id),
+            ),
+            ...current,
+          ]);
+        } else {
+          setPendingNew((current) => {
+            const merged = [
+              ...newOnes.filter(
+                (chirp) => !current.some((row) => row.id === chirp.id),
+              ),
+              ...current,
+            ];
+            return merged;
+          });
+        }
+      } catch {
+        // A failed poll just tries again on the next tick.
+      }
+    };
+    const timer = setInterval(() => void poll(), 20_000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [sort]);
+
+  function showPendingNew(): void {
+    if (sort === "latest") {
+      setChirps((current) => [
+        ...pendingNew.filter(
+          (chirp) => !current.some((row) => row.id === chirp.id),
+        ),
+        ...current,
+      ]);
+    } else {
+      void refresh();
+    }
+    setPendingNew([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function pickImage(file: File | null): void {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     if (!file) {
@@ -428,6 +499,16 @@ export default function ChirpFeed({
       </div>
       ) : null}
 
+      {pendingNew.length > 0 ? (
+        <button
+          type="button"
+          onClick={showPendingNew}
+          className="sticky top-2 z-20 mx-auto mb-2 block rounded-full bg-sky-500 px-4 py-1.5 text-sm font-semibold text-white shadow-lg transition hover:bg-sky-400"
+        >
+          ↑ {pendingNew.length} new {pendingNew.length === 1 ? "chirp" : "chirps"}
+        </button>
+      ) : null}
+
       {chirps.length === 0 ? (
         <p className="py-10 text-center text-sm text-neutral-500">
           No chirps yet — post the first one.
@@ -537,7 +618,13 @@ function ChirpCard({
   }
 
   return (
-    <li className="border-b border-neutral-800 py-4">
+    <li
+      className={
+        chirp.mine
+          ? "-mx-3 rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-400/[0.10] to-rose-500/[0.08] px-3 py-4"
+          : "border-b border-neutral-800 py-4"
+      }
+    >
       <div className="flex gap-3">
         {chirp.author && !chirp.author.developer ? (
           <Link
@@ -576,6 +663,11 @@ function ChirpCard({
             )}
             {chirp.author && !chirp.author.developer ? (
               <span className="truncate text-sm text-neutral-500">@{chirp.author.username}</span>
+            ) : null}
+            {chirp.mine ? (
+              <span className="shrink-0 rounded-full bg-amber-400 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-black">
+                You
+              </span>
             ) : null}
             <span className="shrink-0 text-sm text-neutral-500">· {time}</span>
           </div>
@@ -683,7 +775,14 @@ function ChirpCard({
                 </p>
               ) : (
                 comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-2.5">
+                  <div
+                    key={comment.id}
+                    className={
+                      comment.mine
+                        ? "-mx-2 flex gap-2.5 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-2 py-1.5"
+                        : "flex gap-2.5"
+                    }
+                  >
                     {comment.author && !comment.author.developer ? (
                       <Link
                         href={`/profile/${comment.author.username}`}

@@ -3129,3 +3129,24 @@ DM rules (first-of-burst + presence window):
 - New chirp → push accepted followers (30-min burst rule).
 Matches already pushed (2026-11-11) — unchanged. No migration:
 inbox_items.kind is free text and renders generically.
+
+## Addendum — 2026-11-20: icon badge, in-app toasts, Chirp live + mine styling
+
+- App-icon badge: app/activity/actions.ts getMyBadgeCountAction
+  sums the bottom bar's three counts (DM + Tea + Inbox unread);
+  components/AppBadgeSync sets navigator.setAppBadge on mount /
+  30s / foreground. sw.js sets the generic badge on push and
+  clears it on notification click.
+- In-app toasts: getMyActivityAction(since) merges unread inbox
+  items + latest DM per match + latest Tea message per server
+  (Jwalam excluded); components/InAppToasts polls 25s, mounted in
+  DialShell; items for the open screen never toast.
+- Chirp feed polls fetchChirpsAction every 20s (visible tab
+  only): new chirps auto-merge at the top of a Latest feed when
+  the reader is near the top, else wait behind an "↑ N new
+  chirps" pill. Polls never overwrite existing rows.
+- Chirp mine-vs-theirs (owner's ask): my chirps render as a
+  tinted amber/rose card with a "You" pill; others stay flat X
+  rows. My comments get the same tint.
+- Fling "Top this week" rows are now profile links (owner's ask):
+  tap a leader → /profile/[username], with hover + › affordance.
