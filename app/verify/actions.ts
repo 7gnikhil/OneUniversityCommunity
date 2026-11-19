@@ -8,6 +8,9 @@ import {
   type AccountRow,
 } from "@/lib/auth/account";
 import { listCollegeCodes, type CollegeCodeRow } from "@/lib/profile";
+import { deliverInboxItem } from "@/lib/inbox";
+import { notifyAccount } from "@/lib/push";
+import { getDeveloperAccountId } from "@/lib/server/owner";
 import {
   listedCollegeFromValue,
   type ListedCollege,
@@ -37,6 +40,38 @@ export interface AddCollegeResult {
 
 const NOT_CONFIGURED =
   "Account setup isn't fully configured yet — please try again later.";
+
+// New-join notification (2026-11-20, owner's ask): the owner gets a
+// push + an Inbox note the moment a student finishes setting up —
+// joins were invisible before unless he opened the admin Pulse.
+// completeProfileAction only reaches its save when the account is
+// not yet verified, so this fires exactly once per student.
+// Fail-soft: a notification problem never blocks a signup.
+async function notifyOwnerOfNewJoin(
+  admin: ReturnType<typeof createAdminClient>,
+  account: { id: string; username: string },
+): Promise<void> {
+  try {
+    const ownerId = await getDeveloperAccountId(admin);
+    if (!ownerId || ownerId === account.id) return;
+    await notifyAccount(admin, ownerId, {
+      title: "New student on OneUco 🎉",
+      body: `@${account.username} just joined and finished setting up.`,
+      url: "/admin",
+      tag: `join-${account.id}`,
+    });
+    await deliverInboxItem(
+      admin,
+      ownerId,
+      "new_join",
+      "New student on OneUco 🎉",
+      `@${account.username} just joined and finished setting up.`,
+      account.id,
+    );
+  } catch {
+    // Signup niceties only; ignore.
+  }
+}
 
 // Live @handle availability for the completion form. Uses the service-role
 // client because pre-completion there is no account row for RLS to match,
@@ -442,6 +477,7 @@ export async function completeProfileAction(
       if (error) {
         return { error: "Couldn't save your profile — please try again." };
       }
+      await notifyOwnerOfNewJoin(admin, account);
       redirect("/swipe");
     }
   } else if (selectedCollegeCode) {
@@ -470,5 +506,6 @@ export async function completeProfileAction(
     return { error: "Couldn't save your profile — please try again." };
   }
 
+  await notifyOwnerOfNewJoin(admin, account);
   redirect("/swipe");
 }

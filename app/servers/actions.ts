@@ -23,6 +23,11 @@ import {
   type ServerRow,
 } from "@/lib/servers";
 import { deliverInboxItem } from "@/lib/inbox";
+import {
+  getNotifyDisplayName,
+  isRecentlyActive,
+  notifyAccount,
+} from "@/lib/push";
 import { moderateText, JWALAM_POSTS_PER_MINUTE } from "@/lib/moderation";
 import {
   getPresenceMap,
@@ -104,6 +109,92 @@ export interface CreateServerInput {
   iconUrl: string | null;
 }
 
+// ── Activity notifications (2026-11-20, owner's ask: users should
+// get notified) ──────────────────────────────────────────────────
+// Tea was silent: messages and joins produced no push at all, so
+// members only found out by opening the app. Now:
+//  • a message in a Tea pushes the OTHER members — first message
+//    of a burst only (the same 15-minute rule as DMs), never to a
+//    member who is in the app right now (presence window), and
+//    never for Maya Jwalam: it is the whole-campus firehose, and
+//    pinging everyone per anonymous post would train the whole
+//    app to switch notifications off.
+//  • joining a Tea pushes + inbox-notes the Tea's owner.
+// Everything fails soft: a notification problem never blocks a
+// message or a join.
+
+async function notifyTeaMembersOfMessage(
+  admin: Ctx["admin"],
+  server: ServerRow,
+  authorId: string,
+  text: string,
+  imageUrl: string | null,
+): Promise<void> {
+  try {
+    if (server.is_main_channel) return;
+    const burstCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { count } = await admin
+      .from("server_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("server_id", server.id)
+      .eq("author_id", authorId)
+      .gte("created_at", burstCutoff);
+    if ((count ?? 0) > 1) return;
+    const { data } = await admin
+      .from("server_members")
+      .select("account_id")
+      .eq("server_id", server.id)
+      .neq("account_id", authorId);
+    const memberIds = ((data ?? []) as Array<{ account_id: string }>).map(
+      (row) => row.account_id,
+    );
+    if (memberIds.length === 0) return;
+    const authorName = await getNotifyDisplayName(admin, authorId);
+    await Promise.all(
+      memberIds.map(async (memberId) => {
+        if (await isRecentlyActive(admin, memberId)) return;
+        await notifyAccount(admin, memberId, {
+          title: server.name,
+          body: text
+            ? `${authorName}: ${text.slice(0, 90)}`
+            : `${authorName} sent a photo`,
+          url: `/servers/${server.id}`,
+          tag: `tea-${server.id}`,
+        });
+      }),
+    );
+  } catch {
+    // Notifications are a nicety; the message is already saved.
+  }
+}
+
+async function notifyTeaOwnerOfJoin(
+  admin: Ctx["admin"],
+  server: ServerRow,
+  joinerId: string,
+): Promise<void> {
+  try {
+    if (server.created_by === joinerId) return;
+    const joinerName = await getNotifyDisplayName(admin, joinerId);
+    await notifyAccount(admin, server.created_by, {
+      title: "New member in your Tea",
+      body: `${joinerName} joined ${server.name}.`,
+      url: `/servers/${server.id}`,
+      tag: `tea-join-${server.id}`,
+    });
+    await deliverInboxItem(
+      admin,
+      server.created_by,
+      "server_join",
+      "New member in your Tea",
+      `${joinerName} joined ${server.name}.`,
+      server.id,
+    );
+  } catch {
+    // Same fail-soft rule.
+  }
+}
+
 export async function createServerAction(
   input: CreateServerInput,
 ): Promise<{ error: string | null; serverId: string | null }> {
@@ -174,6 +265,7 @@ export async function joinServerAction(serverId: string): Promise<ActionResult> 
     role: "member",
   });
   if (error) return { error: "Couldn't join — please try again." };
+  await notifyTeaOwnerOfJoin(ctx.admin, server, ctx.account.id);
   return { error: null };
 }
 
@@ -207,6 +299,10 @@ export async function joinByInviteCodeAction(
       role: "member",
     });
     if (error) return { error: "Couldn't join — please try again.", serverId: null };
+    const joinedServer = await getServerById(ctx.admin, invite.server_id);
+    if (joinedServer) {
+      await notifyTeaOwnerOfJoin(ctx.admin, joinedServer, ctx.account.id);
+    }
   }
   return { error: null, serverId: invite.server_id };
 }
@@ -248,6 +344,7 @@ export async function sendServerMessageAction(
     if (joinError) return { error: "Couldn't join — please try again.", messageId: null };
     membership = await getMembership(ctx.admin, serverId, ctx.account.id);
     if (!membership) return { error: "Couldn't join — please try again.", messageId: null };
+    await notifyTeaOwnerOfJoin(ctx.admin, server, ctx.account.id);
   }
 
   const text = body.trim().slice(0, MAX_BODY_CHARS);
@@ -316,6 +413,7 @@ export async function sendServerMessageAction(
   if (error || !data) {
     return { error: "That message didn't send — please try again.", messageId: null };
   }
+  await notifyTeaMembersOfMessage(ctx.admin, server, ctx.account.id, text, imageUrl);
   return { error: null, messageId: (data as { id: string }).id };
 }
 
@@ -714,6 +812,12 @@ export async function directAddMemberAction(
       "Open Tea to jump in.",
       serverId,
     ),
+    notifyAccount(ctx.admin, targetAccountId, {
+      title: "You've been added to a Tea",
+      body: `You've been added to ${server.name} — open Tea to jump in.`,
+      url: `/servers/${serverId}`,
+      tag: `tea-join-${serverId}`,
+    }),
   ]);
   return { error: null };
 }

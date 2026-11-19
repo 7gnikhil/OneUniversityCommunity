@@ -3113,3 +3113,19 @@ Owner directives in one burst: Chirp → X, Fling → Tinder/Bumble, Tea → Dis
 
 - **Homies online rail (Discord):** friends/page shows a horizontal rail of currently-online friends (avatar + green dot + first name, tap → the DM) above the chat list, only when at least one friend is online. onlineIds was already computed privacy-shaped (friends who hide status never appear).
 - **Profile QR (WhatsApp-style):** own profile gains a "QR code" button beside Edit/Share — components/ProfileQr.tsx generates a QR of the profile URL in-browser (qrcode package, added to dependencies) and shows it in a modal for scanning/screenshots. Nothing is uploaded.
+
+## Addendum — 2026-11-20: activity notifications (owner's ask)
+
+Tea messages/joins, new signups and new chirps were silent — no
+push existed for them at all. Wired, all fail-soft, all reusing the
+DM rules (first-of-burst + presence window):
+- Tea message → push other members (15-min burst rule; skipped for
+  Maya Jwalam — the firehose would train everyone to disable
+  notifications). Join (button / invite code / auto-join on first
+  post) → push + inbox to the Tea's owner. Direct add → push added
+  to the existing inbox note.
+- New signup (completeProfileAction, fires once at the verified
+  transition) → push + inbox to the owner ("New student 🎉").
+- New chirp → push accepted followers (30-min burst rule).
+Matches already pushed (2026-11-11) — unchanged. No migration:
+inbox_items.kind is free text and renders generically.

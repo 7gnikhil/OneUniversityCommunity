@@ -17,6 +17,11 @@ import {
   type NewsItem,
   type WeatherView,
 } from "@/lib/news";
+import {
+  getNotifyDisplayName,
+  isRecentlyActive,
+  notifyAccount,
+} from "@/lib/push";
 
 // Chirp actions. Posting/deleting/liking/commenting run on the SESSION
 // client — RLS covers all of them (own rows only; admins may delete any
@@ -74,6 +79,47 @@ export async function createChirpAction(
     image_url: imageUrl,
   });
   if (error) return { error: "That chirp didn't post — please try again." };
+
+  // Follower notifications (2026-11-20, owner's ask: users should
+  // get notified): a new chirp pushes the author's followers —
+  // first chirp of a 30-minute burst only, and never to a follower
+  // who is in the app right now. Fail-soft throughout: the chirp
+  // is already posted whatever happens here.
+  try {
+    const admin = createAdminClient();
+    const burstCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { count } = await admin
+      .from("chirps")
+      .select("id", { count: "exact", head: true })
+      .eq("author_id", ctx.account.id)
+      .gte("created_at", burstCutoff);
+    if ((count ?? 0) <= 1) {
+      const { data } = await admin
+        .from("follow_requests")
+        .select("requester_id")
+        .eq("target_id", ctx.account.id)
+        .eq("status", "accepted");
+      const followerIds = ((data ?? []) as Array<{ requester_id: string }>).map(
+        (row) => row.requester_id,
+      );
+      if (followerIds.length > 0) {
+        const myName = await getNotifyDisplayName(admin, ctx.account.id);
+        await Promise.all(
+          followerIds.map(async (followerId) => {
+            if (await isRecentlyActive(admin, followerId)) return;
+            await notifyAccount(admin, followerId, {
+              title: `${myName} posted on Chirp`,
+              body: text ? text.slice(0, 90) : "Posted a photo",
+              url: "/chirp",
+              tag: `chirp-${ctx.account.id}`,
+            });
+          }),
+        );
+      }
+    }
+  } catch {
+    // Posting niceties only; ignore.
+  }
   return { error: null };
 }
 
