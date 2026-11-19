@@ -87,6 +87,15 @@ export async function middleware(request: NextRequest) {
   // the app's HTML in the first place.
   if (pathname === "/robots.txt") return response;
 
+  // PWA plumbing is public for the same reason (found in the
+  // 2026-11-20 whole-app check): the browser fetches the manifest
+  // and the service-worker script outside the page session — a
+  // 307 to /login makes the manifest invalid (no install prompt
+  // for signed-out visitors) and can stall SW updates.
+  if (pathname === "/sw.js" || pathname === "/manifest.webmanifest") {
+    return response;
+  }
+
   const PUBLIC_AUTH_PAGES: string[] = [
     "/login",
     "/signup",
@@ -107,6 +116,14 @@ export async function middleware(request: NextRequest) {
     // (the landing rule below sends them to /swipe first).
     if (pathname === "/" || PUBLIC_AUTH_PAGES.includes(pathname)) {
       return response;
+    }
+    // API callers get a real 401, not an HTML login redirect they
+    // cannot follow (2026-11-20 check). /api/warm returns earlier.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Sign in required." },
+        { status: 401 },
+      );
     }
     return redirect("/login", pathname);
   }

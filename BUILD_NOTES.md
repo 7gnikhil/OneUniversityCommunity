@@ -3150,3 +3150,7 @@ inbox_items.kind is free text and renders generically.
   rows. My comments get the same tint.
 - Fling "Top this week" rows are now profile links (owner's ask):
   tap a leader → /profile/[username], with hover + › affordance.
+- Middleware fixes from the same check: /sw.js and
+  /manifest.webmanifest are public now (were 307→/login, which
+  invalidates the PWA manifest for signed-out visitors), and
+  signed-out /api/* gets a JSON 401 instead of a login redirect.
